@@ -27,7 +27,7 @@ val Success = Color(0xFF4E8A70)
 val Warning = Color(0xFF9A5A22)
 val Error = Color(0xFFB4473E)
 
-private val XingmouColors = lightColorScheme(
+private val StandardColors = lightColorScheme(
     primary = Coral,
     onPrimary = Ink,
     primaryContainer = CoralSoft,
@@ -44,6 +44,25 @@ private val XingmouColors = lightColorScheme(
     onSurfaceVariant = Muted,
     outline = Rule,
     error = Error
+)
+
+private val HighContrastColors = lightColorScheme(
+    primary = Color(0xFF9E2F20),
+    onPrimary = Color.White,
+    primaryContainer = Color(0xFFFFD9D2),
+    onPrimaryContainer = Color(0xFF4A1008),
+    secondary = Color(0xFF174E9B),
+    onSecondary = Color.White,
+    secondaryContainer = Color(0xFFD4E4FF),
+    onSecondaryContainer = Color(0xFF062B62),
+    background = Color(0xFFFFFBF8),
+    onBackground = Color(0xFF111318),
+    surface = Color.White,
+    onSurface = Color(0xFF111318),
+    surfaceVariant = Color(0xFFF1ECE7),
+    onSurfaceVariant = Color(0xFF3D454D),
+    outline = Color(0xFF5C6268),
+    error = Color(0xFF8B1E16)
 )
 
 private val XingmouTypography = Typography(
@@ -98,9 +117,9 @@ private val XingmouShapes = Shapes(
 )
 
 @Composable
-fun XingmouTheme(content: @Composable () -> Unit) {
+fun XingmouTheme(highContrast: Boolean = false, content: @Composable () -> Unit) {
     MaterialTheme(
-        colorScheme = XingmouColors,
+        colorScheme = if (highContrast) HighContrastColors else StandardColors,
         typography = XingmouTypography,
         shapes = XingmouShapes,
         content = content

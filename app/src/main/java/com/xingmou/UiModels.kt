@@ -15,8 +15,21 @@ data class XingmouUiState(
     val child: ChildUiState = ChildUiState(),
     val parent: ParentUiState = ParentUiState(),
     val professional: ProfessionalUiState = ProfessionalUiState(),
+    val accessibility: AccessibilityUiState = AccessibilityUiState(),
     val aiConfigured: Boolean = false
 )
+
+data class AccessibilityUiState(
+    val speechEnabled: Boolean = true,
+    val speechRate: Float = 1.0f,
+    val speechVolume: Float = 1.0f,
+    val largeText: Boolean = false,
+    val highContrast: Boolean = false
+)
+
+fun normalizeSpeechRate(rate: Float): Float = rate.coerceIn(0.75f, 1.25f)
+
+fun normalizeSpeechVolume(volume: Float): Float = volume.coerceIn(0.5f, 1.0f)
 
 data class ChildUiState(
     val instruction: String = "找到圆形",

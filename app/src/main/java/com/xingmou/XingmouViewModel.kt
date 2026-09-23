@@ -41,6 +41,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 class XingmouViewModel(application: Application) : AndroidViewModel(application) {
+    private val accessibilityPreferences = application.getSharedPreferences("xingmou_accessibility", 0)
     private val database = QizhiDatabase.getInstance(application)
     private val eventCoordinator = AgentEventCoordinator(
         AgentEventProcessor(),
@@ -62,7 +63,16 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
     private val orchestrator = AgentOrchestrator(localSafeModel)
 
     private val _uiState = MutableStateFlow(
-        XingmouUiState(aiConfigured = DeepSeekClientFactory.isConfigured())
+        XingmouUiState(
+            accessibility = AccessibilityUiState(
+                speechEnabled = accessibilityPreferences.getBoolean("speech_enabled", true),
+                speechRate = normalizeSpeechRate(accessibilityPreferences.getFloat("speech_rate", 1.0f)),
+                speechVolume = normalizeSpeechVolume(accessibilityPreferences.getFloat("speech_volume", 1.0f)),
+                largeText = accessibilityPreferences.getBoolean("large_text", false),
+                highContrast = accessibilityPreferences.getBoolean("high_contrast", false)
+            ),
+            aiConfigured = DeepSeekClientFactory.isConfigured()
+        )
     )
     val uiState: StateFlow<XingmouUiState> = _uiState.asStateFlow()
 
@@ -76,6 +86,33 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
     fun selectPort(port: Port) {
         _uiState.update { it.copy(selectedPort = port) }
         if (port == Port.PROFESSIONAL) refreshProfessionalAnalysis()
+    }
+
+    fun setSpeechEnabled(enabled: Boolean) {
+        accessibilityPreferences.edit().putBoolean("speech_enabled", enabled).apply()
+        _uiState.update { it.copy(accessibility = it.accessibility.copy(speechEnabled = enabled)) }
+    }
+
+    fun setSpeechRate(rate: Float) {
+        val normalized = normalizeSpeechRate(rate)
+        accessibilityPreferences.edit().putFloat("speech_rate", normalized).apply()
+        _uiState.update { it.copy(accessibility = it.accessibility.copy(speechRate = normalized)) }
+    }
+
+    fun setSpeechVolume(volume: Float) {
+        val normalized = normalizeSpeechVolume(volume)
+        accessibilityPreferences.edit().putFloat("speech_volume", normalized).apply()
+        _uiState.update { it.copy(accessibility = it.accessibility.copy(speechVolume = normalized)) }
+    }
+
+    fun setLargeText(enabled: Boolean) {
+        accessibilityPreferences.edit().putBoolean("large_text", enabled).apply()
+        _uiState.update { it.copy(accessibility = it.accessibility.copy(largeText = enabled)) }
+    }
+
+    fun setHighContrast(enabled: Boolean) {
+        accessibilityPreferences.edit().putBoolean("high_contrast", enabled).apply()
+        _uiState.update { it.copy(accessibility = it.accessibility.copy(highContrast = enabled)) }
     }
 
     fun completeChildTask(correct: Boolean) {

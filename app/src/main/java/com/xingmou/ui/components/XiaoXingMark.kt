@@ -1,6 +1,7 @@
 package com.xingmou.ui.components
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -9,17 +10,17 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import com.xingmou.ui.theme.Coral
-import com.xingmou.ui.theme.CoralSoft
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
 
 @Composable
 fun XiaoXingMark(modifier: Modifier = Modifier) {
+    val foreground = MaterialTheme.colorScheme.primary
+    val background = MaterialTheme.colorScheme.primaryContainer
     Canvas(modifier = modifier.semantics { contentDescription = "小星标记" }) {
-        drawCircle(color = CoralSoft, radius = size.minDimension / 2f)
-        drawStar(color = Coral, radius = size.minDimension * 0.29f)
+        drawCircle(color = background, radius = size.minDimension / 2f)
+        drawStar(color = foreground, radius = size.minDimension * 0.29f)
     }
 }
 

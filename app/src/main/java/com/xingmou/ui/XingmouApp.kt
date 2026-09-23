@@ -17,10 +17,12 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.xingmou.XingmouViewModel
@@ -28,26 +30,31 @@ import com.xingmou.core.model.Port
 import com.xingmou.ui.child.ChildScreen
 import com.xingmou.ui.parent.ParentScreen
 import com.xingmou.ui.professional.ProfessionalScreen
-import com.xingmou.ui.theme.Paper
-import com.xingmou.ui.theme.Rule
+import com.xingmou.ui.theme.XingmouTheme
 
 @Composable
 fun XingmouApp(viewModel: XingmouViewModel) {
     val state by viewModel.uiState.collectAsState()
-    Scaffold(
-        containerColor = Paper,
-        bottomBar = { AppStatusBand(aiConfigured = state.aiConfigured) }
-    ) { padding ->
-        BoxWithConstraints(Modifier.fillMaxSize().padding(padding)) {
-            if (maxWidth >= 840.dp) {
-                Row(Modifier.fillMaxSize()) {
-                    PortRail(state.selectedPort, viewModel::selectPort)
-                    PortContent(viewModel, state.selectedPort, Modifier.weight(1f))
-                }
-            } else {
-                Column(Modifier.fillMaxSize()) {
-                    CompactPortSelector(state.selectedPort, viewModel::selectPort)
-                    PortContent(viewModel, state.selectedPort, Modifier.weight(1f))
+    val density = LocalDensity.current
+    val fontScale = if (state.accessibility.largeText) 1.15f else 1.0f
+    CompositionLocalProvider(LocalDensity provides androidx.compose.ui.unit.Density(density.density, fontScale)) {
+        XingmouTheme(highContrast = state.accessibility.highContrast) {
+            Scaffold(
+                containerColor = MaterialTheme.colorScheme.background,
+                bottomBar = { AppStatusBand(aiConfigured = state.aiConfigured) }
+            ) { padding ->
+                BoxWithConstraints(Modifier.fillMaxSize().padding(padding)) {
+                    if (maxWidth >= 840.dp) {
+                        Row(Modifier.fillMaxSize()) {
+                            PortRail(state.selectedPort, viewModel::selectPort)
+                            PortContent(viewModel, state.selectedPort, Modifier.weight(1f))
+                        }
+                    } else {
+                        Column(Modifier.fillMaxSize()) {
+                            CompactPortSelector(state.selectedPort, viewModel::selectPort)
+                            PortContent(viewModel, state.selectedPort, Modifier.weight(1f))
+                        }
+                    }
                 }
             }
         }
@@ -58,7 +65,19 @@ fun XingmouApp(viewModel: XingmouViewModel) {
 private fun PortContent(viewModel: XingmouViewModel, port: Port, modifier: Modifier) {
     val state by viewModel.uiState.collectAsState()
     when (port) {
-        Port.CHILD -> ChildScreen(state.child, viewModel::completeChildTask, viewModel::pauseChildTraining, viewModel::resumeChildTraining, modifier)
+        Port.CHILD -> ChildScreen(
+            state = state.child,
+            accessibility = state.accessibility,
+            onChoice = viewModel::completeChildTask,
+            onPause = viewModel::pauseChildTraining,
+            onResume = viewModel::resumeChildTraining,
+            onSpeechEnabledChange = viewModel::setSpeechEnabled,
+            onSpeechRateChange = viewModel::setSpeechRate,
+            onSpeechVolumeChange = viewModel::setSpeechVolume,
+            onLargeTextChange = viewModel::setLargeText,
+            onHighContrastChange = viewModel::setHighContrast,
+            modifier = modifier
+        )
         Port.PARENT -> ParentScreen(state.parent, viewModel::updateParentQuery, viewModel::askParentQuestion, modifier)
         Port.PROFESSIONAL -> ProfessionalScreen(
             state = state.professional,
@@ -104,7 +123,7 @@ private fun CompactPortSelector(selected: Port, onSelect: (Port) -> Unit) {
                 modifier = Modifier.weight(1f),
                 shape = MaterialTheme.shapes.medium,
                 color = if (selected == port) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
-                border = BorderStroke(1.dp, if (selected == port) MaterialTheme.colorScheme.primary else Rule)
+                border = BorderStroke(1.dp, if (selected == port) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline)
             ) {
                 Text(
                     portLabel(port),
@@ -121,7 +140,7 @@ private fun CompactPortSelector(selected: Port, onSelect: (Port) -> Unit) {
 
 @Composable
 private fun AppStatusBand(aiConfigured: Boolean) {
-    Surface(color = MaterialTheme.colorScheme.surface, border = BorderStroke(1.dp, Rule)) {
+    Surface(color = MaterialTheme.colorScheme.surface, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 9.dp),
             verticalAlignment = Alignment.CenterVertically

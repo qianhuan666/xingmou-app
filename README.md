@@ -52,7 +52,7 @@ app/src/main/java/com/xingmou/
 
 ## 四、当前工程状态
 
-阶段 4 三端口工作台已完成：项目现在包含可编译的 Gradle Android 工程、Room 数据层、领域与安全规则、Agent Runtime、事件协调器，以及儿童端、家长端、专业端正式 Compose 页面。
+阶段 5 语音与辅助设置已完成：项目现在包含可编译的 Gradle Android 工程、Room 数据层、领域与安全规则、Agent Runtime、事件协调器、三端口 Compose 页面，以及儿童端本地 TTS 朗读和辅助设置。
 
 ```powershell
 cd xingmou-app
@@ -69,7 +69,7 @@ DEEPSEEK_API_KEY=你的本机开发密钥
 
 未配置时 `DeepSeekClientFactory.createOrNull()` 返回 `null`，应用应使用 Mock 或确定性降级，不会自动发起网络模型请求。生产发布仍建议通过服务端代理或更强的密钥保护方案，避免将长期密钥直接打包进 APK。
 
-阶段 4 已完成：三端口页面通过 `XingmouViewModel` 接入 Room、`AgentEventCoordinator` 和 `AgentOrchestrator`。儿童端支持单步训练、主动休息、连续失败暂停和安全停止；家长端支持观察输入、风险路由、已审核知识检索和来源展示；专业端支持过程分析、Agent 审计信息和 `draft → confirmed → active` 两步审核。当前自动化验收为 28 项单元测试通过、Debug APK 构建通过。尚待完成：真实 DeepSeek Key 联调和 Android 模拟器人工验收。开发过程记录见：[开发日志.md](docs/开发日志.md)。
+阶段 5 已完成：儿童端通过 Android `TextToSpeech` 朗读规则层确认后的短句，支持朗读开关、语速、朗读音量、大字体和高对比设置，所有选择通过本机偏好持久化。三端口页面继续通过 `XingmouViewModel` 接入 Room、`AgentEventCoordinator` 和 `AgentOrchestrator`。当前自动化验收为 29 项单元测试通过、Debug APK 构建通过，`Pixel_Tablet` 模拟器已完成安装、启动、设置切换和重启持久化验收。尚待完成：真实 DeepSeek Key 联调、Compose UI 自动化测试和阶段 6 红队/上线检查。开发过程记录见：[开发日志.md](docs/开发日志.md)。
 
 ## 五、依赖清单（build.gradle.kts）
 

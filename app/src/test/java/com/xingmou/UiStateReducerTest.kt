@@ -53,6 +53,14 @@ class UiStateReducerTest {
         assertEquals(PlanStatus.REJECTED, rejected)
     }
 
+    @Test
+    fun accessibilitySpeechSettingsStayWithinSafeRange() {
+        assertEquals(0.75f, normalizeSpeechRate(0.2f))
+        assertEquals(1.25f, normalizeSpeechRate(2.0f))
+        assertEquals(0.5f, normalizeSpeechVolume(0.1f))
+        assertEquals(1.0f, normalizeSpeechVolume(1.8f))
+    }
+
     private fun decision(
         state: AgentRunState,
         nextDifficulty: Int? = null,

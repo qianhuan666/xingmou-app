@@ -14,22 +14,20 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
-import com.xingmou.ui.theme.PaperSurface
-import com.xingmou.ui.theme.Rule
 
 @Composable
 fun SectionSurface(
     title: String,
     modifier: Modifier = Modifier,
     supporting: String? = null,
-    containerColor: Color = PaperSurface,
+    containerColor: Color? = null,
     content: @Composable ColumnScope.() -> Unit
 ) {
     Surface(
         modifier = modifier,
         shape = MaterialTheme.shapes.large,
-        color = containerColor,
-        border = BorderStroke(1.dp, Rule)
+        color = containerColor ?: MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
     ) {
         Column(modifier = Modifier.padding(20.dp)) {
             Text(title, style = MaterialTheme.typography.titleLarge)

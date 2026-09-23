@@ -13,6 +13,13 @@
   --color-success: oklch(57% 0.08 158);
   --color-warning: oklch(55% 0.11 58);
   --color-error: oklch(50% 0.15 28);
+  --color-hc-paper: oklch(99% 0.006 55);
+  --color-hc-surface: oklch(100% 0 0);
+  --color-hc-ink: oklch(18% 0.015 260);
+  --color-hc-accent: oklch(45% 0.17 31);
+  --color-hc-accent-soft: oklch(91% 0.055 31);
+  --color-hc-info: oklch(43% 0.15 255);
+  --color-hc-rule: oklch(49% 0.015 250);
   --font-display: system-ui, sans-serif;
   --font-body: system-ui, sans-serif;
   --space-xs: 4px;

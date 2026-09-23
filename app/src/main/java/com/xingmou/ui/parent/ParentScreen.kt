@@ -24,7 +24,6 @@ import com.xingmou.ParentUiState
 import com.xingmou.core.safety.SafeResponses
 import com.xingmou.ui.components.SectionSurface
 import com.xingmou.ui.components.StatusLine
-import com.xingmou.ui.theme.BlueSoft
 import com.xingmou.ui.theme.Warning
 
 @Composable
@@ -56,7 +55,7 @@ fun ParentScreen(
             }
         }
 
-        SectionSurface(title = "边界说明", containerColor = BlueSoft) {
+        SectionSurface(title = "边界说明", containerColor = MaterialTheme.colorScheme.secondaryContainer) {
             Text(SafeResponses.DISCLAIMER)
             Text("涉及诊疗判断、持续加重或紧急风险时，请联系有资质的专业人员。", modifier = Modifier.padding(top = 8.dp))
         }

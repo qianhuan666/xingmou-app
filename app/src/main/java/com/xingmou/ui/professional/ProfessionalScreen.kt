@@ -25,8 +25,6 @@ import com.xingmou.ProfessionalUiState
 import com.xingmou.core.domain.PlanStatus
 import com.xingmou.ui.components.SectionSurface
 import com.xingmou.ui.components.StatusLine
-import com.xingmou.ui.theme.BlueSoft
-import com.xingmou.ui.theme.CoralSoft
 import com.xingmou.ui.theme.Success
 import com.xingmou.ui.theme.Warning
 
@@ -96,7 +94,7 @@ private fun PlanPanel(
         title = "训练方案",
         supporting = state.reviewMessage,
         modifier = modifier,
-        containerColor = if (state.planStatus == PlanStatus.ACTIVE) BlueSoft else MaterialTheme.colorScheme.surface
+        containerColor = if (state.planStatus == PlanStatus.ACTIVE) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface
     ) {
         StatusLine("当前状态", state.planStatus?.name ?: "尚未创建")
         Spacer(Modifier.height(12.dp))
@@ -135,7 +133,7 @@ private fun PlanPanel(
 
 @Composable
 private fun AgentPanel(state: ProfessionalUiState) {
-    SectionSurface(title = "Agent 运行", supporting = "本地可审计信息，不展示原始敏感数据。", containerColor = CoralSoft) {
+    SectionSurface(title = "Agent 运行", supporting = "本地可审计信息，不展示原始敏感数据。", containerColor = MaterialTheme.colorScheme.primaryContainer) {
         StatusLine("运行状态", state.agentStatus)
         Spacer(Modifier.height(8.dp))
         StatusLine("最近事件", state.recentEvent)
