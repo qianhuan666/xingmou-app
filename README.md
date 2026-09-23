@@ -52,7 +52,7 @@ app/src/main/java/com/xingmou/
 
 ## 四、当前工程状态
 
-阶段 5 语音与辅助设置已完成：项目现在包含可编译的 Gradle Android 工程、Room 数据层、领域与安全规则、Agent Runtime、事件协调器、三端口 Compose 页面，以及儿童端本地 TTS 朗读和辅助设置。
+阶段 6 首轮自动化验收已完成：项目现在包含可编译的 Gradle Android 工程、Room 数据层、领域与安全规则、Agent Runtime、事件协调器、三端口 Compose 页面、儿童端本地 TTS 朗读和辅助设置，以及 10 条红队边界测试、Room 仪器测试和 Compose UI 仪器测试。
 
 ```powershell
 cd xingmou-app
@@ -69,7 +69,7 @@ DEEPSEEK_API_KEY=你的本机开发密钥
 
 未配置时 `DeepSeekClientFactory.createOrNull()` 返回 `null`，应用应使用 Mock 或确定性降级，不会自动发起网络模型请求。生产发布仍建议通过服务端代理或更强的密钥保护方案，避免将长期密钥直接打包进 APK。
 
-阶段 5 已完成：儿童端通过 Android `TextToSpeech` 朗读规则层确认后的短句，支持朗读开关、语速、朗读音量、大字体和高对比设置，所有选择通过本机偏好持久化。三端口页面继续通过 `XingmouViewModel` 接入 Room、`AgentEventCoordinator` 和 `AgentOrchestrator`。当前自动化验收为 29 项单元测试通过、Debug APK 构建通过，`Pixel_Tablet` 模拟器已完成安装、启动、设置切换和重启持久化验收。尚待完成：真实 DeepSeek Key 联调、Compose UI 自动化测试和阶段 6 红队/上线检查。开发过程记录见：[开发日志.md](docs/开发日志.md)。
+阶段 5 已完成：儿童端通过 Android `TextToSpeech` 朗读规则层确认后的短句，支持朗读开关、语速、朗读音量、大字体和高对比设置，所有选择通过本机偏好持久化。阶段 6 已通过 `testDebugUnitTest`、`connectedDebugAndroidTest` 和 `assembleDebug`；`Pixel_Tablet` 上 4 项 Android 仪器测试全部通过。DeepSeek Key 已仅写入本机 `local.properties`，默认仍使用本地安全 ModelGateway，不会因配置 Key 自动发送训练数据。开发过程记录见：[开发日志.md](docs/开发日志.md)。
 
 ## 五、依赖清单（build.gradle.kts）
 
@@ -90,6 +90,6 @@ dependencies {
 1. 使用 Android Studio 打开本目录，并等待 Gradle Sync 完成。
 2. 创建或启动 Android Emulator 平板 AVD。
 3. 运行 `app`，依次验收儿童端、家长端和专业端主要流程。
-4. 联调 DeepSeek 时通过本机 `local.properties` 注入开发密钥，**不要硬编码或提交密钥**。
+4. 联调 DeepSeek 时通过本机 `local.properties` 注入开发密钥，**不要硬编码或提交密钥**；当前默认离线安全网关不会自动联网。
 
 > 说明：当前 `XingmouViewModel` 默认使用本地安全 ModelGateway 验证 Agent 闭环；即使本机配置了 DeepSeek Key，也不会在未明确切换网关前自动发送训练数据到外部服务。
