@@ -52,7 +52,7 @@ app/src/main/java/com/xingmou/
 
 ## 四、当前工程状态
 
-阶段 0 工程脚手架已完成：项目现在包含可编译的 Gradle Android 工程、Compose 占位入口和现有 `core` 规则/LLM 骨架。
+阶段 4 三端口工作台已完成：项目现在包含可编译的 Gradle Android 工程、Room 数据层、领域与安全规则、Agent Runtime、事件协调器，以及儿童端、家长端、专业端正式 Compose 页面。
 
 ```powershell
 cd xingmou-app
@@ -69,7 +69,7 @@ DEEPSEEK_API_KEY=你的本机开发密钥
 
 未配置时 `DeepSeekClientFactory.createOrNull()` 返回 `null`，应用应使用 Mock 或确定性降级，不会自动发起网络模型请求。生产发布仍建议通过服务端代理或更强的密钥保护方案，避免将长期密钥直接打包进 APK。
 
-阶段 3.5 已完成：Room 数据层、领域/规则引擎、Agent Runtime、三端口 Mock AI 闭环和事件驱动人机协同已加入，支持训练完成、连续失败、风险检测、记录阈值、方案审核、暂停恢复及幂等恢复。当前尚未完成：三端口 Compose 正式页面、真实 DeepSeek Key 联调和 Android 模拟器验收。开发过程记录见：[开发日志.md](docs/开发日志.md)。
+阶段 4 已完成：三端口页面通过 `XingmouViewModel` 接入 Room、`AgentEventCoordinator` 和 `AgentOrchestrator`。儿童端支持单步训练、主动休息、连续失败暂停和安全停止；家长端支持观察输入、风险路由、已审核知识检索和来源展示；专业端支持过程分析、Agent 审计信息和 `draft → confirmed → active` 两步审核。当前自动化验收为 28 项单元测试通过、Debug APK 构建通过。尚待完成：真实 DeepSeek Key 联调和 Android 模拟器人工验收。开发过程记录见：[开发日志.md](docs/开发日志.md)。
 
 ## 五、依赖清单（build.gradle.kts）
 
@@ -87,9 +87,9 @@ dependencies {
 
 ## 六、接入步骤
 
-1. 用 Android Studio 新建 Empty Compose Activity 项目（包名 `com.xingmou`）。
-2. 把本目录 `core/` 下所有 `.kt` 文件拷贝到项目对应包下。
-3. 在 `MainActivity` 里按角色路由到三个端口页面。
-4. `DeepSeekClient` 的 API Key 放入 Android Keystore / EncryptedSharedPreferences，**不要硬编码**。
+1. 使用 Android Studio 打开本目录，并等待 Gradle Sync 完成。
+2. 创建或启动 Android Emulator 平板 AVD。
+3. 运行 `app`，依次验收儿童端、家长端和专业端主要流程。
+4. 联调 DeepSeek 时通过本机 `local.properties` 注入开发密钥，**不要硬编码或提交密钥**。
 
-> 说明：本目录是设计稿（核心逻辑完整、可直接拷贝），UI 层（Compose 页面）和 Room 数据层待环境就绪后补全。
+> 说明：当前 `XingmouViewModel` 默认使用本地安全 ModelGateway 验证 Agent 闭环；即使本机配置了 DeepSeek Key，也不会在未明确切换网关前自动发送训练数据到外部服务。

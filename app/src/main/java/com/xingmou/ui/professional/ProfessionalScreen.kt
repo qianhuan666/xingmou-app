@@ -1,0 +1,150 @@
+package com.xingmou.ui.professional
+
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+import com.xingmou.ProfessionalUiState
+import com.xingmou.core.domain.PlanStatus
+import com.xingmou.ui.components.SectionSurface
+import com.xingmou.ui.components.StatusLine
+import com.xingmou.ui.theme.BlueSoft
+import com.xingmou.ui.theme.CoralSoft
+import com.xingmou.ui.theme.Success
+import com.xingmou.ui.theme.Warning
+
+@Composable
+fun ProfessionalScreen(
+    state: ProfessionalUiState,
+    onReviewCommentChange: (String) -> Unit,
+    onCreateDraft: () -> Unit,
+    onConfirm: () -> Unit,
+    onActivate: () -> Unit,
+    onReject: () -> Unit,
+    onRefresh: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        Text("专业审核工作台", style = MaterialTheme.typography.headlineMedium)
+        Text("Agent 负责整理与草拟，方案确认和生效始终由专业人员完成。", color = MaterialTheme.colorScheme.onSurfaceVariant)
+
+        BoxWithConstraints(Modifier.fillMaxWidth()) {
+            val wide = maxWidth >= 920.dp
+            if (wide) {
+                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                        AnalysisPanel(state, onRefresh)
+                        AgentPanel(state)
+                    }
+                    PlanPanel(state, onReviewCommentChange, onCreateDraft, onConfirm, onActivate, onReject, Modifier.weight(1.12f))
+                }
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    AnalysisPanel(state, onRefresh)
+                    PlanPanel(state, onReviewCommentChange, onCreateDraft, onConfirm, onActivate, onReject, Modifier.fillMaxWidth())
+                    AgentPanel(state)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AnalysisPanel(state: ProfessionalUiState, onRefresh: () -> Unit) {
+    SectionSurface(title = "过程分析", supporting = "只描述训练过程表现，不作医学诊断。") {
+        StatusLine("有效记录", "${state.recordCount} 条")
+        Spacer(Modifier.height(8.dp))
+        StatusLine("数据充分性", if (state.dataSufficient) "可生成过程分析" else "不足 3 条", valueColor = if (state.dataSufficient) Success else Warning)
+        HorizontalDivider(Modifier.padding(vertical = 14.dp))
+        state.analysisSummary.forEach { Text("• $it", modifier = Modifier.padding(bottom = 6.dp)) }
+        state.warningSignals.forEach { Text("注意：$it", modifier = Modifier.padding(top = 6.dp), color = Warning) }
+        OutlinedButton(onClick = onRefresh, modifier = Modifier.fillMaxWidth().padding(top = 12.dp)) { Text("刷新本地记录") }
+    }
+}
+
+@Composable
+private fun PlanPanel(
+    state: ProfessionalUiState,
+    onReviewCommentChange: (String) -> Unit,
+    onCreateDraft: () -> Unit,
+    onConfirm: () -> Unit,
+    onActivate: () -> Unit,
+    onReject: () -> Unit,
+    modifier: Modifier
+) {
+    SectionSurface(
+        title = "训练方案",
+        supporting = state.reviewMessage,
+        modifier = modifier,
+        containerColor = if (state.planStatus == PlanStatus.ACTIVE) BlueSoft else MaterialTheme.colorScheme.surface
+    ) {
+        StatusLine("当前状态", state.planStatus?.name ?: "尚未创建")
+        Spacer(Modifier.height(12.dp))
+        Text(state.planSummary, style = MaterialTheme.typography.bodyLarge)
+        if (state.isWorking) LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 12.dp))
+        Spacer(Modifier.height(16.dp))
+        OutlinedTextField(
+            value = state.reviewComment,
+            onValueChange = onReviewCommentChange,
+            modifier = Modifier.fillMaxWidth(),
+            minLines = 3,
+            maxLines = 5,
+            label = { Text("审核意见") },
+            placeholder = { Text("退回修改时必须填写理由；确认时建议记录核对要点。") }
+        )
+        Spacer(Modifier.height(14.dp))
+        when (state.planStatus) {
+            null, PlanStatus.REJECTED -> Button(
+                onClick = onCreateDraft,
+                modifier = Modifier.fillMaxWidth().height(52.dp),
+                enabled = state.dataSufficient && !state.isWorking
+            ) { Text(if (state.dataSufficient) "生成方案草案" else "记录不足，暂不能生成") }
+            PlanStatus.DRAFT -> {
+                Button(onClick = onConfirm, modifier = Modifier.fillMaxWidth().height(52.dp), enabled = !state.isWorking) { Text("确认草案") }
+                OutlinedButton(onClick = onReject, modifier = Modifier.fillMaxWidth().padding(top = 10.dp), enabled = !state.isWorking) { Text("退回修改") }
+            }
+            PlanStatus.CONFIRMED -> {
+                Button(onClick = onActivate, modifier = Modifier.fillMaxWidth().height(52.dp), enabled = !state.isWorking) { Text("签署生效") }
+                OutlinedButton(onClick = onReject, modifier = Modifier.fillMaxWidth().padding(top = 10.dp), enabled = !state.isWorking) { Text("退回修改") }
+            }
+            PlanStatus.ACTIVE -> Text("方案已由专业人员签署生效。后续变更应创建新版本。", color = Success)
+            else -> Text("当前状态不可在本页面继续变更。", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable
+private fun AgentPanel(state: ProfessionalUiState) {
+    SectionSurface(title = "Agent 运行", supporting = "本地可审计信息，不展示原始敏感数据。", containerColor = CoralSoft) {
+        StatusLine("运行状态", state.agentStatus)
+        Spacer(Modifier.height(8.dp))
+        StatusLine("最近事件", state.recentEvent)
+        state.agentRunId?.let {
+            Spacer(Modifier.height(8.dp))
+            StatusLine("runId", it)
+        }
+        HorizontalDivider(Modifier.padding(vertical = 14.dp))
+        Text("规则与工具", style = MaterialTheme.typography.titleMedium)
+        Text(state.evidence.joinToString(" · "), modifier = Modifier.padding(top = 6.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}

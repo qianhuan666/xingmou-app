@@ -1,0 +1,35 @@
+/* Hallmark · genre: modern-minimal · macrostructure: Workbench · theme: Coral · tone: soft-technical · audience: children/families/professionals · use: complete role-specific training and review tasks · enrichment: Compose-drawn XiaoXing mark · nav: N3 · footer: Ft2 · contrast: pass (40–41) · slop: pass (42–45) · mobile: pass (34, 49, 50–57) */
+/* Hallmark · pre-emit critique: P4 H4 E4 S5 R5 V4 */
+:root {
+  --color-paper: oklch(97% 0.012 70);
+  --color-surface: oklch(99% 0.008 70);
+  --color-ink: oklch(27% 0.012 265);
+  --color-muted: oklch(53% 0.025 240);
+  --color-rule: oklch(89% 0.012 70);
+  --color-accent: oklch(61% 0.145 32);
+  --color-accent-soft: oklch(91% 0.045 32);
+  --color-info: oklch(64% 0.17 258);
+  --color-info-soft: oklch(92% 0.05 258);
+  --color-success: oklch(57% 0.08 158);
+  --color-warning: oklch(55% 0.11 58);
+  --color-error: oklch(50% 0.15 28);
+  --font-display: system-ui, sans-serif;
+  --font-body: system-ui, sans-serif;
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 12px;
+  --space-lg: 16px;
+  --space-xl: 24px;
+  --space-2xl: 32px;
+  --text-body: 1rem;
+  --text-title: 1.25rem;
+  --text-display: 2rem;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in: cubic-bezier(0.7, 0, 0.84, 0);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --dur-short: 120ms;
+  --dur-medium: 200ms;
+  --rule-hairline: 1px;
+  --radius-input: 12px;
+  --radius-surface: 16px;
+}

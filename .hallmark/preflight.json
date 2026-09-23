@@ -1,0 +1,10 @@
+{
+  "date": "2026-09-23",
+  "framework": "Android / Jetpack Compose Material 3",
+  "font_stack": "system sans",
+  "palette": "existing #4F86F7 information blue; placeholder light surfaces",
+  "motion": "motion-cut; no animation library",
+  "spacing": "introduced 4dp Compose spacing scale",
+  "preserved": ["Gradle dependencies", "system font", "#4F86F7 information color"],
+  "introduced": ["Workbench macrostructure", "Coral theme", "N3 tablet rail", "Ft2 status band"]
+}

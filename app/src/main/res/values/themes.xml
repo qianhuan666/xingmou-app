@@ -2,9 +2,10 @@
 <resources>
     <style name="Theme.Xingmou" parent="android:style/Theme.Material.Light.NoActionBar">
         <item name="android:fontFamily">sans</item>
-        <item name="android:colorAccent">#4F86F7</item>
-        <item name="android:navigationBarColor">#F7F9FC</item>
-        <item name="android:statusBarColor">#F7F9FC</item>
+        <item name="android:colorAccent">#D96855</item>
+        <item name="android:navigationBarColor">#F8F5F0</item>
+        <item name="android:statusBarColor">#F8F5F0</item>
         <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar">true</item>
     </style>
 </resources>
