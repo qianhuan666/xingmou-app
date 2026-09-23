@@ -61,7 +61,7 @@ cd xingmou-app
 
 Debug APK 输出位置：`app/build/outputs/apk/debug/app-debug.apk`。
 
-阶段 1 已完成 Room 数据层基础：核心 Entity、DAO、数据库单例和本地知识/任务种子已加入。当前尚未完成：三端口 Compose 页面、Agent Runtime、训练引擎和 Android 模拟器验收。开发过程记录见：[开发日志.md](docs/开发日志.md)。
+阶段 2.5 已完成：Room 数据层、领域/规则引擎和最小 Agent Runtime 已加入，包含工具注册表、端口授权、幂等校验、运行状态机和审计轨迹映射。当前尚未完成：三端口 Compose 页面、真实工具处理器接入和 Android 模拟器验收。开发过程记录见：[开发日志.md](docs/开发日志.md)。
 
 ## 五、依赖清单（build.gradle.kts）
 
