@@ -61,7 +61,15 @@ cd xingmou-app
 
 Debug APK 输出位置：`app/build/outputs/apk/debug/app-debug.apk`。
 
-阶段 2.5 已完成：Room 数据层、领域/规则引擎和最小 Agent Runtime 已加入，包含工具注册表、端口授权、幂等校验、运行状态机和审计轨迹映射。当前尚未完成：三端口 Compose 页面、真实工具处理器接入和 Android 模拟器验收。开发过程记录见：[开发日志.md](docs/开发日志.md)。
+本机联调 DeepSeek 时，可在不会提交 Git 的 `local.properties` 中增加：
+
+```properties
+DEEPSEEK_API_KEY=你的本机开发密钥
+```
+
+未配置时 `DeepSeekClientFactory.createOrNull()` 返回 `null`，应用应使用 Mock 或确定性降级，不会自动发起网络模型请求。生产发布仍建议通过服务端代理或更强的密钥保护方案，避免将长期密钥直接打包进 APK。
+
+阶段 3 已完成：Room 数据层、领域/规则引擎、Agent Runtime 和三端口 Mock AI 闭环已加入，包含上下文组装、隐私脱敏、模型输出校验、工具调用、人工审批、记忆撤回和决策追踪。当前尚未完成：事件驱动闭环、三端口 Compose 正式页面、真实 DeepSeek Key 联调和 Android 模拟器验收。开发过程记录见：[开发日志.md](docs/开发日志.md)。
 
 ## 五、依赖清单（build.gradle.kts）
 

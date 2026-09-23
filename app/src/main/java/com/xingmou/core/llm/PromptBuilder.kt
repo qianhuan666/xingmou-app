@@ -75,14 +75,14 @@ object PromptBuilder {
     fun buildUserMessage(port: Port, ctx: SessionContext, userText: String): String {
         val sb = StringBuilder()
         sb.append("角色：").append(port.name.lowercase()).append("\n")
-        sb.append("儿童化名：").append(ctx.childAlias).append("\n")
-        sb.append("年龄段：").append(ctx.ageBand).append("\n")
+        sb.append("儿童化名：").append(sanitize(ctx.childAlias)).append("\n")
+        sb.append("年龄段：").append(sanitize(ctx.ageBand)).append("\n")
         sb.append("沟通水平：").append(communicationToCn(ctx.communicationLevel)).append("\n")
         sb.append("支持等级：").append(ctx.supportLevel).append("\n")
-        ctx.currentDomain?.let { sb.append("当前领域：").append(it).append("\n") }
-        ctx.currentTask?.let { sb.append("当前任务：").append(it).append("\n") }
-        ctx.recentSummary?.let { sb.append("近期摘要：").append(it).append("\n") }
-        if (ctx.riskFlags.isNotEmpty()) sb.append("风险标记：").append(ctx.riskFlags.joinToString()).append("\n")
+        ctx.currentDomain?.let { sb.append("当前领域：").append(sanitize(it)).append("\n") }
+        ctx.currentTask?.let { sb.append("当前任务：").append(sanitize(it)).append("\n") }
+        ctx.recentSummary?.let { sb.append("近期摘要：").append(sanitize(it)).append("\n") }
+        if (ctx.riskFlags.isNotEmpty()) sb.append("风险标记：").append(sanitize(ctx.riskFlags.joinToString())).append("\n")
         sb.append("用户输入：").append(sanitize(userText))
         return sb.toString()
     }

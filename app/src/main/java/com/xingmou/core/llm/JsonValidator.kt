@@ -3,6 +3,7 @@ package com.xingmou.core.llm
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import com.xingmou.core.model.Port
+import com.xingmou.core.rule.PortGuard
 
 /**
  * JSON 输出校验（对应提示词第八节硬规则第 5 条：结构校验）。
@@ -46,6 +47,9 @@ object JsonValidator {
             }
         }
 
+        val leakedTerms = PortGuard.checkLeak(port, obj.toString())
+        require(leakedTerms.isEmpty()) { "端口输出包含越权内容：${leakedTerms.joinToString()}" }
+
         // 3. 悬空引用校验（家长端/专业端）：claim.source_ids 必须能在 sources 找到
         if (port != Port.CHILD) {
             checkDanglingReferences(obj)
@@ -55,6 +59,22 @@ object JsonValidator {
         if (port == Port.PROFESSIONAL) {
             require(obj.get("review_required")?.asBoolean == true) {
                 "专业端 review_required 必须为 true"
+            }
+        }
+
+        // 5. 可选 Agent 动作必须是完整的结构化对象，实际白名单授权由 ToolRegistry 完成
+        obj.get("action")?.let { actionElement ->
+            require(actionElement.isJsonObject) { "action 必须为对象" }
+            val action = actionElement.asJsonObject
+            require(action.get("tool_name")?.isJsonPrimitive == true && action.get("tool_name").asString.isNotBlank()) {
+                "action 缺少 tool_name"
+            }
+            require(action.get("arguments")?.isJsonObject == true) { "action.arguments 必须为对象" }
+            require(action.get("idempotency_key")?.isJsonPrimitive == true && action.get("idempotency_key").asString.isNotBlank()) {
+                "action 缺少 idempotency_key"
+            }
+            require(action.get("requires_review")?.isJsonPrimitive == true && action.get("requires_review").asJsonPrimitive.isBoolean) {
+                "action 缺少 requires_review"
             }
         }
 

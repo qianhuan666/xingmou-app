@@ -29,7 +29,10 @@ object PortGuard {
      * @return 命中越权的敏感词列表（空表示合规）
      */
     fun checkLeak(port: Port, text: String): List<String> =
-        forbiddenByPort[port].orEmpty().filter { it in text }
+        forbiddenByPort[port].orEmpty().filter { term ->
+            val normalized = if (port == Port.PARENT) text.replace("不构成医学诊断", "") else text
+            term in normalized
+        }
 
     /**
      * 判断该端口能否看到某条来源的完整信息。

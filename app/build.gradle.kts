@@ -1,9 +1,20 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
     id("com.google.devtools.ksp")
 }
+
+val localProperties = Properties().apply {
+    val localFile = rootProject.file("local.properties")
+    if (localFile.exists()) localFile.inputStream().use { load(it) }
+}
+val deepSeekApiKey = localProperties.getProperty("DEEPSEEK_API_KEY")
+    ?: System.getenv("DEEPSEEK_API_KEY")
+    ?: ""
+val escapedDeepSeekApiKey = deepSeekApiKey.replace("\\", "\\\\").replace("\"", "\\\"")
 
 android {
     namespace = "com.xingmou"
@@ -15,6 +26,7 @@ android {
         targetSdk = 36
         versionCode = 1
         versionName = "0.1.0"
+        buildConfigField("String", "DEEPSEEK_API_KEY", "\"$escapedDeepSeekApiKey\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
