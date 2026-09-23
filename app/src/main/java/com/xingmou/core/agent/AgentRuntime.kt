@@ -48,6 +48,32 @@ class AgentRuntime(
 
     fun get(runId: String): AgentRunSnapshot = runs[runId] ?: error("找不到 Agent 运行：$runId")
 
+    fun findOrNull(runId: String): AgentRunSnapshot? = runs[runId]
+
+    /** 从 Room 最近一致状态恢复运行；不会重新执行已记录的工具副作用。 */
+    fun restore(
+        run: AgentRunEntity,
+        steps: List<AgentStepEntity> = emptyList(),
+        toolCalls: List<ToolCallEntity> = emptyList()
+    ): AgentRunSnapshot {
+        val snapshot = AgentRunSnapshot(
+            runId = run.runId,
+            taskType = run.taskType,
+            port = Port.from(run.port),
+            childId = run.childId,
+            state = AgentRunState.valueOf(run.state),
+            status = AgentRunStatus.valueOf(run.status),
+            steps = steps.sortedBy { it.stepIndex },
+            toolCalls = toolCalls.sortedBy { it.createdAt },
+            errorMessage = run.errorMessage
+        )
+        runs[run.runId] = snapshot
+        toolCalls.filter { it.executionStatus == "succeeded" && it.resultSummary != null }.forEach {
+            idempotencyResults[it.idempotencyKey] = requireNotNull(it.resultSummary)
+        }
+        return snapshot
+    }
+
     fun transition(runId: String, target: AgentRunState, now: Long = 0L, reason: String? = null): AgentStateTransition {
         val current = get(runId)
         val result = ExecutionStateMachine.transition(current.state, target)

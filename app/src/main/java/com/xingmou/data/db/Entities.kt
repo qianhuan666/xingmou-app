@@ -186,6 +186,21 @@ data class AgentStepEntity(
 )
 
 @Entity(
+    tableName = "agent_events",
+    indices = [Index("runId"), Index("childId"), Index("eventType"), Index("createdAt")]
+)
+data class AgentEventEntity(
+    @androidx.room.PrimaryKey val eventId: String,
+    val runId: String?,
+    val childId: String?,
+    val eventType: String,
+    val payloadSummary: String,
+    val status: String,
+    val createdAt: Long,
+    val processedAt: Long?
+)
+
+@Entity(
     tableName = "tool_calls",
     indices = [Index("runId"), Index("toolName")]
 )

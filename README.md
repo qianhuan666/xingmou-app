@@ -69,7 +69,7 @@ DEEPSEEK_API_KEY=你的本机开发密钥
 
 未配置时 `DeepSeekClientFactory.createOrNull()` 返回 `null`，应用应使用 Mock 或确定性降级，不会自动发起网络模型请求。生产发布仍建议通过服务端代理或更强的密钥保护方案，避免将长期密钥直接打包进 APK。
 
-阶段 3 已完成：Room 数据层、领域/规则引擎、Agent Runtime 和三端口 Mock AI 闭环已加入，包含上下文组装、隐私脱敏、模型输出校验、工具调用、人工审批、记忆撤回和决策追踪。当前尚未完成：事件驱动闭环、三端口 Compose 正式页面、真实 DeepSeek Key 联调和 Android 模拟器验收。开发过程记录见：[开发日志.md](docs/开发日志.md)。
+阶段 3.5 已完成：Room 数据层、领域/规则引擎、Agent Runtime、三端口 Mock AI 闭环和事件驱动人机协同已加入，支持训练完成、连续失败、风险检测、记录阈值、方案审核、暂停恢复及幂等恢复。当前尚未完成：三端口 Compose 正式页面、真实 DeepSeek Key 联调和 Android 模拟器验收。开发过程记录见：[开发日志.md](docs/开发日志.md)。
 
 ## 五、依赖清单（build.gradle.kts）
 

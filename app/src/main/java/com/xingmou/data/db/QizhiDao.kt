@@ -84,14 +84,23 @@ interface AgentDao {
     suspend fun insertStep(step: AgentStepEntity)
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertEvent(event: AgentEventEntity)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertToolCall(call: ToolCallEntity)
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertTrace(trace: DecisionTraceEntity)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertReview(review: ReviewRequestEntity)
 
     @Query("SELECT * FROM agent_runs WHERE runId = :runId LIMIT 1")
     suspend fun findRun(runId: String): AgentRunEntity?
 
     @Query("SELECT * FROM agent_steps WHERE runId = :runId ORDER BY stepIndex ASC")
     suspend fun steps(runId: String): List<AgentStepEntity>
+
+    @Query("SELECT * FROM agent_events WHERE runId = :runId ORDER BY createdAt ASC")
+    suspend fun events(runId: String): List<AgentEventEntity>
 }
