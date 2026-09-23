@@ -9,7 +9,7 @@ package com.xingmou.core.rule
 object DifficultyController {
 
     /** 难度上限 */
-    const val MAX_LEVEL = 10
+    const val MAX_LEVEL = 5
     const val MIN_LEVEL = 1
 
     /**
