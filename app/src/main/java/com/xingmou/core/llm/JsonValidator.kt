@@ -41,7 +41,7 @@ object JsonValidator {
         if (port == Port.CHILD) {
             val speech = obj.getAsJsonArray("speech")
                 ?: throw IllegalArgumentException("儿童端缺少 speech")
-            require(speech.isNotEmpty() && speech.all { it.asString.length <= 15 }) {
+            require(speech.size() > 0 && speech.all { it.asString.length <= 15 }) {
                 "儿童端 speech 缺失或超长"
             }
         }

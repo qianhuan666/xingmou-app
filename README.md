@@ -50,7 +50,20 @@ app/src/main/java/com/xingmou/
 | 输出前自检 | `JsonValidator` 校验失败 → `SafeResponses` 降级 |
 | 隐私最小化 | `PromptBuilder` 只传化名/汇总，真实信息本地硬过滤 |
 
-## 四、依赖清单（build.gradle.kts）
+## 四、当前工程状态
+
+阶段 0 工程脚手架已完成：项目现在包含可编译的 Gradle Android 工程、Compose 占位入口和现有 `core` 规则/LLM 骨架。
+
+```powershell
+cd xingmou-app
+./gradlew.bat assembleDebug
+```
+
+Debug APK 输出位置：`app/build/outputs/apk/debug/app-debug.apk`。
+
+当前尚未完成：Room 数据层、三端口 Compose 页面、Agent Runtime、训练引擎和 Android 模拟器验收。开发过程记录见：[开发日志.md](docs/开发日志.md)。
+
+## 五、依赖清单（build.gradle.kts）
 
 ```kotlin
 dependencies {
@@ -64,7 +77,7 @@ dependencies {
 }
 ```
 
-## 五、接入步骤
+## 六、接入步骤
 
 1. 用 Android Studio 新建 Empty Compose Activity 项目（包名 `com.xingmou`）。
 2. 把本目录 `core/` 下所有 `.kt` 文件拷贝到项目对应包下。
