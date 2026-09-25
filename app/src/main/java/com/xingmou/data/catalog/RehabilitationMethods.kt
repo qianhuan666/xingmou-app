@@ -1,6 +1,13 @@
 package com.xingmou.data.catalog
 
-data class RehabilitationMethod(val id: String, val name: String, val summary: String, val boundary: String)
+data class RehabilitationMethod(
+    val id: String,
+    val name: String,
+    val summary: String,
+    val boundary: String,
+    val sourceRef: String = "LOCAL_REVIEWED_METHODS_V1",
+    val reviewStatus: String = "已审核"
+)
 
 object RehabilitationMethods {
     val all = listOf(

@@ -5,10 +5,17 @@ import com.xingmou.core.model.SupportLevel
 import com.xingmou.data.db.KnowledgeItemEntity
 import com.xingmou.data.db.SeedData
 import com.xingmou.data.db.TrainingRecordEntity
+import com.xingmou.data.catalog.RehabilitationMethods
 import org.junit.Assert.*
 import org.junit.Test
 
 class DomainEnginesTest {
+    @Test fun rehabilitationMethodCatalogHasReviewedBoundaries() {
+        assertEquals(12, RehabilitationMethods.all.size)
+        assertEquals(12, RehabilitationMethods.all.map { it.id }.toSet().size)
+        assertTrue(RehabilitationMethods.all.all { it.summary.isNotBlank() && it.boundary.isNotBlank() && it.sourceRef.isNotBlank() })
+    }
+
     @Test fun retrieverLimitsResultsAndExcludesUnverified() {
         val extra = KnowledgeItemEntity("x", "support", "A", "提示", "等待辅助", null, "unverified", "all_ports", "[\"提示\"]", true, 0)
         val result = KnowledgeRetriever().retrieve("提示 辅助 等待", Port.PARENT, items = SeedData.knowledgeItems + extra)

@@ -30,6 +30,7 @@ import androidx.compose.ui.unit.dp
 import com.xingmou.ProfessionalUiState
 import com.xingmou.HomeFeedbackUi
 import com.xingmou.data.catalog.AssessmentCatalog
+import com.xingmou.data.catalog.RehabilitationMethods
 import com.xingmou.core.domain.PlanStatus
 import com.xingmou.ui.components.SectionSurface
 import com.xingmou.ui.components.StatusLine
@@ -82,6 +83,7 @@ fun ProfessionalScreen(
                         GroupReportPanel(state)
                         TrainingDetailsPanel(state)
                         AssessmentPanel(state, onAssessmentSelect, onAssessmentDateChange, onAssessmentSourceChange, onAssessmentScoresChange, onAssessmentNotesChange, onSaveAssessment)
+                        MethodLibraryPanel()
                         CareWorkflowPanel(state, onAdvanceCareStage, onCareNoteChange, onCareClosureReasonChange, onCareFollowUpPlanChange, onCareFollowUpDateChange)
                         HomeFeedbackPanel(state)
                         AgentPanel(state)
@@ -95,12 +97,26 @@ fun ProfessionalScreen(
                     GroupReportPanel(state)
                     TrainingDetailsPanel(state)
                     AssessmentPanel(state, onAssessmentSelect, onAssessmentDateChange, onAssessmentSourceChange, onAssessmentScoresChange, onAssessmentNotesChange, onSaveAssessment)
+                    MethodLibraryPanel()
                     CareWorkflowPanel(state, onAdvanceCareStage, onCareNoteChange, onCareClosureReasonChange, onCareFollowUpPlanChange, onCareFollowUpDateChange)
                     HomeFeedbackPanel(state)
                     PlanPanel(state, onReviewCommentChange, onPlanTaskChange, onPlanDifficultyChange, onPlanSupportLevelChange, onPlanFrequencyChange, onPlanDurationChange, onPlanStopConditionsChange, onCreateRevision, onCreateDraft, onConfirm, onActivate, onReject, Modifier.fillMaxWidth())
                     AgentPanel(state)
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun MethodLibraryPanel() {
+    SectionSurface(title = "12 方法库", supporting = "仅供专业人员参考；每条方法都保留适用边界和本地审核来源。") {
+        RehabilitationMethods.all.forEachIndexed { index, method ->
+            if (index > 0) HorizontalDivider(Modifier.padding(vertical = 8.dp))
+            Text(method.name, style = MaterialTheme.typography.titleSmall)
+            Text(method.summary, modifier = Modifier.padding(top = 3.dp))
+            Text("边界：${method.boundary}", modifier = Modifier.padding(top = 3.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("来源：${method.sourceRef} · ${method.reviewStatus}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
