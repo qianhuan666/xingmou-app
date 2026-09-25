@@ -680,6 +680,9 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                 )
                 decision.updatedPlan?.let { activePlan = it }
                 decision.updatedReview?.let { activeReview = it }
+                if (activate && decision.updatedPlan?.status == "active") {
+                    publishActivePlanToHomeTask(decision.updatedPlan)
+                }
                 _uiState.update {
                     it.copy(professional = it.professional.copy(
                         planStatus = decision.updatedPlan?.status?.uppercase()?.let(PlanStatus::valueOf) ?: it.professional.planStatus,
@@ -729,6 +732,8 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
             runCatching {
                 val records = database.trainingRecordDao().recentForChild(childId)
                 val analysis = analysisEngine.analyze(records)
+                val latestPlan = database.planDao().latest(childId)
+                val feedback = database.homeFeedbackDao().recentForChild(childId)
                 _uiState.update {
                     it.copy(
                         parent = it.parent.copy(recordCount = records.size),
@@ -737,13 +742,29 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                             dataSufficient = analysis.dataSufficient,
                             analysisSummary = analysis.observations + if (analysis.dataSufficient) listOf("趋势：${analysis.trend.name}") else emptyList(),
                             warningSignals = analysis.warningSignals,
-                            planSummary = if (analysis.dataSufficient || it.professional.planStatus != null) it.professional.planSummary else "达到 3 条有效记录后，可生成方案草案。",
-                            recentEvent = if (analysis.sampleCount >= 3) "RECORDS_THRESHOLD_REACHED" else it.professional.recentEvent
+                            planStatus = latestPlan?.status?.uppercase()?.let { status -> runCatching { PlanStatus.valueOf(status) }.getOrNull() } ?: it.professional.planStatus,
+                            planSummary = if (latestPlan != null) "当前方案 V${latestPlan.version} · ${latestPlan.status.uppercase()}" else if (analysis.dataSufficient || it.professional.planStatus != null) it.professional.planSummary else "达到 3 条有效记录后，可生成方案草案。",
+                            recentEvent = if (analysis.sampleCount >= 3) "RECORDS_THRESHOLD_REACHED" else it.professional.recentEvent,
+                            recentHomeFeedback = feedback.map { item -> "心情：${item.mood} · 疲劳：${item.fatigue}${item.note.takeIf { note -> note.isNotBlank() }?.let { " · $it" } ?: ""}" }
                         )
                     )
                 }
             }
         }
+    }
+
+    private suspend fun publishActivePlanToHomeTask(plan: PlanVersionEntity) {
+        database.homeTaskDao().upsert(
+            HomeTaskEntity(
+                taskId = "home-$childId-plan-${plan.version}",
+                childId = childId,
+                title = "专业下发：图片配对短练习",
+                description = "已签署方案 V${plan.version}。按当前支持等级完成一次 5–10 分钟练习；出现疲劳、拒绝或风险时暂停并记录观察。",
+                status = "pending",
+                updatedAt = System.currentTimeMillis()
+            )
+        )
+        loadHomeSupport(childId)
     }
 
     private fun session() = SessionContext(

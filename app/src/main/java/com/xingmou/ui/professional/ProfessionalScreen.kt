@@ -52,6 +52,7 @@ fun ProfessionalScreen(
                 Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                         AnalysisPanel(state, onRefresh)
+                        HomeFeedbackPanel(state)
                         AgentPanel(state)
                     }
                     PlanPanel(state, onReviewCommentChange, onCreateDraft, onConfirm, onActivate, onReject, Modifier.weight(1.12f))
@@ -59,9 +60,23 @@ fun ProfessionalScreen(
             } else {
                 Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                     AnalysisPanel(state, onRefresh)
+                    HomeFeedbackPanel(state)
                     PlanPanel(state, onReviewCommentChange, onCreateDraft, onConfirm, onActivate, onReject, Modifier.fillMaxWidth())
                     AgentPanel(state)
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun HomeFeedbackPanel(state: ProfessionalUiState) {
+    SectionSurface(title = "家庭反馈", supporting = "仅显示当前儿童已保存的状态观察。") {
+        if (state.recentHomeFeedback.isEmpty()) {
+            Text("暂无家庭反馈。家长完成任务后可保存今天的观察。", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        } else {
+            state.recentHomeFeedback.forEach { feedback ->
+                Text("• $feedback", modifier = Modifier.padding(bottom = 6.dp))
             }
         }
     }

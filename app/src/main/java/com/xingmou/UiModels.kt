@@ -117,7 +117,8 @@ data class ProfessionalUiState(
     val agentRunId: String? = null,
     val agentStatus: String = "本地待命",
     val recentEvent: String = "尚无事件",
-    val evidence: List<String> = listOf("RiskEngine", "AnalysisEngine", "PlanStateMachine")
+    val evidence: List<String> = listOf("RiskEngine", "AnalysisEngine", "PlanStateMachine"),
+    val recentHomeFeedback: List<String> = emptyList()
 )
 
 enum class PlanUiAction { CONFIRM, ACTIVATE, REJECT }

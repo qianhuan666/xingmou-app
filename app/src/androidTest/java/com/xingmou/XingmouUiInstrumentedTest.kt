@@ -53,6 +53,7 @@ class XingmouUiInstrumentedTest {
         composeRule.onNodeWithText("保存今天的观察").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("专业端").performClick()
         composeRule.onNodeWithText("专业审核工作台").assertIsDisplayed()
+        composeRule.onNodeWithText("家庭反馈").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("儿童端").performClick()
         composeRule.onNodeWithText("和小星一起练习").assertIsDisplayed()
     }
