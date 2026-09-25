@@ -159,6 +159,20 @@ fun ChildScreen(
             )
         }
 
+        SectionSurface(title = "我的小星星", supporting = "这里只记录练习过程中的鼓励，不用于比较或排名。") {
+            StatusLine("小星星", "${state.coursePoints} 颗")
+            Spacer(Modifier.height(8.dp))
+            StatusLine("完成轮数", "${state.completedRounds} 轮")
+            Spacer(Modifier.height(8.dp))
+            StatusLine("最近感觉", state.encouragementTrend)
+            Text(
+                state.rewardMessage,
+                modifier = Modifier.padding(top = 12.dp),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+
         SectionSurface(title = "辅助设置", supporting = "设置只保存在本机，用来调整小星的呈现方式。") {
             SettingRow("小星朗读", "朗读儿童端短句", accessibility.speechEnabled) { onSpeechEnabledChange(it) }
             Spacer(Modifier.height(8.dp))

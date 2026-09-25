@@ -49,6 +49,13 @@ class XingmouUiInstrumentedTest {
     }
 
     @Test
+    fun childEncouragementPanelIsReachable() {
+        composeRule.onNodeWithText("我的小星星").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("最近感觉").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("不用于比较或排名", substring = true).assertIsDisplayed()
+    }
+
+    @Test
     fun coreScreenRemainsReachableInLandscapeAndPortrait() {
         composeRule.activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
         composeRule.waitForIdle()

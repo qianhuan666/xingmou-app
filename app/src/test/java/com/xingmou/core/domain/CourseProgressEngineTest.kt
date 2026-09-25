@@ -32,6 +32,21 @@ class CourseProgressEngineTest {
         assertEquals(null, progress.nextQuestion)
     }
 
+    @Test
+    fun encouragementUsesProcessSignalsWithoutRanking() {
+        val records = listOf(
+            record("M02-L1-01", true, 1),
+            record("M02-L1-02", true, 2),
+            record("M02-L1-03", true, 3)
+        )
+        val progress = engine.summarize(records)
+        val encouragement = engine.encouragement(progress, records)
+        assertEquals(30, encouragement.points)
+        assertEquals(0, encouragement.completedRounds)
+        assertEquals("越来越熟悉", encouragement.trendLabel)
+        assertTrue(encouragement.rewardMessage.contains("3"))
+    }
+
     private fun record(taskId: String, correct: Boolean, createdAt: Long) = TrainingRecordEntity(
         recordId = "record-$taskId-$createdAt", childId = "child", domain = "B", taskId = taskId,
         difficulty = 1, supportLevel = "L1", reactionMs = 1000, errorType = null,

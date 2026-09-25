@@ -293,6 +293,7 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
         val records = database.trainingRecordDao().recentForChild(childId, 100)
             .filter { it.taskId.startsWith("M02-L1-") || it.taskId == "图片配对" }
         val progress = courseProgressEngine.summarize(records)
+        val encouragement = courseProgressEngine.encouragement(progress, records)
         val question = progress.nextQuestion
         _uiState.update {
             it.copy(child = it.child.copy(
@@ -303,7 +304,11 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                 courseQuestionId = question?.id,
                 courseUnlocked = baselineSession.status == BaselineStatus.COMPLETED,
                 courseOpen = true,
-                courseSummary = progress.summary
+                courseSummary = progress.summary,
+                coursePoints = encouragement.points,
+                completedRounds = encouragement.completedRounds,
+                encouragementTrend = encouragement.trendLabel,
+                rewardMessage = encouragement.rewardMessage
             ))
         }
     }
