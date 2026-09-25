@@ -118,4 +118,17 @@ class QizhiDatabaseInstrumentedTest {
         assertEquals(2, task?.demoStep)
         assertEquals("home-plan-v2", feedback.taskId)
     }
+
+    @Test
+    fun assessmentRecordsKeepVersionChainPerChild() = runBlocking {
+        database.assessmentRecordDao().upsert(
+            AssessmentRecordEntity("assessment-1", "child-a", "GESELL", "Gesell", 1, "初评", "2026-09-25", "专业人员转录", "{\"A\":3}", "首次记录", "transcribed", 1L, 1L)
+        )
+        database.assessmentRecordDao().upsert(
+            AssessmentRecordEntity("assessment-2", "child-a", "GESELL", "Gesell", 2, "复评", "2026-10-25", "专业人员转录", "{\"A\":4}", "复评记录", "transcribed", 2L, 2L)
+        )
+        assertEquals(2, database.assessmentRecordDao().latestVersion("child-a", "GESELL"))
+        assertEquals(2, database.assessmentRecordDao().recentForChild("child-a").size)
+        assertEquals(0, database.assessmentRecordDao().recentForChild("child-b").size)
+    }
 }

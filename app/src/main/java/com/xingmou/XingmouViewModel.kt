@@ -42,10 +42,15 @@ import com.xingmou.data.db.ConsentEntity
 import com.xingmou.data.db.AbilityProfileEntity
 import com.xingmou.data.db.HomeFeedbackEntity
 import com.xingmou.data.db.HomeTaskEntity
+import com.xingmou.data.db.AssessmentRecordEntity
 import com.xingmou.data.catalog.QuestionCatalog
+import com.xingmou.data.catalog.AssessmentCatalog
 import com.xingmou.BaselineUiState
 import com.xingmou.ReportMetricUi
 import java.util.UUID
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -624,6 +629,78 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
         _uiState.update { it.copy(professional = it.professional.copy(reviewComment = text.take(300))) }
     }
 
+    fun selectAssessment(assessmentId: String) {
+        val definition = AssessmentCatalog.all.firstOrNull { it.id == assessmentId } ?: return
+        _uiState.update {
+            it.copy(professional = it.professional.copy(
+                assessmentId = definition.id,
+                assessmentName = definition.name,
+                assessmentMessage = definition.note
+            ))
+        }
+    }
+
+    fun updateAssessmentDate(value: String) {
+        _uiState.update { it.copy(professional = it.professional.copy(assessmentDate = value.take(24))) }
+    }
+
+    fun updateAssessmentSource(value: String) {
+        _uiState.update { it.copy(professional = it.professional.copy(assessmentSource = value.take(120))) }
+    }
+
+    fun updateAssessmentScores(value: String) {
+        _uiState.update { it.copy(professional = it.professional.copy(assessmentScores = value.take(500))) }
+    }
+
+    fun updateAssessmentNotes(value: String) {
+        _uiState.update { it.copy(professional = it.professional.copy(assessmentNotes = value.take(500))) }
+    }
+
+    fun saveAssessmentRecord() {
+        val professional = _uiState.value.professional
+        if (professional.assessmentScores.trim().isBlank()) {
+            _uiState.update { it.copy(professional = it.professional.copy(assessmentMessage = "请先填写分数摘要或专业记录。")) }
+            return
+        }
+        viewModelScope.launch {
+            runCatching {
+                val now = System.currentTimeMillis()
+                val version = database.assessmentRecordDao().latestVersion(childId, professional.assessmentId) + 1
+                val date = professional.assessmentDate.trim().ifBlank { currentDateLabel() }
+                val source = professional.assessmentSource.trim().ifBlank { "专业人员转录" }
+                database.assessmentRecordDao().upsert(
+                    AssessmentRecordEntity(
+                        recordId = newId("assessment"),
+                        childId = childId,
+                        assessmentId = professional.assessmentId,
+                        assessmentName = professional.assessmentName,
+                        version = version,
+                        recordType = if (version == 1) "初评" else "复评",
+                        assessmentDate = date,
+                        source = source,
+                        scoresJson = professional.assessmentScores.trim(),
+                        notes = professional.assessmentNotes.trim(),
+                        status = "transcribed",
+                        createdAt = now,
+                        updatedAt = now
+                    )
+                )
+                _uiState.update {
+                    it.copy(professional = it.professional.copy(
+                        assessmentDate = date,
+                        assessmentSource = source,
+                        assessmentScores = "",
+                        assessmentNotes = "",
+                        assessmentMessage = "${professional.assessmentName} V$version 已保存，${if (version == 1) "作为初评记录" else "已建立复评版本"}。"
+                    ))
+                }
+                refreshProfessionalAnalysis()
+            }.onFailure { error ->
+                _uiState.update { it.copy(professional = it.professional.copy(assessmentMessage = "量表保存失败：${error.message ?: "未知错误"}")) }
+            }
+        }
+    }
+
     fun createPlanDraft() {
         val professional = _uiState.value.professional
         if (!professional.dataSufficient || professional.isWorking) return
@@ -771,6 +848,7 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                 val review = latestPlan?.let { database.agentDao().latestReviewForTarget(it.planId) }
                 val feedback = database.homeFeedbackDao().recentForChild(childId)
                 val homeTasks = database.homeTaskDao().allForChild(childId).associateBy { it.taskId }
+                val assessments = database.assessmentRecordDao().recentForChild(childId)
                 val reportGroups = records.groupBy { it.domain to it.taskId }.map { (key, group) ->
                     ReportGroupUi(
                         domain = key.first,
@@ -815,6 +893,17 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                             ),
                             reportGroups = reportGroups,
                             recentTrainingDetails = trainingDetails,
+                            recentAssessments = assessments.map { item ->
+                                AssessmentRecordUi(
+                                    item.assessmentName,
+                                    item.version,
+                                    item.recordType,
+                                    item.assessmentDate,
+                                    item.source,
+                                    item.scoresJson,
+                                    item.notes
+                                )
+                            },
                             planStatus = latestPlan?.status?.uppercase()?.let { status -> runCatching { PlanStatus.valueOf(status) }.getOrNull() } ?: it.professional.planStatus,
                             planSummary = if (latestPlan != null) "当前方案 V${latestPlan.version} · ${latestPlan.status.uppercase()}" else if (analysis.dataSufficient || it.professional.planStatus != null) it.professional.planSummary else "达到 3 条有效记录后，可生成方案草案。",
                             recentEvent = if (analysis.sampleCount >= 3) "RECORDS_THRESHOLD_REACHED" else it.professional.recentEvent,
@@ -859,6 +948,8 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
 
     private fun jsonString(json: String, key: String): String? =
         Regex("\\\"${Regex.escape(key)}\\\"\\s*:\\s*\\\"([^\\\"]*)\\\"").find(json)?.groupValues?.getOrNull(1)
+
+    private fun currentDateLabel(): String = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
 
     private fun Double?.percentLabel(): String = this?.let { "%.0f%%".format(it * 100) } ?: "—"
 

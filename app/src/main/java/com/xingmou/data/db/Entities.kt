@@ -101,6 +101,26 @@ data class AbilityProfileEntity(
     val createdAt: Long
 )
 
+@Entity(
+    tableName = "assessment_records",
+    indices = [Index("childId"), Index(value = ["childId", "assessmentId"]), Index(value = ["childId", "createdAt"])]
+)
+data class AssessmentRecordEntity(
+    @androidx.room.PrimaryKey val recordId: String,
+    val childId: String,
+    val assessmentId: String,
+    val assessmentName: String,
+    val version: Int,
+    val recordType: String,
+    val assessmentDate: String,
+    val source: String,
+    val scoresJson: String,
+    val notes: String,
+    val status: String,
+    val createdAt: Long,
+    val updatedAt: Long
+)
+
 @Entity(tableName = "sources")
 data class SourceEntity(
     @androidx.room.PrimaryKey val sourceId: String,

@@ -205,6 +205,12 @@ private fun PortContent(viewModel: XingmouViewModel, port: Port, modifier: Modif
         Port.PROFESSIONAL -> ProfessionalScreen(
             state = state.professional,
             onReviewCommentChange = viewModel::updateReviewComment,
+            onAssessmentSelect = viewModel::selectAssessment,
+            onAssessmentDateChange = viewModel::updateAssessmentDate,
+            onAssessmentSourceChange = viewModel::updateAssessmentSource,
+            onAssessmentScoresChange = viewModel::updateAssessmentScores,
+            onAssessmentNotesChange = viewModel::updateAssessmentNotes,
+            onSaveAssessment = viewModel::saveAssessmentRecord,
             onCreateDraft = viewModel::createPlanDraft,
             onConfirm = viewModel::confirmPlanDraft,
             onActivate = viewModel::activatePlan,

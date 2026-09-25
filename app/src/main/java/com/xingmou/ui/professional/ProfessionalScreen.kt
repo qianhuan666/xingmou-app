@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -19,10 +21,15 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.xingmou.ProfessionalUiState
 import com.xingmou.HomeFeedbackUi
+import com.xingmou.data.catalog.AssessmentCatalog
 import com.xingmou.core.domain.PlanStatus
 import com.xingmou.ui.components.SectionSurface
 import com.xingmou.ui.components.StatusLine
@@ -33,6 +40,12 @@ import com.xingmou.ui.theme.Warning
 fun ProfessionalScreen(
     state: ProfessionalUiState,
     onReviewCommentChange: (String) -> Unit,
+    onAssessmentSelect: (String) -> Unit,
+    onAssessmentDateChange: (String) -> Unit,
+    onAssessmentSourceChange: (String) -> Unit,
+    onAssessmentScoresChange: (String) -> Unit,
+    onAssessmentNotesChange: (String) -> Unit,
+    onSaveAssessment: () -> Unit,
     onCreateDraft: () -> Unit,
     onConfirm: () -> Unit,
     onActivate: () -> Unit,
@@ -56,6 +69,7 @@ fun ProfessionalScreen(
                         ReportPanel(state)
                         GroupReportPanel(state)
                         TrainingDetailsPanel(state)
+                        AssessmentPanel(state, onAssessmentSelect, onAssessmentDateChange, onAssessmentSourceChange, onAssessmentScoresChange, onAssessmentNotesChange, onSaveAssessment)
                         HomeFeedbackPanel(state)
                         AgentPanel(state)
                     }
@@ -67,6 +81,7 @@ fun ProfessionalScreen(
                     ReportPanel(state)
                     GroupReportPanel(state)
                     TrainingDetailsPanel(state)
+                    AssessmentPanel(state, onAssessmentSelect, onAssessmentDateChange, onAssessmentSourceChange, onAssessmentScoresChange, onAssessmentNotesChange, onSaveAssessment)
                     HomeFeedbackPanel(state)
                     PlanPanel(state, onReviewCommentChange, onCreateDraft, onConfirm, onActivate, onReject, Modifier.fillMaxWidth())
                     AgentPanel(state)
@@ -131,6 +146,48 @@ private fun TrainingDetailsPanel(state: ProfessionalUiState) {
                 if (index > 0) HorizontalDivider(Modifier.padding(vertical = 8.dp))
                 Text("${java.text.SimpleDateFormat("MM-dd HH:mm", java.util.Locale.getDefault()).format(java.util.Date(detail.timestamp))} · ${detail.domain}/${detail.task}", style = MaterialTheme.typography.titleSmall)
                 Text("${detail.result} · ${detail.support} · 反应时 ${detail.reaction}", modifier = Modifier.padding(top = 4.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+    }
+}
+
+@Composable
+private fun AssessmentPanel(
+    state: ProfessionalUiState,
+    onSelect: (String) -> Unit,
+    onDateChange: (String) -> Unit,
+    onSourceChange: (String) -> Unit,
+    onScoresChange: (String) -> Unit,
+    onNotesChange: (String) -> Unit,
+    onSave: () -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+    SectionSurface(title = "量表转录与复评", supporting = state.assessmentMessage) {
+        Text("量表记录由专业人员录入，保留版本与来源。", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        androidx.compose.foundation.layout.Box {
+            OutlinedButton(onClick = { expanded = true }, modifier = Modifier.fillMaxWidth().padding(top = 10.dp)) {
+                Text("${state.assessmentName} · ${state.assessmentId}")
+            }
+            DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                AssessmentCatalog.all.forEach { definition ->
+                    DropdownMenuItem(
+                        text = { Text("${definition.name} · ${definition.id}") },
+                        onClick = { expanded = false; onSelect(definition.id) }
+                    )
+                }
+            }
+        }
+        OutlinedTextField(value = state.assessmentDate, onValueChange = onDateChange, modifier = Modifier.fillMaxWidth().padding(top = 8.dp), label = { Text("评估日期") }, placeholder = { Text("例如 2026-09-25") })
+        OutlinedTextField(value = state.assessmentSource, onValueChange = onSourceChange, modifier = Modifier.fillMaxWidth().padding(top = 8.dp), label = { Text("来源/工具版本") })
+        OutlinedTextField(value = state.assessmentScores, onValueChange = onScoresChange, modifier = Modifier.fillMaxWidth().padding(top = 8.dp), minLines = 2, maxLines = 4, label = { Text("分数摘要") }, placeholder = { Text("例如：A=3，B=2；或粘贴结构化摘要") })
+        OutlinedTextField(value = state.assessmentNotes, onValueChange = onNotesChange, modifier = Modifier.fillMaxWidth().padding(top = 8.dp), minLines = 2, maxLines = 4, label = { Text("专业备注（可选）") })
+        Button(onClick = onSave, modifier = Modifier.fillMaxWidth().padding(top = 10.dp)) { Text("保存量表记录") }
+        if (state.recentAssessments.isNotEmpty()) {
+            HorizontalDivider(Modifier.padding(vertical = 14.dp))
+            Text("历史版本", style = MaterialTheme.typography.titleMedium)
+            state.recentAssessments.forEach { item ->
+                Text("${item.assessmentName} V${item.version} · ${item.recordType} · ${item.assessmentDate}", modifier = Modifier.padding(top = 6.dp))
+                Text("${item.source} · ${item.scores}", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }

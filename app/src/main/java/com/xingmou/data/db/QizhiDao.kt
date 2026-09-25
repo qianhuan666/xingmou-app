@@ -40,6 +40,18 @@ interface AbilityProfileDao {
 }
 
 @Dao
+interface AssessmentRecordDao {
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(record: AssessmentRecordEntity)
+
+    @Query("SELECT * FROM assessment_records WHERE childId = :childId ORDER BY createdAt DESC LIMIT :limit")
+    suspend fun recentForChild(childId: String, limit: Int = 10): List<AssessmentRecordEntity>
+
+    @Query("SELECT COALESCE(MAX(version), 0) FROM assessment_records WHERE childId = :childId AND assessmentId = :assessmentId")
+    suspend fun latestVersion(childId: String, assessmentId: String): Int
+}
+
+@Dao
 interface ChildBindingDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(binding: ChildBindingEntity)

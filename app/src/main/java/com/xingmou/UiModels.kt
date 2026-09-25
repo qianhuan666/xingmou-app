@@ -134,6 +134,14 @@ data class ProfessionalUiState(
     ),
     val reportGroups: List<ReportGroupUi> = emptyList(),
     val recentTrainingDetails: List<TrainingDetailUi> = emptyList(),
+    val assessmentId: String = "GESELL",
+    val assessmentName: String = "Gesell",
+    val assessmentDate: String = "",
+    val assessmentSource: String = "专业人员转录",
+    val assessmentScores: String = "",
+    val assessmentNotes: String = "",
+    val assessmentMessage: String = "量表仅作为专业转录记录，不用于平台自动诊断。",
+    val recentAssessments: List<AssessmentRecordUi> = emptyList(),
     val recentHomeFeedback: List<HomeFeedbackUi> = emptyList()
 )
 
@@ -155,6 +163,16 @@ data class TrainingDetailUi(
     val result: String,
     val support: String,
     val reaction: String
+)
+
+data class AssessmentRecordUi(
+    val assessmentName: String,
+    val version: Int,
+    val recordType: String,
+    val assessmentDate: String,
+    val source: String,
+    val scores: String,
+    val notes: String
 )
 
 data class HomeFeedbackUi(
