@@ -675,9 +675,10 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                 val version = database.assessmentRecordDao().latestVersion(childId, professional.assessmentId) + 1
                 val date = professional.assessmentDate.trim().ifBlank { currentDateLabel() }
                 val source = professional.assessmentSource.trim().ifBlank { "专业人员转录" }
+                val recordId = newId("assessment")
                 database.assessmentRecordDao().upsert(
                     AssessmentRecordEntity(
-                        recordId = newId("assessment"),
+                        recordId = recordId,
                         childId = childId,
                         assessmentId = professional.assessmentId,
                         assessmentName = professional.assessmentName,
@@ -692,6 +693,16 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                         updatedAt = now
                     )
                 )
+                database.abilityProfileDao().latestForChild(childId)?.let { profile ->
+                    database.abilityProfileDao().upsert(
+                        profile.copy(
+                            profileId = "profile-$childId-assessment-$version-$now",
+                            status = "assessment_linked",
+                            assessmentRecordIdsJson = appendJsonId(profile.assessmentRecordIdsJson, recordId),
+                            createdAt = now
+                        )
+                    )
+                }
                 _uiState.update {
                     it.copy(professional = it.professional.copy(
                         assessmentDate = date,
@@ -898,6 +909,7 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                 val feedback = database.homeFeedbackDao().recentForChild(childId)
                 val homeTasks = database.homeTaskDao().allForChild(childId).associateBy { it.taskId }
                 val assessments = database.assessmentRecordDao().recentForChild(childId)
+                val latestProfile = database.abilityProfileDao().latestForChild(childId)
                 val previousPlan = planVersions.firstOrNull { it.planId != latestPlan?.planId }
                 val planDiffs = if (latestPlan != null && previousPlan != null) planDiffs(previousPlan.payloadJson, latestPlan.payloadJson) else emptyList()
                 val latestAssessment = assessments.firstOrNull()
@@ -957,6 +969,10 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                                 )
                             },
                             profileVersionSummary = latestAssessment?.let { "最近量表：${it.assessmentName} V${it.version} · ${it.recordType} · ${it.assessmentDate}" } ?: "尚无量表复评记录。",
+                            profileEvidenceSummary = latestProfile?.let { profile ->
+                                val count = Regex("\\\"([^\\\"]+)\\\"").findAll(profile.assessmentRecordIdsJson).count()
+                                "能力画像 ${profile.status} · 证据版本 ${profile.profileId} · 已关联量表记录 $count 条"
+                            } ?: "能力画像尚无可展示的证据引用。",
                             planStatus = latestPlan?.status?.uppercase()?.let { status -> runCatching { PlanStatus.valueOf(status) }.getOrNull() } ?: it.professional.planStatus,
                             planSummary = if (latestPlan != null) "当前方案 V${latestPlan.version} · ${latestPlan.status.uppercase()}" else if (analysis.dataSufficient || it.professional.planStatus != null) it.professional.planSummary else "达到 3 条有效记录后，可生成方案草案。",
                             planDiffs = planDiffs,
@@ -1016,6 +1032,12 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
         diffs.joinToString(prefix = "[", postfix = "]") { "{\"field\":\"${jsonEscape(it.field)}\",\"previous\":\"${jsonEscape(it.previous)}\",\"current\":\"${jsonEscape(it.current)}\"}" }
 
     private fun jsonEscape(value: String): String = value.replace("\\", "\\\\").replace("\"", "\\\"")
+
+    private fun appendJsonId(json: String, id: String): String {
+        val existing = Regex("\\\"([^\\\"]+)\\\"").findAll(json).map { it.groupValues[1] }.toMutableList()
+        if (id !in existing) existing += id
+        return existing.joinToString(prefix = "[\"", postfix = "\"]", separator = "\",\"")
+    }
 
     private fun planDiffs(previousJson: String, currentJson: String): List<PlanDiffUi> {
         val fields = listOf(

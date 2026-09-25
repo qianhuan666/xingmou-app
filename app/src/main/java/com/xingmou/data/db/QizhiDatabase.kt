@@ -31,7 +31,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         ReviewRequestEntity::class,
         DecisionTraceEntity::class
     ],
-    version = 7,
+    version = 8,
     exportSchema = false
 )
 abstract class QizhiDatabase : RoomDatabase() {
@@ -59,7 +59,7 @@ abstract class QizhiDatabase : RoomDatabase() {
                     context.applicationContext,
                     QizhiDatabase::class.java,
                     "qizhi_training.db"
-                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7).build().also {
+                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8).build().also {
                     INSTANCE = it
                     DatabaseSeeder.seedAsync(it)
                 }
@@ -189,6 +189,12 @@ abstract class QizhiDatabase : RoomDatabase() {
                 db.execSQL("CREATE INDEX IF NOT EXISTS `index_assessment_records_childId` ON `assessment_records` (`childId`)")
                 db.execSQL("CREATE INDEX IF NOT EXISTS `index_assessment_records_childId_assessmentId` ON `assessment_records` (`childId`, `assessmentId`)")
                 db.execSQL("CREATE INDEX IF NOT EXISTS `index_assessment_records_childId_createdAt` ON `assessment_records` (`childId`, `createdAt`)")
+            }
+        }
+
+        val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE ability_profiles ADD COLUMN assessmentRecordIdsJson TEXT NOT NULL DEFAULT '[]'")
             }
         }
     }

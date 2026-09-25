@@ -131,4 +131,14 @@ class QizhiDatabaseInstrumentedTest {
         assertEquals(2, database.assessmentRecordDao().recentForChild("child-a").size)
         assertEquals(0, database.assessmentRecordDao().recentForChild("child-b").size)
     }
+
+    @Test
+    fun abilityProfileKeepsAssessmentEvidenceReferences() = runBlocking {
+        database.abilityProfileDao().upsert(
+            AbilityProfileEntity("profile-1", "child-a", "assessment_linked", "{\"A\":2}", 0.8, "[]", "[\"assessment-1\"]", 1L)
+        )
+        val profile = database.abilityProfileDao().latestForChild("child-a")
+        assertEquals("assessment_linked", profile?.status)
+        assertTrue(profile?.assessmentRecordIdsJson?.contains("assessment-1") == true)
+    }
 }

@@ -209,6 +209,7 @@ private fun AnalysisPanel(state: ProfessionalUiState, onRefresh: () -> Unit) {
         HorizontalDivider(Modifier.padding(vertical = 14.dp))
         state.analysisSummary.forEach { Text("• $it", modifier = Modifier.padding(bottom = 6.dp)) }
         Text(state.profileVersionSummary, modifier = Modifier.padding(top = 6.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(state.profileEvidenceSummary, modifier = Modifier.padding(top = 4.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
         state.warningSignals.forEach { Text("注意：$it", modifier = Modifier.padding(top = 6.dp), color = Warning) }
         OutlinedButton(onClick = onRefresh, modifier = Modifier.fillMaxWidth().padding(top = 12.dp)) { Text("刷新本地记录") }
     }

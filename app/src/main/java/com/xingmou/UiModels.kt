@@ -150,6 +150,7 @@ data class ProfessionalUiState(
     val assessmentMessage: String = "量表仅作为专业转录记录，不用于平台自动诊断。",
     val recentAssessments: List<AssessmentRecordUi> = emptyList(),
     val profileVersionSummary: String = "尚无量表复评记录。",
+    val profileEvidenceSummary: String = "能力画像尚无可展示的证据引用。",
     val recentHomeFeedback: List<HomeFeedbackUi> = emptyList()
 )
 

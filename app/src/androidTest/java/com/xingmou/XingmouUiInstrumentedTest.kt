@@ -61,6 +61,7 @@ class XingmouUiInstrumentedTest {
         composeRule.onNodeWithText("量表转录与复评").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("保存量表记录").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("尚无量表复评记录。", substring = true).performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("能力画像", substring = true).performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("家庭反馈").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("儿童端").performClick()
         composeRule.onNodeWithText("和小星一起练习").assertIsDisplayed()

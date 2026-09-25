@@ -98,6 +98,7 @@ data class AbilityProfileEntity(
     val scoresJson: String,
     val confidence: Double,
     val evidenceJson: String,
+    val assessmentRecordIdsJson: String = "[]",
     val createdAt: Long
 )
 
