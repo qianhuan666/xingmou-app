@@ -145,12 +145,13 @@ class QizhiDatabaseInstrumentedTest {
     @Test
     fun careWorkflowKeepsStageHistoryPerChild() = runBlocking {
         database.careRecordDao().insert(
-            CareRecordEntity("care-1", "child-a", "intake", "接案", "active", "已建立档案", null, null, "professional", 1L, 1L)
+            CareRecordEntity("care-1", "child-a", "intake", "接案", "active", "已建立档案", null, null, "professional", 1L, 1L, 1L, "professional", "首次接案已核对")
         )
         database.careRecordDao().insert(
             CareRecordEntity("care-2", "child-a", "goals", "目标", "active", "目标已确认", null, null, "professional", 2L, 2L)
         )
         assertEquals("goals", database.careRecordDao().latestForChild("child-a")?.stage)
+        assertEquals("professional", database.careRecordDao().recentForChild("child-a").last().professionalSignature)
         assertEquals(2, database.careRecordDao().recentForChild("child-a").size)
         assertEquals(0, database.careRecordDao().recentForChild("child-b").size)
     }

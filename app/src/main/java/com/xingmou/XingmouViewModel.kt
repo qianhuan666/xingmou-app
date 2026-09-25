@@ -630,10 +630,19 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
         _uiState.update { it.copy(professional = it.professional.copy(reviewComment = text.take(300))) }
     }
 
+    fun updateCareNote(value: String) {
+        _uiState.update { it.copy(professional = it.professional.copy(careNote = value.take(300))) }
+    }
+
     fun advanceCareStage() {
         viewModelScope.launch {
             runCatching {
                 val current = database.careRecordDao().latestForChild(childId)
+                val note = _uiState.value.professional.careNote.trim()
+                if (current != null && current.stage in setOf("closure", "follow_up") && note.isBlank()) {
+                    _uiState.update { it.copy(professional = it.professional.copy(careStageSummary = "结案或随访阶段必须填写专业备注后才能签署。")) }
+                    return@runCatching
+                }
                 val nextIndex = (CARE_STAGES.indexOfFirst { it.first == current?.stage } + 1).coerceAtLeast(0).coerceAtMost(CARE_STAGES.lastIndex)
                 val next = CARE_STAGES[nextIndex]
                 val latestPlan = database.planDao().latest(childId)
@@ -654,6 +663,9 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                         linkedPlanId = latestPlan?.planId,
                         linkedAssessmentId = latestAssessment?.recordId,
                         professionalId = localUserId,
+                        professionalSignedAt = now,
+                        professionalSignature = localUserId,
+                        note = note,
                         createdAt = now,
                         updatedAt = now
                     )
@@ -1029,7 +1041,7 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                             careStage = latestCare?.stageLabel ?: "接案",
                             careStageStatus = latestCare?.status ?: "待开始",
                             careStageSummary = latestCare?.summary ?: "尚未建立专业个案记录。",
-                            careTimeline = careRecords.map { item -> CareRecordUi(item.stage, item.stageLabel, item.status, item.summary, item.createdAt) },
+                            careTimeline = careRecords.map { item -> CareRecordUi(item.stage, item.stageLabel, item.status, item.summary, item.createdAt, item.professionalSignedAt != null, item.note) },
                             planStatus = latestPlan?.status?.uppercase()?.let { status -> runCatching { PlanStatus.valueOf(status) }.getOrNull() } ?: it.professional.planStatus,
                             planSummary = if (latestPlan != null) "当前方案 V${latestPlan.version} · ${latestPlan.status.uppercase()}" else if (analysis.dataSufficient || it.professional.planStatus != null) it.professional.planSummary else "达到 3 条有效记录后，可生成方案草案。",
                             planDiffs = planDiffs,

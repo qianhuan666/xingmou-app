@@ -213,6 +213,7 @@ private fun PortContent(viewModel: XingmouViewModel, port: Port, modifier: Modif
             onPlanStopConditionsChange = viewModel::updatePlanStopConditions,
             onCreateRevision = viewModel::createPlanRevision,
             onAdvanceCareStage = viewModel::advanceCareStage,
+            onCareNoteChange = viewModel::updateCareNote,
             onAssessmentSelect = viewModel::selectAssessment,
             onAssessmentDateChange = viewModel::updateAssessmentDate,
             onAssessmentSourceChange = viewModel::updateAssessmentSource,

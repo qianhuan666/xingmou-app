@@ -85,6 +85,8 @@ class XingmouUiInstrumentedTest {
         composeRule.onNodeWithText("能力画像", substring = true).performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("专业个案流程").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("当前阶段").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("阶段备注").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("签署并推进到下一阶段").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("家庭反馈").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("儿童端").performClick()
         composeRule.onNodeWithText("和小星一起练习").assertIsDisplayed()

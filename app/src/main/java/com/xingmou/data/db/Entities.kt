@@ -137,7 +137,10 @@ data class CareRecordEntity(
     val linkedAssessmentId: String? = null,
     val professionalId: String,
     val createdAt: Long,
-    val updatedAt: Long
+    val updatedAt: Long,
+    val professionalSignedAt: Long? = null,
+    val professionalSignature: String? = null,
+    val note: String = ""
 )
 
 @Entity(tableName = "sources")
