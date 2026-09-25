@@ -94,7 +94,14 @@ data class ParentUiState(
     val riskLabel: String = "未评估",
     val isWorking: Boolean = false,
     val agentRunId: String? = null,
-    val agentStatus: String = "本地待命"
+    val agentStatus: String = "本地待命",
+    val homeTaskTitle: String = "五分钟图片配对陪练",
+    val homeTaskDescription: String = "准备两个熟悉的图片，先示范一次，再邀请孩子自己试试。出现疲劳或拒绝时暂停。",
+    val homeTaskStatus: String = "pending",
+    val feedbackMood: String = "平稳",
+    val feedbackFatigue: String = "不确定",
+    val feedbackNote: String = "",
+    val feedbackMessage: String = "记录今天的状态，帮助下一次安排支持。"
 )
 
 data class ProfessionalUiState(

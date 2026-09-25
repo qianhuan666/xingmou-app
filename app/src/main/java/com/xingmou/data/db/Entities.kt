@@ -38,6 +38,28 @@ data class ChildBindingEntity(
     val validTo: Long? = null
 )
 
+@Entity(tableName = "home_tasks", indices = [Index("childId"), Index(value = ["childId", "status"])])
+data class HomeTaskEntity(
+    @androidx.room.PrimaryKey val taskId: String,
+    val childId: String,
+    val title: String,
+    val description: String,
+    val status: String = "pending",
+    val dueAt: Long? = null,
+    val updatedAt: Long
+)
+
+@Entity(tableName = "home_feedback", indices = [Index("childId"), Index(value = ["childId", "createdAt"])])
+data class HomeFeedbackEntity(
+    @androidx.room.PrimaryKey val feedbackId: String,
+    val childId: String,
+    val taskId: String?,
+    val mood: String,
+    val fatigue: String,
+    val note: String,
+    val createdAt: Long
+)
+
 @Entity(
     tableName = "training_records",
     indices = [Index("childId"), Index(value = ["childId", "createdAt"])]

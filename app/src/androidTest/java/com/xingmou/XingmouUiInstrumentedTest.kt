@@ -49,6 +49,8 @@ class XingmouUiInstrumentedTest {
     fun allPortsAreReachable() {
         composeRule.onNodeWithText("家长端").performClick()
         composeRule.onNodeWithText("家庭观察与支持").assertIsDisplayed()
+        composeRule.onNodeWithText("今日家庭任务").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("保存今天的观察").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("专业端").performClick()
         composeRule.onNodeWithText("专业审核工作台").assertIsDisplayed()
         composeRule.onNodeWithText("儿童端").performClick()

@@ -16,7 +16,9 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -31,6 +33,13 @@ fun ParentScreen(
     state: ParentUiState,
     onQueryChange: (String) -> Unit,
     onAsk: () -> Unit,
+    onCompleteTask: () -> Unit,
+    onSkipTask: () -> Unit,
+    onPauseTask: () -> Unit,
+    onMoodChange: (String) -> Unit,
+    onFatigueChange: (String) -> Unit,
+    onFeedbackNoteChange: (String) -> Unit,
+    onSubmitFeedback: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -39,6 +48,8 @@ fun ParentScreen(
     ) {
         Text("家庭观察与支持", style = MaterialTheme.typography.headlineMedium)
         Text("先记录事实，再从本地已审核知识中寻找可执行建议。", color = MaterialTheme.colorScheme.onSurfaceVariant)
+
+        HomeTaskPanel(state, onCompleteTask, onSkipTask, onPauseTask, onMoodChange, onFatigueChange, onFeedbackNoteChange, onSubmitFeedback)
 
         BoxWithConstraints(Modifier.fillMaxWidth()) {
             val wide = maxWidth >= 860.dp
@@ -60,6 +71,63 @@ fun ParentScreen(
             Text("涉及诊疗判断、持续加重或紧急风险时，请联系有资质的专业人员。", modifier = Modifier.padding(top = 8.dp))
         }
     }
+}
+
+@Composable
+private fun HomeTaskPanel(
+    state: ParentUiState,
+    onComplete: () -> Unit,
+    onSkip: () -> Unit,
+    onPause: () -> Unit,
+    onMoodChange: (String) -> Unit,
+    onFatigueChange: (String) -> Unit,
+    onNoteChange: (String) -> Unit,
+    onSubmit: () -> Unit
+) {
+    SectionSurface(title = "今日家庭任务", supporting = state.feedbackMessage, containerColor = MaterialTheme.colorScheme.tertiaryContainer) {
+        Text(state.homeTaskTitle, style = MaterialTheme.typography.titleLarge)
+        Text(state.homeTaskDescription, modifier = Modifier.padding(top = 8.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.height(10.dp))
+        StatusLine("任务状态", homeStatusLabel(state.homeTaskStatus))
+        Spacer(Modifier.height(10.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+            Button(onClick = onComplete, enabled = state.homeTaskStatus == "pending", modifier = Modifier.weight(1f)) { Text("完成") }
+            OutlinedButton(onClick = onPause, enabled = state.homeTaskStatus == "pending", modifier = Modifier.weight(1f)) { Text("暂停") }
+            TextButton(onClick = onSkip, enabled = state.homeTaskStatus == "pending", modifier = Modifier.weight(1f)) { Text("跳过") }
+        }
+        HorizontalDivider(Modifier.padding(vertical = 14.dp))
+        Text("今天的状态", style = MaterialTheme.typography.titleMedium)
+        ChoiceRow("心情", listOf("平稳", "兴奋", "抗拒"), state.feedbackMood, onMoodChange)
+        ChoiceRow("疲劳", listOf("不确定", "较少", "明显"), state.feedbackFatigue, onFatigueChange)
+        OutlinedTextField(
+            value = state.feedbackNote,
+            onValueChange = onNoteChange,
+            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+            minLines = 2,
+            maxLines = 4,
+            label = { Text("补充观察（可选）") }
+        )
+        Button(onClick = onSubmit, modifier = Modifier.fillMaxWidth().padding(top = 10.dp)) { Text("保存今天的观察") }
+    }
+}
+
+@Composable
+private fun ChoiceRow(label: String, options: List<String>, selected: String, onChange: (String) -> Unit) {
+    Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+        Text(label, modifier = Modifier.weight(0.28f))
+        options.forEach { option ->
+            TextButton(onClick = { onChange(option) }, modifier = Modifier.weight(0.24f)) {
+                Text(if (option == selected) "✓ $option" else option)
+            }
+        }
+    }
+}
+
+private fun homeStatusLabel(status: String): String = when (status) {
+    "completed" -> "已完成"
+    "skipped" -> "已跳过"
+    "paused" -> "已暂停"
+    else -> "待完成"
 }
 
 @Composable

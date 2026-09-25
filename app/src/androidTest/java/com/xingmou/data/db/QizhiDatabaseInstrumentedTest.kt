@@ -77,4 +77,23 @@ class QizhiDatabaseInstrumentedTest {
         assertEquals(1, database.agentDao().events("instrumented-run").size)
         assertEquals("SAFETY_STOP", database.safetyFlagDao().observeActive("child-instrumented").first().single().level)
     }
+
+    @Test
+    fun homeTaskAndFeedbackAreIsolatedByChild() = runBlocking {
+        database.homeTaskDao().upsert(
+            HomeTaskEntity(
+                taskId = "home-child-a", childId = "child-a", title = "陪练",
+                description = "五分钟", status = "pending", updatedAt = 1L
+            )
+        )
+        database.homeFeedbackDao().insert(
+            HomeFeedbackEntity(
+                feedbackId = "feedback-a", childId = "child-a", taskId = "home-child-a",
+                mood = "平稳", fatigue = "较少", note = "完成一次", createdAt = 2L
+            )
+        )
+        assertEquals("child-a", database.homeTaskDao().latestForChild("child-a")?.childId)
+        assertEquals(1, database.homeFeedbackDao().recentForChild("child-a").size)
+        assertEquals(0, database.homeFeedbackDao().recentForChild("child-b").size)
+    }
 }

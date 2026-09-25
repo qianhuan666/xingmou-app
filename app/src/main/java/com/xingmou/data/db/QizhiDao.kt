@@ -52,6 +52,27 @@ interface ChildBindingDao {
 }
 
 @Dao
+interface HomeTaskDao {
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(task: HomeTaskEntity)
+
+    @Query("SELECT * FROM home_tasks WHERE childId = :childId ORDER BY updatedAt DESC LIMIT 1")
+    suspend fun latestForChild(childId: String): HomeTaskEntity?
+
+    @Query("UPDATE home_tasks SET status = :status, updatedAt = :updatedAt WHERE taskId = :taskId AND childId = :childId")
+    suspend fun updateStatus(childId: String, taskId: String, status: String, updatedAt: Long)
+}
+
+@Dao
+interface HomeFeedbackDao {
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insert(feedback: HomeFeedbackEntity)
+
+    @Query("SELECT * FROM home_feedback WHERE childId = :childId ORDER BY createdAt DESC LIMIT :limit")
+    suspend fun recentForChild(childId: String, limit: Int = 10): List<HomeFeedbackEntity>
+}
+
+@Dao
 interface TrainingRecordDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(record: TrainingRecordEntity)

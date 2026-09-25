@@ -40,6 +40,8 @@ import com.xingmou.data.db.ReviewRequestEntity
 import com.xingmou.data.db.SeedData
 import com.xingmou.data.db.ConsentEntity
 import com.xingmou.data.db.AbilityProfileEntity
+import com.xingmou.data.db.HomeFeedbackEntity
+import com.xingmou.data.db.HomeTaskEntity
 import com.xingmou.data.catalog.QuestionCatalog
 import com.xingmou.BaselineUiState
 import java.util.UUID
@@ -110,6 +112,7 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                 current?.let { loadConsentState(it.childId) }
                 current?.let { loadBaseline(it) }
                 current?.let { loadCourseProgress(it.childId) }
+                current?.let { loadHomeSupport(it.childId) }
             }
         }
         refreshProfessionalAnalysis()
@@ -123,6 +126,7 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
             refreshProfessionalAnalysis()
             loadBaseline(child)
             loadCourseProgress(child.childId)
+            loadHomeSupport(child.childId)
         }
     }
 
@@ -455,6 +459,48 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
         _uiState.update { it.copy(parent = it.parent.copy(query = text.take(240))) }
     }
 
+    fun updateFeedbackMood(value: String) {
+        _uiState.update { it.copy(parent = it.parent.copy(feedbackMood = value)) }
+    }
+
+    fun updateFeedbackFatigue(value: String) {
+        _uiState.update { it.copy(parent = it.parent.copy(feedbackFatigue = value)) }
+    }
+
+    fun updateFeedbackNote(value: String) {
+        _uiState.update { it.copy(parent = it.parent.copy(feedbackNote = value.take(240))) }
+    }
+
+    fun completeHomeTask() = updateHomeTaskStatus("completed")
+
+    fun skipHomeTask() = updateHomeTaskStatus("skipped")
+
+    fun pauseHomeTask() = updateHomeTaskStatus("paused")
+
+    private fun updateHomeTaskStatus(status: String) {
+        val current = _uiState.value.parent
+        viewModelScope.launch {
+            val task = database.homeTaskDao().latestForChild(childId) ?: return@launch
+            database.homeTaskDao().updateStatus(childId, task.taskId, status, System.currentTimeMillis())
+            _uiState.update { it.copy(parent = it.parent.copy(homeTaskStatus = status, feedbackMessage = "家庭任务已${homeTaskStatusLabel(status)}。")) }
+        }
+    }
+
+    fun submitHomeFeedback() {
+        val parent = _uiState.value.parent
+        viewModelScope.launch {
+            val task = database.homeTaskDao().latestForChild(childId)
+            database.homeFeedbackDao().insert(
+                HomeFeedbackEntity(
+                    feedbackId = newId("feedback"), childId = childId, taskId = task?.taskId,
+                    mood = parent.feedbackMood, fatigue = parent.feedbackFatigue,
+                    note = parent.feedbackNote.trim(), createdAt = System.currentTimeMillis()
+                )
+            )
+            _uiState.update { it.copy(parent = it.parent.copy(feedbackMessage = "观察已保存到当前儿童档案。", feedbackNote = "")) }
+        }
+    }
+
     fun askParentQuestion() {
         val query = _uiState.value.parent.query.trim()
         if (query.isBlank()) {
@@ -511,6 +557,32 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                 }
             }
         }
+    }
+
+    private suspend fun loadHomeSupport(childId: String) {
+        val existing = database.homeTaskDao().latestForChild(childId)
+        val task = existing ?: HomeTaskEntity(
+            taskId = "home-$childId-matching",
+            childId = childId,
+            title = "五分钟图片配对陪练",
+            description = "准备两个熟悉的图片，先示范一次，再邀请孩子自己试试。出现疲劳或拒绝时暂停。",
+            status = "pending",
+            updatedAt = System.currentTimeMillis()
+        ).also { database.homeTaskDao().upsert(it) }
+        _uiState.update {
+            it.copy(parent = it.parent.copy(
+                homeTaskTitle = task.title,
+                homeTaskDescription = task.description,
+                homeTaskStatus = task.status
+            ))
+        }
+    }
+
+    private fun homeTaskStatusLabel(status: String): String = when (status) {
+        "completed" -> "完成"
+        "skipped" -> "跳过"
+        "paused" -> "暂停"
+        else -> "待完成"
     }
 
     fun updateReviewComment(text: String) {

@@ -188,7 +188,19 @@ private fun PortContent(viewModel: XingmouViewModel, port: Port, modifier: Modif
             onHighContrastChange = viewModel::setHighContrast,
             modifier = modifier
         )
-        Port.PARENT -> ParentScreen(state.parent, viewModel::updateParentQuery, viewModel::askParentQuestion, modifier)
+        Port.PARENT -> ParentScreen(
+            state = state.parent,
+            onQueryChange = viewModel::updateParentQuery,
+            onAsk = viewModel::askParentQuestion,
+            onCompleteTask = viewModel::completeHomeTask,
+            onSkipTask = viewModel::skipHomeTask,
+            onPauseTask = viewModel::pauseHomeTask,
+            onMoodChange = viewModel::updateFeedbackMood,
+            onFatigueChange = viewModel::updateFeedbackFatigue,
+            onFeedbackNoteChange = viewModel::updateFeedbackNote,
+            onSubmitFeedback = viewModel::submitHomeFeedback,
+            modifier = modifier
+        )
         Port.PROFESSIONAL -> ProfessionalScreen(
             state = state.professional,
             onReviewCommentChange = viewModel::updateReviewComment,

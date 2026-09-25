@@ -11,6 +11,8 @@ import androidx.sqlite.db.SupportSQLiteDatabase
     entities = [
         ChildEntity::class,
         ChildBindingEntity::class,
+        HomeTaskEntity::class,
+        HomeFeedbackEntity::class,
         TrainingRecordEntity::class,
         AbilityProfileEntity::class,
         SourceEntity::class,
@@ -28,12 +30,14 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         ReviewRequestEntity::class,
         DecisionTraceEntity::class
     ],
-    version = 3,
+    version = 4,
     exportSchema = false
 )
 abstract class QizhiDatabase : RoomDatabase() {
     abstract fun childDao(): ChildDao
     abstract fun childBindingDao(): ChildBindingDao
+    abstract fun homeTaskDao(): HomeTaskDao
+    abstract fun homeFeedbackDao(): HomeFeedbackDao
     abstract fun trainingRecordDao(): TrainingRecordDao
     abstract fun abilityProfileDao(): AbilityProfileDao
     abstract fun knowledgeDao(): KnowledgeDao
@@ -53,7 +57,7 @@ abstract class QizhiDatabase : RoomDatabase() {
                     context.applicationContext,
                     QizhiDatabase::class.java,
                     "qizhi_training.db"
-                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3).build().also {
+                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4).build().also {
                     INSTANCE = it
                     DatabaseSeeder.seedAsync(it)
                 }
@@ -106,6 +110,39 @@ abstract class QizhiDatabase : RoomDatabase() {
                 db.execSQL("CREATE INDEX IF NOT EXISTS `index_child_bindings_userId` ON `child_bindings` (`userId`)")
                 db.execSQL("CREATE INDEX IF NOT EXISTS `index_child_bindings_childId` ON `child_bindings` (`childId`)")
                 db.execSQL("CREATE INDEX IF NOT EXISTS `index_child_bindings_userId_childId_status` ON `child_bindings` (`userId`, `childId`, `status`)")
+            }
+        }
+
+        val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """CREATE TABLE IF NOT EXISTS `home_tasks` (
+                        `taskId` TEXT NOT NULL,
+                        `childId` TEXT NOT NULL,
+                        `title` TEXT NOT NULL,
+                        `description` TEXT NOT NULL,
+                        `status` TEXT NOT NULL,
+                        `dueAt` INTEGER,
+                        `updatedAt` INTEGER NOT NULL,
+                        PRIMARY KEY(`taskId`)
+                    )""".trimIndent()
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_home_tasks_childId` ON `home_tasks` (`childId`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_home_tasks_childId_status` ON `home_tasks` (`childId`, `status`)")
+                db.execSQL(
+                    """CREATE TABLE IF NOT EXISTS `home_feedback` (
+                        `feedbackId` TEXT NOT NULL,
+                        `childId` TEXT NOT NULL,
+                        `taskId` TEXT,
+                        `mood` TEXT NOT NULL,
+                        `fatigue` TEXT NOT NULL,
+                        `note` TEXT NOT NULL,
+                        `createdAt` INTEGER NOT NULL,
+                        PRIMARY KEY(`feedbackId`)
+                    )""".trimIndent()
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_home_feedback_childId` ON `home_feedback` (`childId`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_home_feedback_childId_createdAt` ON `home_feedback` (`childId`, `createdAt`)")
             }
         }
     }
