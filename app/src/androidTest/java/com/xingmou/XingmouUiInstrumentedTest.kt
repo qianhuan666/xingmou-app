@@ -59,6 +59,14 @@ class XingmouUiInstrumentedTest {
     }
 
     @Test
+    fun accessibilitySwitchesHaveTalkBackDescriptions() {
+        composeRule.onNodeWithText("辅助设置").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("大字体 开关").performClick()
+        composeRule.onNodeWithContentDescription("高对比 开关").performClick()
+        composeRule.onNodeWithText("辅助设置").assertIsDisplayed()
+    }
+
+    @Test
     fun allPortsAreReachable() {
         composeRule.onNodeWithText("家长端").performClick()
         composeRule.onNodeWithText("家庭观察与支持").assertIsDisplayed()

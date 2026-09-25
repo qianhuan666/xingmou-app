@@ -248,7 +248,11 @@ private fun SettingRow(title: String, supporting: String, checked: Boolean, onCh
             Text(title, style = MaterialTheme.typography.titleMedium)
             Text(supporting, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        Switch(checked = checked, onCheckedChange = onCheckedChange)
+        Switch(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+            modifier = Modifier.semantics { contentDescription = "$title 开关" }
+        )
     }
 }
 
