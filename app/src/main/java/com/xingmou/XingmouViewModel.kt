@@ -910,6 +910,21 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                 val homeTasks = database.homeTaskDao().allForChild(childId).associateBy { it.taskId }
                 val assessments = database.assessmentRecordDao().recentForChild(childId)
                 val latestProfile = database.abilityProfileDao().latestForChild(childId)
+                val assessmentById = assessments.associateBy { it.recordId }
+                val profileEvidenceDetails = latestProfile?.let { profile ->
+                    Regex("\\\"([^\\\"]+)\\\"").findAll(profile.assessmentRecordIdsJson)
+                        .mapNotNull { assessmentById[it.groupValues[1]] }
+                        .map { ProfileEvidenceUi(it.assessmentName, it.version, it.recordType, it.assessmentDate, it.source) }
+                        .toList()
+                } ?: emptyList()
+                val assessmentChanges = assessments.groupBy { it.assessmentId }.values.mapNotNull { versions ->
+                    val ordered = versions.sortedBy { it.version }
+                    if (ordered.size < 2) return@mapNotNull null
+                    val previous = ordered[ordered.lastIndex - 1]
+                    val current = ordered.last()
+                    val changes = scoreChanges(previous.scoresJson, current.scoresJson)
+                    AssessmentChangeUi(current.assessmentName, previous.version, current.version, changes)
+                }
                 val previousPlan = planVersions.firstOrNull { it.planId != latestPlan?.planId }
                 val planDiffs = if (latestPlan != null && previousPlan != null) planDiffs(previousPlan.payloadJson, latestPlan.payloadJson) else emptyList()
                 val latestAssessment = assessments.firstOrNull()
@@ -973,6 +988,8 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                                 val count = Regex("\\\"([^\\\"]+)\\\"").findAll(profile.assessmentRecordIdsJson).count()
                                 "能力画像 ${profile.status} · 证据版本 ${profile.profileId} · 已关联量表记录 $count 条"
                             } ?: "能力画像尚无可展示的证据引用。",
+                            profileEvidenceDetails = profileEvidenceDetails,
+                            assessmentChanges = assessmentChanges,
                             planStatus = latestPlan?.status?.uppercase()?.let { status -> runCatching { PlanStatus.valueOf(status) }.getOrNull() } ?: it.professional.planStatus,
                             planSummary = if (latestPlan != null) "当前方案 V${latestPlan.version} · ${latestPlan.status.uppercase()}" else if (analysis.dataSufficient || it.professional.planStatus != null) it.professional.planSummary else "达到 3 条有效记录后，可生成方案草案。",
                             planDiffs = planDiffs,
@@ -1038,6 +1055,21 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
         if (id !in existing) existing += id
         return existing.joinToString(prefix = "[\"", postfix = "\"]", separator = "\",\"")
     }
+
+    private fun scoreChanges(previous: String, current: String): List<String> {
+        val before = scoreMap(previous)
+        val after = scoreMap(current)
+        return (before.keys + after.keys).distinct().sorted().mapNotNull { key ->
+            val old = before[key] ?: return@mapNotNull "$key：新增 ${after[key]}"
+            val new = after[key] ?: return@mapNotNull "$key：移除（原 $old）"
+            if (old == new) null else "$key：$old → $new"
+        }
+    }
+
+    private fun scoreMap(value: String): Map<String, String> =
+        Regex("[\\\"]?([A-Za-z][A-Za-z0-9_-]*)[\\\"]?\\s*[:=]\\s*(-?\\d+(?:\\.\\d+)?)")
+            .findAll(value)
+            .associate { it.groupValues[1] to it.groupValues[2] }
 
     private fun planDiffs(previousJson: String, currentJson: String): List<PlanDiffUi> {
         val fields = listOf(

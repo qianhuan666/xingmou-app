@@ -151,6 +151,8 @@ data class ProfessionalUiState(
     val recentAssessments: List<AssessmentRecordUi> = emptyList(),
     val profileVersionSummary: String = "尚无量表复评记录。",
     val profileEvidenceSummary: String = "能力画像尚无可展示的证据引用。",
+    val profileEvidenceDetails: List<ProfileEvidenceUi> = emptyList(),
+    val assessmentChanges: List<AssessmentChangeUi> = emptyList(),
     val recentHomeFeedback: List<HomeFeedbackUi> = emptyList()
 )
 
@@ -185,6 +187,21 @@ data class AssessmentRecordUi(
 )
 
 data class PlanDiffUi(val field: String, val previous: String, val current: String)
+
+data class ProfileEvidenceUi(
+    val assessmentName: String,
+    val version: Int,
+    val recordType: String,
+    val date: String,
+    val source: String
+)
+
+data class AssessmentChangeUi(
+    val assessmentName: String,
+    val fromVersion: Int,
+    val toVersion: Int,
+    val changes: List<String>
+)
 
 data class HomeFeedbackUi(
     val createdAt: Long,

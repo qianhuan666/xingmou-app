@@ -197,6 +197,26 @@ private fun AssessmentPanel(
                 Text("${item.source} · ${item.scores}", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
+        if (state.assessmentChanges.isNotEmpty()) {
+            HorizontalDivider(Modifier.padding(vertical = 14.dp))
+            Text("复评前后变化", style = MaterialTheme.typography.titleMedium)
+            state.assessmentChanges.forEach { change ->
+                Text("${change.assessmentName} V${change.fromVersion} → V${change.toVersion}", modifier = Modifier.padding(top = 6.dp))
+                if (change.changes.isEmpty()) {
+                    Text("分数摘要未检测到变化", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                } else {
+                    change.changes.forEach { item -> Text(item, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                }
+            }
+        }
+        if (state.profileEvidenceDetails.isNotEmpty()) {
+            HorizontalDivider(Modifier.padding(vertical = 14.dp))
+            Text("能力画像证据回放", style = MaterialTheme.typography.titleMedium)
+            state.profileEvidenceDetails.forEach { evidence ->
+                Text("${evidence.assessmentName} V${evidence.version} · ${evidence.recordType} · ${evidence.date}", modifier = Modifier.padding(top = 6.dp))
+                Text(evidence.source, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
     }
 }
 
