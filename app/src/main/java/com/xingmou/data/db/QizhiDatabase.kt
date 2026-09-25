@@ -39,6 +39,7 @@ abstract class QizhiDatabase : RoomDatabase() {
     abstract fun safetyFlagDao(): SafetyFlagDao
     abstract fun planDao(): PlanDao
     abstract fun conversationDao(): ConversationDao
+    abstract fun consentDao(): ConsentDao
     abstract fun agentDao(): AgentDao
 
     companion object {

@@ -19,6 +19,9 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
@@ -44,7 +47,15 @@ fun XingmouApp(viewModel: XingmouViewModel) {
         XingmouTheme(highContrast = state.accessibility.highContrast) {
             Scaffold(
                 containerColor = MaterialTheme.colorScheme.background,
-                topBar = { ChildContextBar(state, viewModel::selectChild) },
+                topBar = {
+                    ChildContextBar(
+                        state = state,
+                        onSelectChild = viewModel::selectChild,
+                        onCreateChild = viewModel::createLocalChild,
+                        onUpdateChild = viewModel::updateActiveChild,
+                        onArchiveChild = viewModel::archiveActiveChild
+                    )
+                },
                 bottomBar = { AppStatusBand(aiConfigured = state.aiConfigured) }
             ) { padding ->
                 BoxWithConstraints(Modifier.fillMaxSize().padding(padding)) {
@@ -66,8 +77,17 @@ fun XingmouApp(viewModel: XingmouViewModel) {
 }
 
 @Composable
-private fun ChildContextBar(state: com.xingmou.XingmouUiState, onSelectChild: (String) -> Unit) {
+private fun ChildContextBar(
+    state: com.xingmou.XingmouUiState,
+    onSelectChild: (String) -> Unit,
+    onCreateChild: (String, String) -> Unit,
+    onUpdateChild: (String, String) -> Unit,
+    onArchiveChild: () -> Unit
+) {
     val expandedState = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+    val dialogMode = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<String?>(null) }
+    val aliasState = androidx.compose.runtime.remember(state.activeChildAlias) { androidx.compose.runtime.mutableStateOf(state.activeChildAlias) }
+    val ageBandState = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf("学龄期") }
     Surface(color = MaterialTheme.colorScheme.surface, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
@@ -75,6 +95,9 @@ private fun ChildContextBar(state: com.xingmou.XingmouUiState, onSelectChild: (S
         ) {
             Text("当前儿童：${state.activeChildAlias}", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
             TextButton(onClick = { expandedState.value = true }, enabled = state.availableChildren.isNotEmpty()) { Text("切换档案") }
+            TextButton(onClick = { aliasState.value = ""; ageBandState.value = "学龄期"; dialogMode.value = "create" }) { Text("新建") }
+            TextButton(onClick = { dialogMode.value = "edit" }) { Text("编辑") }
+            TextButton(onClick = onArchiveChild, enabled = state.availableChildren.size > 1) { Text("归档") }
             DropdownMenu(expanded = expandedState.value, onDismissRequest = { expandedState.value = false }) {
                 state.availableChildren.forEach { child ->
                     DropdownMenuItem(
@@ -84,6 +107,26 @@ private fun ChildContextBar(state: com.xingmou.XingmouUiState, onSelectChild: (S
                 }
             }
         }
+    }
+    dialogMode.value?.let { mode ->
+        AlertDialog(
+            onDismissRequest = { dialogMode.value = null },
+            title = { Text(if (mode == "create") "新建儿童档案" else "编辑儿童档案") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(value = aliasState.value, onValueChange = { aliasState.value = it }, label = { Text("化名") })
+                    OutlinedTextField(value = ageBandState.value, onValueChange = { ageBandState.value = it }, label = { Text("年龄段") })
+                }
+            },
+            confirmButton = {
+                Button(onClick = {
+                    if (mode == "create") onCreateChild(aliasState.value, ageBandState.value)
+                    else onUpdateChild(aliasState.value, ageBandState.value)
+                    dialogMode.value = null
+                }) { Text("保存") }
+            },
+            dismissButton = { TextButton(onClick = { dialogMode.value = null }) { Text("取消") } }
+        )
     }
 }
 

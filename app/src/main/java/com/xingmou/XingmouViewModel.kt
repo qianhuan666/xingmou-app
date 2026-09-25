@@ -38,6 +38,7 @@ import java.util.UUID
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -126,6 +127,26 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                 )
             )
             selectChild(child.childId)
+        }
+    }
+
+    fun updateActiveChild(alias: String, ageBand: String) {
+        val id = activeChildId ?: return
+        val normalized = alias.trim().take(24)
+        val normalizedAge = ageBand.trim().take(24)
+        if (normalized.isBlank() || normalizedAge.isBlank()) return
+        viewModelScope.launch {
+            database.childDao().updateBasicProfile(id, normalized, normalizedAge, System.currentTimeMillis())
+        }
+    }
+
+    fun archiveActiveChild() {
+        val id = activeChildId ?: return
+        viewModelScope.launch {
+            val count = database.childDao().observeActive().first().size
+            if (count <= 1) return@launch
+            database.childDao().archive(id, System.currentTimeMillis())
+            activeChildId = database.childDao().firstActive()?.childId
         }
     }
 

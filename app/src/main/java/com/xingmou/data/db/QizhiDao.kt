@@ -19,6 +19,12 @@ interface ChildDao {
 
     @Query("SELECT * FROM children WHERE status = 'active' ORDER BY updatedAt DESC LIMIT 1")
     suspend fun firstActive(): ChildEntity?
+
+    @Query("UPDATE children SET alias = :alias, ageBand = :ageBand, updatedAt = :updatedAt WHERE childId = :childId")
+    suspend fun updateBasicProfile(childId: String, alias: String, ageBand: String, updatedAt: Long)
+
+    @Query("UPDATE children SET status = 'archived', updatedAt = :updatedAt WHERE childId = :childId")
+    suspend fun archive(childId: String, updatedAt: Long)
 }
 
 @Dao
@@ -88,6 +94,18 @@ interface ConversationDao {
 
     @Query("SELECT * FROM conversation_messages WHERE sessionId = :sessionId ORDER BY createdAt ASC")
     suspend fun forSession(sessionId: String): List<ConversationMessageEntity>
+}
+
+@Dao
+interface ConsentDao {
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(consent: ConsentEntity)
+
+    @Query("SELECT * FROM consents WHERE childId = :childId AND purpose = :purpose LIMIT 1")
+    suspend fun find(childId: String, purpose: String): ConsentEntity?
+
+    @Query("SELECT * FROM consents WHERE childId = :childId ORDER BY purpose")
+    suspend fun forChild(childId: String): List<ConsentEntity>
 }
 
 @Dao
