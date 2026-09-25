@@ -157,6 +157,10 @@ data class ProfessionalUiState(
     val careStageStatus: String = "待开始",
     val careStageSummary: String = "尚未建立专业个案记录。",
     val careNote: String = "",
+    val careClosureReason: String = "",
+    val careFollowUpPlan: String = "",
+    val careFollowUpDate: String = "",
+    val carePermissionMessage: String = "",
     val careSignature: String = "local-professional",
     val careTimeline: List<CareRecordUi> = emptyList(),
     val recentHomeFeedback: List<HomeFeedbackUi> = emptyList()
@@ -216,7 +220,10 @@ data class CareRecordUi(
     val summary: String,
     val createdAt: Long,
     val signed: Boolean,
-    val note: String
+    val note: String,
+    val closureReason: String? = null,
+    val followUpPlan: String? = null,
+    val followUpDate: String? = null
 )
 
 data class HomeFeedbackUi(

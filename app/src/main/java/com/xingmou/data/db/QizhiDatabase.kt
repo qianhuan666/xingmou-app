@@ -32,7 +32,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         ReviewRequestEntity::class,
         DecisionTraceEntity::class
     ],
-    version = 10,
+    version = 11,
     exportSchema = false
 )
 abstract class QizhiDatabase : RoomDatabase() {
@@ -61,7 +61,7 @@ abstract class QizhiDatabase : RoomDatabase() {
                     context.applicationContext,
                     QizhiDatabase::class.java,
                     "qizhi_training.db"
-                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10).build().also {
+                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11).build().also {
                     INSTANCE = it
                     DatabaseSeeder.seedAsync(it)
                 }
@@ -229,6 +229,14 @@ abstract class QizhiDatabase : RoomDatabase() {
                 db.execSQL("ALTER TABLE care_records ADD COLUMN professionalSignedAt INTEGER")
                 db.execSQL("ALTER TABLE care_records ADD COLUMN professionalSignature TEXT")
                 db.execSQL("ALTER TABLE care_records ADD COLUMN note TEXT NOT NULL DEFAULT ''")
+            }
+        }
+
+        val MIGRATION_10_11 = object : Migration(10, 11) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE care_records ADD COLUMN closureReason TEXT")
+                db.execSQL("ALTER TABLE care_records ADD COLUMN followUpPlan TEXT")
+                db.execSQL("ALTER TABLE care_records ADD COLUMN followUpDate TEXT")
             }
         }
     }

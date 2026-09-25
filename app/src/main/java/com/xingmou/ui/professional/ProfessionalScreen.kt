@@ -49,6 +49,9 @@ fun ProfessionalScreen(
     onCreateRevision: () -> Unit,
     onAdvanceCareStage: () -> Unit,
     onCareNoteChange: (String) -> Unit,
+    onCareClosureReasonChange: (String) -> Unit,
+    onCareFollowUpPlanChange: (String) -> Unit,
+    onCareFollowUpDateChange: (String) -> Unit,
     onAssessmentSelect: (String) -> Unit,
     onAssessmentDateChange: (String) -> Unit,
     onAssessmentSourceChange: (String) -> Unit,
@@ -79,7 +82,7 @@ fun ProfessionalScreen(
                         GroupReportPanel(state)
                         TrainingDetailsPanel(state)
                         AssessmentPanel(state, onAssessmentSelect, onAssessmentDateChange, onAssessmentSourceChange, onAssessmentScoresChange, onAssessmentNotesChange, onSaveAssessment)
-                        CareWorkflowPanel(state, onAdvanceCareStage, onCareNoteChange)
+                        CareWorkflowPanel(state, onAdvanceCareStage, onCareNoteChange, onCareClosureReasonChange, onCareFollowUpPlanChange, onCareFollowUpDateChange)
                         HomeFeedbackPanel(state)
                         AgentPanel(state)
                     }
@@ -92,7 +95,7 @@ fun ProfessionalScreen(
                     GroupReportPanel(state)
                     TrainingDetailsPanel(state)
                     AssessmentPanel(state, onAssessmentSelect, onAssessmentDateChange, onAssessmentSourceChange, onAssessmentScoresChange, onAssessmentNotesChange, onSaveAssessment)
-                    CareWorkflowPanel(state, onAdvanceCareStage, onCareNoteChange)
+                    CareWorkflowPanel(state, onAdvanceCareStage, onCareNoteChange, onCareClosureReasonChange, onCareFollowUpPlanChange, onCareFollowUpDateChange)
                     HomeFeedbackPanel(state)
                     PlanPanel(state, onReviewCommentChange, onPlanTaskChange, onPlanDifficultyChange, onPlanSupportLevelChange, onPlanFrequencyChange, onPlanDurationChange, onPlanStopConditionsChange, onCreateRevision, onCreateDraft, onConfirm, onActivate, onReject, Modifier.fillMaxWidth())
                     AgentPanel(state)
@@ -117,11 +120,48 @@ private fun HomeFeedbackPanel(state: ProfessionalUiState) {
 }
 
 @Composable
-private fun CareWorkflowPanel(state: ProfessionalUiState, onAdvance: () -> Unit, onNoteChange: (String) -> Unit) {
+private fun CareWorkflowPanel(
+    state: ProfessionalUiState,
+    onAdvance: () -> Unit,
+    onNoteChange: (String) -> Unit,
+    onClosureReasonChange: (String) -> Unit,
+    onFollowUpPlanChange: (String) -> Unit,
+    onFollowUpDateChange: (String) -> Unit
+) {
     SectionSurface(title = "专业个案流程", supporting = "接案、目标、方案、复评、结案和随访均保留历史记录。") {
         StatusLine("当前阶段", state.careStage)
         StatusLine("阶段状态", state.careStageStatus)
         Text(state.careStageSummary, modifier = Modifier.padding(top = 8.dp))
+        if (state.careStage == "复评") {
+            OutlinedTextField(
+                value = state.careClosureReason,
+                onValueChange = onClosureReasonChange,
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                minLines = 2,
+                maxLines = 4,
+                label = { Text("结案依据") },
+                placeholder = { Text("进入结案阶段前填写可观察的结案依据") }
+            )
+        }
+        if (state.careStage == "结案" || state.careStage == "随访") {
+            OutlinedTextField(
+                value = state.careFollowUpPlan,
+                onValueChange = onFollowUpPlanChange,
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                minLines = 2,
+                maxLines = 4,
+                label = { Text("随访计划") },
+                placeholder = { Text("填写后续观察、联系或支持安排") }
+            )
+            OutlinedTextField(
+                value = state.careFollowUpDate,
+                onValueChange = onFollowUpDateChange,
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                singleLine = true,
+                label = { Text("随访日期") },
+                placeholder = { Text("例如：2026-10-15") }
+            )
+        }
         OutlinedTextField(
             value = state.careNote,
             onValueChange = onNoteChange,
@@ -134,6 +174,9 @@ private fun CareWorkflowPanel(state: ProfessionalUiState, onAdvance: () -> Unit,
         OutlinedButton(onClick = onAdvance, modifier = Modifier.fillMaxWidth().padding(top = 10.dp)) {
             Text(if (state.careStage == "随访") "签署并记录随访" else "签署并推进到下一阶段")
         }
+        if (state.carePermissionMessage.isNotBlank()) {
+            Text(state.carePermissionMessage, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 6.dp))
+        }
         if (state.careTimeline.isNotEmpty()) {
             HorizontalDivider(Modifier.padding(vertical = 12.dp))
             Text("流程历史", style = MaterialTheme.typography.titleMedium)
@@ -141,6 +184,9 @@ private fun CareWorkflowPanel(state: ProfessionalUiState, onAdvance: () -> Unit,
                 Text("${item.stageLabel} · ${item.status} · ${if (item.signed) "已签署" else "未签署"}", modifier = Modifier.padding(top = 6.dp))
                 Text(item.summary, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 if (item.note.isNotBlank()) Text("备注：${item.note}", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                item.closureReason?.takeIf { it.isNotBlank() }?.let { Text("结案依据：$it", color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                item.followUpPlan?.takeIf { it.isNotBlank() }?.let { Text("随访计划：$it", color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                item.followUpDate?.takeIf { it.isNotBlank() }?.let { Text("随访日期：$it", color = MaterialTheme.colorScheme.onSurfaceVariant) }
             }
         }
     }

@@ -155,4 +155,41 @@ class QizhiDatabaseInstrumentedTest {
         assertEquals(2, database.careRecordDao().recentForChild("child-a").size)
         assertEquals(0, database.careRecordDao().recentForChild("child-b").size)
     }
+
+    @Test
+    fun careWorkflowPersistsClosureFollowUpFieldsAndAuditEvent() = runBlocking {
+        database.careRecordDao().insert(
+            CareRecordEntity(
+                recordId = "care-closure",
+                childId = "child-a",
+                stage = "closure",
+                stageLabel = "结案",
+                status = "active",
+                summary = "结案已签署",
+                professionalId = "professional",
+                createdAt = 3L,
+                updatedAt = 3L,
+                professionalSignedAt = 3L,
+                professionalSignature = "professional",
+                note = "阶段记录完整",
+                closureReason = "目标已达到预设的过程指标"
+            )
+        )
+        database.agentDao().upsertEvent(
+            AgentEventEntity(
+                eventId = "audit-care-1",
+                runId = "care-care-closure",
+                childId = "child-a",
+                eventType = "CARE_STAGE_SIGNED",
+                payloadSummary = "stage=closure;professional=professional;closurePresent=true",
+                status = "processed",
+                createdAt = 3L,
+                processedAt = 3L
+            )
+        )
+        val record = database.careRecordDao().latestForChild("child-a")
+        val events = database.agentDao().events("care-care-closure")
+        assertEquals("目标已达到预设的过程指标", record?.closureReason)
+        assertEquals("CARE_STAGE_SIGNED", events.single().eventType)
+    }
 }

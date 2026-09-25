@@ -44,6 +44,7 @@ import com.xingmou.data.db.HomeFeedbackEntity
 import com.xingmou.data.db.HomeTaskEntity
 import com.xingmou.data.db.AssessmentRecordEntity
 import com.xingmou.data.db.CareRecordEntity
+import com.xingmou.data.db.AgentEventEntity
 import com.xingmou.data.catalog.QuestionCatalog
 import com.xingmou.data.catalog.AssessmentCatalog
 import com.xingmou.BaselineUiState
@@ -634,42 +635,82 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
         _uiState.update { it.copy(professional = it.professional.copy(careNote = value.take(300))) }
     }
 
+    fun updateCareClosureReason(value: String) {
+        _uiState.update { it.copy(professional = it.professional.copy(careClosureReason = value.take(240))) }
+    }
+
+    fun updateCareFollowUpPlan(value: String) {
+        _uiState.update { it.copy(professional = it.professional.copy(careFollowUpPlan = value.take(240))) }
+    }
+
+    fun updateCareFollowUpDate(value: String) {
+        _uiState.update { it.copy(professional = it.professional.copy(careFollowUpDate = value.take(32))) }
+    }
+
     fun advanceCareStage() {
         viewModelScope.launch {
             runCatching {
-                val current = database.careRecordDao().latestForChild(childId)
-                val note = _uiState.value.professional.careNote.trim()
-                if (current != null && current.stage in setOf("closure", "follow_up") && note.isBlank()) {
-                    _uiState.update { it.copy(professional = it.professional.copy(careStageSummary = "结案或随访阶段必须填写专业备注后才能签署。")) }
+                if (_uiState.value.selectedPort != Port.PROFESSIONAL) {
+                    _uiState.update { it.copy(professional = it.professional.copy(carePermissionMessage = "只有专业端可以签署或推进个案阶段。")) }
                     return@runCatching
                 }
+                val current = database.careRecordDao().latestForChild(childId)
+                val note = _uiState.value.professional.careNote.trim()
+                val professional = _uiState.value.professional
                 val nextIndex = (CARE_STAGES.indexOfFirst { it.first == current?.stage } + 1).coerceAtLeast(0).coerceAtMost(CARE_STAGES.lastIndex)
                 val next = CARE_STAGES[nextIndex]
+                if (next.first == "closure" && professional.careClosureReason.trim().isBlank()) {
+                    _uiState.update { it.copy(professional = it.professional.copy(carePermissionMessage = "进入结案阶段前必须填写结案依据。")) }
+                    return@runCatching
+                }
+                if (next.first == "follow_up" && (professional.careFollowUpPlan.trim().isBlank() || professional.careFollowUpDate.trim().isBlank())) {
+                    _uiState.update { it.copy(professional = it.professional.copy(carePermissionMessage = "进入随访阶段前必须填写随访计划和日期。")) }
+                    return@runCatching
+                }
+                if (current != null && current.stage in setOf("closure", "follow_up") && note.isBlank()) {
+                    _uiState.update { it.copy(professional = it.professional.copy(carePermissionMessage = "结案或随访阶段必须填写专业备注后才能签署。")) }
+                    return@runCatching
+                }
                 val latestPlan = database.planDao().latest(childId)
                 val latestAssessment = database.assessmentRecordDao().recentForChild(childId, 1).firstOrNull()
                 val now = System.currentTimeMillis()
-                database.careRecordDao().insert(
-                    CareRecordEntity(
-                        recordId = newId("care"), childId = childId, stage = next.first, stageLabel = next.second,
-                        status = if (nextIndex == CARE_STAGES.lastIndex) "completed" else "active",
-                        summary = when (next.first) {
-                            "intake" -> "已建立儿童与授权范围，等待目标确认。"
-                            "goals" -> "目标基于训练过程表现和专业观察整理。"
-                            "plan" -> "方案版本与人工审核状态已关联。"
-                            "review" -> "复评量表与训练报表已进入当前个案链路。"
-                            "closure" -> "结案由专业人员确认，并保留历史记录。"
-                            else -> "随访记录保留后续观察与回访安排。"
-                        },
-                        linkedPlanId = latestPlan?.planId,
-                        linkedAssessmentId = latestAssessment?.recordId,
-                        professionalId = localUserId,
-                        professionalSignedAt = now,
-                        professionalSignature = localUserId,
-                        note = note,
+                val record = CareRecordEntity(
+                    recordId = newId("care"), childId = childId, stage = next.first, stageLabel = next.second,
+                    status = if (nextIndex == CARE_STAGES.lastIndex) "completed" else "active",
+                    summary = when (next.first) {
+                        "intake" -> "已建立儿童与授权范围，等待目标确认。"
+                        "goals" -> "目标基于训练过程表现和专业观察整理。"
+                        "plan" -> "方案版本与人工审核状态已关联。"
+                        "review" -> "复评量表与训练报表已进入当前个案链路。"
+                        "closure" -> "结案由专业人员确认，并保留历史记录。"
+                        else -> "随访记录保留后续观察与回访安排。"
+                    },
+                    linkedPlanId = latestPlan?.planId,
+                    linkedAssessmentId = latestAssessment?.recordId,
+                    professionalId = localUserId,
+                    professionalSignedAt = now,
+                    professionalSignature = localUserId,
+                    note = note,
+                    closureReason = professional.careClosureReason.trim().takeIf { next.first == "closure" || current?.stage == "closure" },
+                    followUpPlan = professional.careFollowUpPlan.trim().takeIf { next.first == "follow_up" || current?.stage == "follow_up" },
+                    followUpDate = professional.careFollowUpDate.trim().takeIf { next.first == "follow_up" || current?.stage == "follow_up" },
+                    createdAt = now,
+                    updatedAt = now
+                )
+                database.careRecordDao().insert(record)
+                database.agentDao().upsertEvent(
+                    AgentEventEntity(
+                        eventId = newId("audit-care"),
+                        runId = "care-${record.recordId}",
+                        childId = childId,
+                        eventType = "CARE_STAGE_SIGNED",
+                        payloadSummary = "stage=${record.stage};professional=$localUserId;notePresent=${note.isNotBlank()};closurePresent=${record.closureReason != null};followUpPresent=${record.followUpPlan != null}",
+                        status = "processed",
                         createdAt = now,
-                        updatedAt = now
+                        processedAt = now
                     )
                 )
+                _uiState.update { it.copy(professional = it.professional.copy(carePermissionMessage = "阶段已签署并记录。")) }
                 refreshProfessionalAnalysis()
             }
         }
@@ -1041,7 +1082,10 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                             careStage = latestCare?.stageLabel ?: "接案",
                             careStageStatus = latestCare?.status ?: "待开始",
                             careStageSummary = latestCare?.summary ?: "尚未建立专业个案记录。",
-                            careTimeline = careRecords.map { item -> CareRecordUi(item.stage, item.stageLabel, item.status, item.summary, item.createdAt, item.professionalSignedAt != null, item.note) },
+                            careTimeline = careRecords.map { item -> CareRecordUi(item.stage, item.stageLabel, item.status, item.summary, item.createdAt, item.professionalSignedAt != null, item.note, item.closureReason, item.followUpPlan, item.followUpDate) },
+                            careClosureReason = latestCare?.closureReason ?: it.professional.careClosureReason,
+                            careFollowUpPlan = latestCare?.followUpPlan ?: it.professional.careFollowUpPlan,
+                            careFollowUpDate = latestCare?.followUpDate ?: it.professional.careFollowUpDate,
                             planStatus = latestPlan?.status?.uppercase()?.let { status -> runCatching { PlanStatus.valueOf(status) }.getOrNull() } ?: it.professional.planStatus,
                             planSummary = if (latestPlan != null) "当前方案 V${latestPlan.version} · ${latestPlan.status.uppercase()}" else if (analysis.dataSufficient || it.professional.planStatus != null) it.professional.planSummary else "达到 3 条有效记录后，可生成方案草案。",
                             planDiffs = planDiffs,

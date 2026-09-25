@@ -140,7 +140,10 @@ data class CareRecordEntity(
     val updatedAt: Long,
     val professionalSignedAt: Long? = null,
     val professionalSignature: String? = null,
-    val note: String = ""
+    val note: String = "",
+    val closureReason: String? = null,
+    val followUpPlan: String? = null,
+    val followUpDate: String? = null
 )
 
 @Entity(tableName = "sources")
