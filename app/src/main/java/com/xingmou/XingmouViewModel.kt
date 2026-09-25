@@ -43,6 +43,7 @@ import com.xingmou.data.db.AbilityProfileEntity
 import com.xingmou.data.db.HomeFeedbackEntity
 import com.xingmou.data.db.HomeTaskEntity
 import com.xingmou.data.db.AssessmentRecordEntity
+import com.xingmou.data.db.CareRecordEntity
 import com.xingmou.data.catalog.QuestionCatalog
 import com.xingmou.data.catalog.AssessmentCatalog
 import com.xingmou.BaselineUiState
@@ -629,6 +630,39 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
         _uiState.update { it.copy(professional = it.professional.copy(reviewComment = text.take(300))) }
     }
 
+    fun advanceCareStage() {
+        viewModelScope.launch {
+            runCatching {
+                val current = database.careRecordDao().latestForChild(childId)
+                val nextIndex = (CARE_STAGES.indexOfFirst { it.first == current?.stage } + 1).coerceAtLeast(0).coerceAtMost(CARE_STAGES.lastIndex)
+                val next = CARE_STAGES[nextIndex]
+                val latestPlan = database.planDao().latest(childId)
+                val latestAssessment = database.assessmentRecordDao().recentForChild(childId, 1).firstOrNull()
+                val now = System.currentTimeMillis()
+                database.careRecordDao().insert(
+                    CareRecordEntity(
+                        recordId = newId("care"), childId = childId, stage = next.first, stageLabel = next.second,
+                        status = if (nextIndex == CARE_STAGES.lastIndex) "completed" else "active",
+                        summary = when (next.first) {
+                            "intake" -> "已建立儿童与授权范围，等待目标确认。"
+                            "goals" -> "目标基于训练过程表现和专业观察整理。"
+                            "plan" -> "方案版本与人工审核状态已关联。"
+                            "review" -> "复评量表与训练报表已进入当前个案链路。"
+                            "closure" -> "结案由专业人员确认，并保留历史记录。"
+                            else -> "随访记录保留后续观察与回访安排。"
+                        },
+                        linkedPlanId = latestPlan?.planId,
+                        linkedAssessmentId = latestAssessment?.recordId,
+                        professionalId = localUserId,
+                        createdAt = now,
+                        updatedAt = now
+                    )
+                )
+                refreshProfessionalAnalysis()
+            }
+        }
+    }
+
     fun updatePlanTask(value: String) = _uiState.update { it.copy(professional = it.professional.copy(planTask = value.take(80))) }
     fun updatePlanDifficulty(value: String) = _uiState.update { it.copy(professional = it.professional.copy(planDifficulty = value.take(8))) }
     fun updatePlanSupportLevel(value: String) = _uiState.update { it.copy(professional = it.professional.copy(planSupportLevel = value.take(8))) }
@@ -910,6 +944,8 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                 val homeTasks = database.homeTaskDao().allForChild(childId).associateBy { it.taskId }
                 val assessments = database.assessmentRecordDao().recentForChild(childId)
                 val latestProfile = database.abilityProfileDao().latestForChild(childId)
+                val careRecords = database.careRecordDao().recentForChild(childId)
+                val latestCare = careRecords.firstOrNull()
                 val assessmentById = assessments.associateBy { it.recordId }
                 val profileEvidenceDetails = latestProfile?.let { profile ->
                     Regex("\\\"([^\\\"]+)\\\"").findAll(profile.assessmentRecordIdsJson)
@@ -990,6 +1026,10 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                             } ?: "能力画像尚无可展示的证据引用。",
                             profileEvidenceDetails = profileEvidenceDetails,
                             assessmentChanges = assessmentChanges,
+                            careStage = latestCare?.stageLabel ?: "接案",
+                            careStageStatus = latestCare?.status ?: "待开始",
+                            careStageSummary = latestCare?.summary ?: "尚未建立专业个案记录。",
+                            careTimeline = careRecords.map { item -> CareRecordUi(item.stage, item.stageLabel, item.status, item.summary, item.createdAt) },
                             planStatus = latestPlan?.status?.uppercase()?.let { status -> runCatching { PlanStatus.valueOf(status) }.getOrNull() } ?: it.professional.planStatus,
                             planSummary = if (latestPlan != null) "当前方案 V${latestPlan.version} · ${latestPlan.status.uppercase()}" else if (analysis.dataSufficient || it.professional.planStatus != null) it.professional.planSummary else "达到 3 条有效记录后，可生成方案草案。",
                             planDiffs = planDiffs,
@@ -1120,3 +1160,12 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
 }
 
 private val HOME_DEMO_STEPS = listOf("准备", "示范", "邀请", "回应", "结束")
+
+private val CARE_STAGES = listOf(
+    "intake" to "接案",
+    "goals" to "目标",
+    "plan" to "方案",
+    "review" to "复评",
+    "closure" to "结案",
+    "follow_up" to "随访"
+)

@@ -141,4 +141,17 @@ class QizhiDatabaseInstrumentedTest {
         assertEquals("assessment_linked", profile?.status)
         assertTrue(profile?.assessmentRecordIdsJson?.contains("assessment-1") == true)
     }
+
+    @Test
+    fun careWorkflowKeepsStageHistoryPerChild() = runBlocking {
+        database.careRecordDao().insert(
+            CareRecordEntity("care-1", "child-a", "intake", "接案", "active", "已建立档案", null, null, "professional", 1L, 1L)
+        )
+        database.careRecordDao().insert(
+            CareRecordEntity("care-2", "child-a", "goals", "目标", "active", "目标已确认", null, null, "professional", 2L, 2L)
+        )
+        assertEquals("goals", database.careRecordDao().latestForChild("child-a")?.stage)
+        assertEquals(2, database.careRecordDao().recentForChild("child-a").size)
+        assertEquals(0, database.careRecordDao().recentForChild("child-b").size)
+    }
 }

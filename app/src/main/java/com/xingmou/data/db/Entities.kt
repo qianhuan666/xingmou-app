@@ -122,6 +122,24 @@ data class AssessmentRecordEntity(
     val updatedAt: Long
 )
 
+@Entity(
+    tableName = "care_records",
+    indices = [Index("childId"), Index(value = ["childId", "stage"]), Index(value = ["childId", "createdAt"])]
+)
+data class CareRecordEntity(
+    @androidx.room.PrimaryKey val recordId: String,
+    val childId: String,
+    val stage: String,
+    val stageLabel: String,
+    val status: String,
+    val summary: String,
+    val linkedPlanId: String? = null,
+    val linkedAssessmentId: String? = null,
+    val professionalId: String,
+    val createdAt: Long,
+    val updatedAt: Long
+)
+
 @Entity(tableName = "sources")
 data class SourceEntity(
     @androidx.room.PrimaryKey val sourceId: String,

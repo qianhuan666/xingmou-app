@@ -52,6 +52,18 @@ interface AssessmentRecordDao {
 }
 
 @Dao
+interface CareRecordDao {
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insert(record: CareRecordEntity)
+
+    @Query("SELECT * FROM care_records WHERE childId = :childId ORDER BY createdAt DESC LIMIT 1")
+    suspend fun latestForChild(childId: String): CareRecordEntity?
+
+    @Query("SELECT * FROM care_records WHERE childId = :childId ORDER BY createdAt DESC LIMIT :limit")
+    suspend fun recentForChild(childId: String, limit: Int = 20): List<CareRecordEntity>
+}
+
+@Dao
 interface ChildBindingDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(binding: ChildBindingEntity)

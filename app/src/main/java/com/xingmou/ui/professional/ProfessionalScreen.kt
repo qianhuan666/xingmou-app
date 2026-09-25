@@ -47,6 +47,7 @@ fun ProfessionalScreen(
     onPlanDurationChange: (String) -> Unit,
     onPlanStopConditionsChange: (String) -> Unit,
     onCreateRevision: () -> Unit,
+    onAdvanceCareStage: () -> Unit,
     onAssessmentSelect: (String) -> Unit,
     onAssessmentDateChange: (String) -> Unit,
     onAssessmentSourceChange: (String) -> Unit,
@@ -77,6 +78,7 @@ fun ProfessionalScreen(
                         GroupReportPanel(state)
                         TrainingDetailsPanel(state)
                         AssessmentPanel(state, onAssessmentSelect, onAssessmentDateChange, onAssessmentSourceChange, onAssessmentScoresChange, onAssessmentNotesChange, onSaveAssessment)
+                        CareWorkflowPanel(state, onAdvanceCareStage)
                         HomeFeedbackPanel(state)
                         AgentPanel(state)
                     }
@@ -89,6 +91,7 @@ fun ProfessionalScreen(
                     GroupReportPanel(state)
                     TrainingDetailsPanel(state)
                     AssessmentPanel(state, onAssessmentSelect, onAssessmentDateChange, onAssessmentSourceChange, onAssessmentScoresChange, onAssessmentNotesChange, onSaveAssessment)
+                    CareWorkflowPanel(state, onAdvanceCareStage)
                     HomeFeedbackPanel(state)
                     PlanPanel(state, onReviewCommentChange, onPlanTaskChange, onPlanDifficultyChange, onPlanSupportLevelChange, onPlanFrequencyChange, onPlanDurationChange, onPlanStopConditionsChange, onCreateRevision, onCreateDraft, onConfirm, onActivate, onReject, Modifier.fillMaxWidth())
                     AgentPanel(state)
@@ -107,6 +110,26 @@ private fun HomeFeedbackPanel(state: ProfessionalUiState) {
             state.recentHomeFeedback.forEach { feedback ->
                 Text("${java.text.SimpleDateFormat("MM-dd HH:mm", java.util.Locale.getDefault()).format(java.util.Date(feedback.createdAt))} · ${feedback.taskTitle}", style = MaterialTheme.typography.labelMedium)
                 Text("心情：${feedback.mood} · 疲劳：${feedback.fatigue}${feedback.note.takeIf { it.isNotBlank() }?.let { " · $it" } ?: ""}", modifier = Modifier.padding(bottom = 10.dp))
+            }
+        }
+    }
+}
+
+@Composable
+private fun CareWorkflowPanel(state: ProfessionalUiState, onAdvance: () -> Unit) {
+    SectionSurface(title = "专业个案流程", supporting = "接案、目标、方案、复评、结案和随访均保留历史记录。") {
+        StatusLine("当前阶段", state.careStage)
+        StatusLine("阶段状态", state.careStageStatus)
+        Text(state.careStageSummary, modifier = Modifier.padding(top = 8.dp))
+        OutlinedButton(onClick = onAdvance, modifier = Modifier.fillMaxWidth().padding(top = 10.dp)) {
+            Text(if (state.careStage == "随访") "重新记录随访" else "推进到下一阶段")
+        }
+        if (state.careTimeline.isNotEmpty()) {
+            HorizontalDivider(Modifier.padding(vertical = 12.dp))
+            Text("流程历史", style = MaterialTheme.typography.titleMedium)
+            state.careTimeline.forEach { item ->
+                Text("${item.stageLabel} · ${item.status}", modifier = Modifier.padding(top = 6.dp))
+                Text(item.summary, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }

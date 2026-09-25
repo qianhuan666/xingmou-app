@@ -16,6 +16,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         TrainingRecordEntity::class,
         AbilityProfileEntity::class,
         AssessmentRecordEntity::class,
+        CareRecordEntity::class,
         SourceEntity::class,
         ClaimEntity::class,
         KnowledgeItemEntity::class,
@@ -31,7 +32,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         ReviewRequestEntity::class,
         DecisionTraceEntity::class
     ],
-    version = 8,
+    version = 9,
     exportSchema = false
 )
 abstract class QizhiDatabase : RoomDatabase() {
@@ -42,6 +43,7 @@ abstract class QizhiDatabase : RoomDatabase() {
     abstract fun trainingRecordDao(): TrainingRecordDao
     abstract fun abilityProfileDao(): AbilityProfileDao
     abstract fun assessmentRecordDao(): AssessmentRecordDao
+    abstract fun careRecordDao(): CareRecordDao
     abstract fun knowledgeDao(): KnowledgeDao
     abstract fun safetyFlagDao(): SafetyFlagDao
     abstract fun planDao(): PlanDao
@@ -59,7 +61,7 @@ abstract class QizhiDatabase : RoomDatabase() {
                     context.applicationContext,
                     QizhiDatabase::class.java,
                     "qizhi_training.db"
-                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8).build().also {
+                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9).build().also {
                     INSTANCE = it
                     DatabaseSeeder.seedAsync(it)
                 }
@@ -195,6 +197,30 @@ abstract class QizhiDatabase : RoomDatabase() {
         val MIGRATION_7_8 = object : Migration(7, 8) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE ability_profiles ADD COLUMN assessmentRecordIdsJson TEXT NOT NULL DEFAULT '[]'")
+            }
+        }
+
+        val MIGRATION_8_9 = object : Migration(8, 9) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """CREATE TABLE IF NOT EXISTS `care_records` (
+                        `recordId` TEXT NOT NULL,
+                        `childId` TEXT NOT NULL,
+                        `stage` TEXT NOT NULL,
+                        `stageLabel` TEXT NOT NULL,
+                        `status` TEXT NOT NULL,
+                        `summary` TEXT NOT NULL,
+                        `linkedPlanId` TEXT,
+                        `linkedAssessmentId` TEXT,
+                        `professionalId` TEXT NOT NULL,
+                        `createdAt` INTEGER NOT NULL,
+                        `updatedAt` INTEGER NOT NULL,
+                        PRIMARY KEY(`recordId`)
+                    )""".trimIndent()
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_care_records_childId` ON `care_records` (`childId`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_care_records_childId_stage` ON `care_records` (`childId`, `stage`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_care_records_childId_createdAt` ON `care_records` (`childId`, `createdAt`)")
             }
         }
     }

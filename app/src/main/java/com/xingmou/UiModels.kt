@@ -153,6 +153,10 @@ data class ProfessionalUiState(
     val profileEvidenceSummary: String = "能力画像尚无可展示的证据引用。",
     val profileEvidenceDetails: List<ProfileEvidenceUi> = emptyList(),
     val assessmentChanges: List<AssessmentChangeUi> = emptyList(),
+    val careStage: String = "接案",
+    val careStageStatus: String = "待开始",
+    val careStageSummary: String = "尚未建立专业个案记录。",
+    val careTimeline: List<CareRecordUi> = emptyList(),
     val recentHomeFeedback: List<HomeFeedbackUi> = emptyList()
 )
 
@@ -201,6 +205,14 @@ data class AssessmentChangeUi(
     val fromVersion: Int,
     val toVersion: Int,
     val changes: List<String>
+)
+
+data class CareRecordUi(
+    val stage: String,
+    val stageLabel: String,
+    val status: String,
+    val summary: String,
+    val createdAt: Long
 )
 
 data class HomeFeedbackUi(
