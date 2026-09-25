@@ -7,6 +7,26 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 object SeedData {
+    const val DEMO_USER_ID = "local-professional"
+
+    val defaultChild = ChildEntity(
+        childId = "child-seed",
+        alias = "小星",
+        ageBand = "学龄期",
+        communicationLevel = "SHORT_SENTENCE",
+        supportLevel = "L1",
+        avatarColor = "coral",
+        createdAt = 0L,
+        updatedAt = 0L
+    )
+
+    val defaultBinding = ChildBindingEntity(
+        userId = DEMO_USER_ID,
+        childId = defaultChild.childId,
+        role = "professional",
+        validFrom = 0L
+    )
+
     val knowledgeItems: List<KnowledgeItemEntity> = listOf(
         KnowledgeItemEntity(
             itemId = "KB-SAFETY-001",
@@ -74,6 +94,8 @@ class SeedDatabaseCallback : RoomDatabase.Callback() {
 
 object DatabaseSeeder {
     suspend fun seed(database: QizhiDatabase) {
+        database.childDao().upsert(SeedData.defaultChild)
+        database.childBindingDao().upsert(SeedData.defaultBinding)
         database.knowledgeDao().insertAll(SeedData.knowledgeItems + SeedData.taskItems)
     }
 

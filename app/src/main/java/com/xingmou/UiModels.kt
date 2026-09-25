@@ -12,12 +12,17 @@ import com.xingmou.core.model.SupportLevel
 
 data class XingmouUiState(
     val selectedPort: Port = Port.CHILD,
+    val activeChildId: String = "child-seed",
+    val activeChildAlias: String = "小星",
+    val availableChildren: List<ChildSummaryUi> = emptyList(),
     val child: ChildUiState = ChildUiState(),
     val parent: ParentUiState = ParentUiState(),
     val professional: ProfessionalUiState = ProfessionalUiState(),
     val accessibility: AccessibilityUiState = AccessibilityUiState(),
     val aiConfigured: Boolean = false
 )
+
+data class ChildSummaryUi(val childId: String, val alias: String, val ageBand: String, val status: String)
 
 data class AccessibilityUiState(
     val speechEnabled: Boolean = true,

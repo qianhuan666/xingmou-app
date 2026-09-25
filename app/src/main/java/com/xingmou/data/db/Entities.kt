@@ -10,9 +10,32 @@ data class ChildEntity(
     val ageBand: String,
     val communicationLevel: String,
     val supportLevel: String,
+    val birthYear: Int? = null,
+    val languageLevel: String? = null,
+    val adlLevel: String? = null,
+    val diagnosisTranscription: String? = null,
+    val diagnosisSource: String? = null,
+    val notes: String? = null,
+    val avatarColor: String = "coral",
+    val baselineJson: String? = null,
+    val profileVersion: Int = 0,
     val status: String = "active",
     val createdAt: Long,
     val updatedAt: Long
+)
+
+@Entity(
+    tableName = "child_bindings",
+    primaryKeys = ["userId", "childId"],
+    indices = [Index("userId"), Index("childId"), Index(value = ["userId", "childId", "status"])]
+)
+data class ChildBindingEntity(
+    val userId: String,
+    val childId: String,
+    val role: String,
+    val status: String = "active",
+    val validFrom: Long,
+    val validTo: Long? = null
 )
 
 @Entity(

@@ -16,6 +16,9 @@ import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
@@ -41,6 +44,7 @@ fun XingmouApp(viewModel: XingmouViewModel) {
         XingmouTheme(highContrast = state.accessibility.highContrast) {
             Scaffold(
                 containerColor = MaterialTheme.colorScheme.background,
+                topBar = { ChildContextBar(state, viewModel::selectChild) },
                 bottomBar = { AppStatusBand(aiConfigured = state.aiConfigured) }
             ) { padding ->
                 BoxWithConstraints(Modifier.fillMaxSize().padding(padding)) {
@@ -55,6 +59,28 @@ fun XingmouApp(viewModel: XingmouViewModel) {
                             PortContent(viewModel, state.selectedPort, Modifier.weight(1f))
                         }
                     }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ChildContextBar(state: com.xingmou.XingmouUiState, onSelectChild: (String) -> Unit) {
+    val expandedState = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+    Surface(color = MaterialTheme.colorScheme.surface, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("当前儿童：${state.activeChildAlias}", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+            TextButton(onClick = { expandedState.value = true }, enabled = state.availableChildren.isNotEmpty()) { Text("切换档案") }
+            DropdownMenu(expanded = expandedState.value, onDismissRequest = { expandedState.value = false }) {
+                state.availableChildren.forEach { child ->
+                    DropdownMenuItem(
+                        text = { Text("${child.alias} · ${child.ageBand}") },
+                        onClick = { expandedState.value = false; onSelectChild(child.childId) }
+                    )
                 }
             }
         }

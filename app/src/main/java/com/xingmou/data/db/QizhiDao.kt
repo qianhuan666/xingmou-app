@@ -16,6 +16,21 @@ interface ChildDao {
 
     @Query("SELECT * FROM children WHERE childId = :childId LIMIT 1")
     suspend fun findById(childId: String): ChildEntity?
+
+    @Query("SELECT * FROM children WHERE status = 'active' ORDER BY updatedAt DESC LIMIT 1")
+    suspend fun firstActive(): ChildEntity?
+}
+
+@Dao
+interface ChildBindingDao {
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(binding: ChildBindingEntity)
+
+    @Query("SELECT * FROM child_bindings WHERE userId = :userId AND status = 'active' ORDER BY validFrom DESC")
+    suspend fun activeForUser(userId: String): List<ChildBindingEntity>
+
+    @Query("SELECT * FROM child_bindings WHERE userId = :userId AND childId = :childId AND status = 'active' LIMIT 1")
+    suspend fun findActive(userId: String, childId: String): ChildBindingEntity?
 }
 
 @Dao

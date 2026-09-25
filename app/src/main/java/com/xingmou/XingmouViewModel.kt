@@ -30,6 +30,7 @@ import com.xingmou.core.model.Port
 import com.xingmou.core.model.SessionContext
 import com.xingmou.core.safety.SafeResponses
 import com.xingmou.data.db.PlanVersionEntity
+import com.xingmou.data.db.ChildEntity
 import com.xingmou.data.db.QizhiDatabase
 import com.xingmou.data.db.ReviewRequestEntity
 import com.xingmou.data.db.SeedData
@@ -50,7 +51,9 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
     private val knowledgeRetriever = KnowledgeRetriever()
     private val analysisEngine = AnalysisEngine()
     private val planStateMachine = PlanStateMachine()
-    private val childId = "child-demo"
+    private var activeChildId: String? = null
+    private val childId: String
+        get() = activeChildId ?: SeedData.defaultChild.childId
 
     private val localSafeModel = ModelGateway { systemPrompt, _ ->
         val json = when {
@@ -80,7 +83,50 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
     private var activeReview: ReviewRequestEntity? = null
 
     init {
+        viewModelScope.launch {
+            database.childDao().observeActive().collect { children ->
+                val current = children.firstOrNull { it.childId == activeChildId } ?: children.firstOrNull()
+                activeChildId = current?.childId ?: SeedData.defaultChild.childId
+                _uiState.update {
+                    it.copy(
+                        activeChildId = activeChildId ?: SeedData.defaultChild.childId,
+                        activeChildAlias = current?.alias ?: SeedData.defaultChild.alias,
+                        availableChildren = children.map(::toChildSummary)
+                    )
+                }
+            }
+        }
         refreshProfessionalAnalysis()
+    }
+
+    fun selectChild(childId: String) {
+        viewModelScope.launch {
+            val child = database.childDao().findById(childId) ?: return@launch
+            activeChildId = child.childId
+            _uiState.update { it.copy(activeChildId = child.childId, activeChildAlias = child.alias) }
+            refreshProfessionalAnalysis()
+        }
+    }
+
+    fun createLocalChild(alias: String, ageBand: String = "学龄期") {
+        val normalized = alias.trim().take(24)
+        if (normalized.isBlank()) return
+        viewModelScope.launch {
+            val now = System.currentTimeMillis()
+            val child = ChildEntity(
+                childId = newId("child"), alias = normalized, ageBand = ageBand,
+                communicationLevel = CommunicationLevel.SHORT_SENTENCE.name,
+                supportLevel = "L1", createdAt = now, updatedAt = now
+            )
+            database.childDao().upsert(child)
+            database.childBindingDao().upsert(
+                com.xingmou.data.db.ChildBindingEntity(
+                    userId = SeedData.DEMO_USER_ID, childId = child.childId,
+                    role = "professional", validFrom = now
+                )
+            )
+            selectChild(child.childId)
+        }
     }
 
     fun selectPort(port: Port) {
@@ -438,4 +484,6 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
     )
 
     private fun newId(prefix: String): String = "$prefix-${UUID.randomUUID()}"
+
+    private fun toChildSummary(child: ChildEntity) = ChildSummaryUi(child.childId, child.alias, child.ageBand, child.status)
 }
