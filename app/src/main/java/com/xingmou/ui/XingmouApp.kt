@@ -168,8 +168,12 @@ private fun PortContent(viewModel: XingmouViewModel, port: Port, modifier: Modif
     when (port) {
         Port.CHILD -> ChildScreen(
             state = state.child,
+            baseline = state.baseline,
             accessibility = state.accessibility,
             onChoice = viewModel::completeChildTask,
+            onStartBaseline = viewModel::startBaseline,
+            onRestartBaseline = viewModel::restartBaseline,
+            onBaselineAnswer = viewModel::answerBaseline,
             onPause = viewModel::pauseChildTraining,
             onResume = viewModel::resumeChildTraining,
             onSpeechEnabledChange = viewModel::setSpeechEnabled,

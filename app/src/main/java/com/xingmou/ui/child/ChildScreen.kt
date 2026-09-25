@@ -30,6 +30,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.xingmou.AccessibilityUiState
 import com.xingmou.ChildUiState
+import com.xingmou.BaselineUiState
+import com.xingmou.core.domain.BaselineStatus
 import com.xingmou.ui.components.SectionSurface
 import com.xingmou.ui.components.StatusLine
 import com.xingmou.ui.components.XiaoXingMark
@@ -38,8 +40,12 @@ import com.xingmou.ui.theme.Error
 @Composable
 fun ChildScreen(
     state: ChildUiState,
+    baseline: BaselineUiState,
     accessibility: AccessibilityUiState,
     onChoice: (Boolean) -> Unit,
+    onStartBaseline: () -> Unit,
+    onRestartBaseline: () -> Unit,
+    onBaselineAnswer: (Int) -> Unit,
     onPause: () -> Unit,
     onResume: () -> Unit,
     onSpeechEnabledChange: (Boolean) -> Unit,
@@ -74,6 +80,8 @@ fun ChildScreen(
             }
         }
 
+        BaselineCard(baseline, onStartBaseline, onRestartBaseline, onBaselineAnswer)
+
         SectionSurface(
             title = if (state.isSafetyStopped) "先找身边的大人" else if (state.isPaused) "休息时间" else state.instruction,
             supporting = state.message,
@@ -88,6 +96,7 @@ fun ChildScreen(
                     enabled = !state.isWorking
                 ) { Text(if (state.isWorking) "请稍等" else "准备好了，继续") }
             } else {
+                Text("图片配对 · 第 ${state.courseProgress.coerceAtMost(state.courseTotal)} / ${state.courseTotal} 个活动", style = MaterialTheme.typography.labelLarge)
                 BoxWithConstraints(Modifier.fillMaxWidth()) {
                     val horizontal = maxWidth >= 520.dp
                     if (horizontal) {
@@ -154,6 +163,49 @@ fun ChildScreen(
             SettingRow("大字体", "增加界面文字大小", accessibility.largeText) { onLargeTextChange(it) }
             Spacer(Modifier.height(8.dp))
             SettingRow("高对比", "提高文字与表面的对比度", accessibility.highContrast) { onHighContrastChange(it) }
+        }
+    }
+}
+
+@Composable
+private fun BaselineCard(
+    state: BaselineUiState,
+    onStart: () -> Unit,
+    onRestart: () -> Unit,
+    onAnswer: (Int) -> Unit
+) {
+    SectionSurface(
+        title = "六题起点小测",
+        supporting = state.message,
+        containerColor = MaterialTheme.colorScheme.tertiaryContainer
+    ) {
+        when (state.status) {
+            BaselineStatus.NOT_STARTED, BaselineStatus.NEEDS_RETEST -> {
+                Button(onClick = onStart, modifier = Modifier.fillMaxWidth().heightIn(min = 60.dp)) {
+                    Text("开始基线")
+                }
+            }
+            BaselineStatus.IN_PROGRESS -> {
+                state.question?.let { question ->
+                    Text("${state.currentIndex + 1} / ${state.totalCount}", style = MaterialTheme.typography.labelLarge)
+                    Text(question.prompt, style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(vertical = 8.dp))
+                    question.options.forEachIndexed { index, option ->
+                        OutlinedButton(
+                            onClick = { onAnswer(index) },
+                            enabled = !state.isWorking,
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)
+                        ) { Text(option) }
+                        Spacer(Modifier.height(8.dp))
+                    }
+                }
+            }
+            BaselineStatus.COMPLETED -> {
+                Text("已完成六题起点小测", style = MaterialTheme.typography.titleMedium)
+                Text("记录的是过程表现，不是诊断或排名。", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                OutlinedButton(onClick = onRestart, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)) {
+                    Text("重新开始")
+                }
+            }
         }
     }
 }

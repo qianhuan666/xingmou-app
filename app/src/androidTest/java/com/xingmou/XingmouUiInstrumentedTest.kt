@@ -4,8 +4,10 @@ import android.content.Context
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.test.core.app.ApplicationProvider
 import org.junit.Before
 import org.junit.Rule
@@ -36,7 +38,25 @@ class XingmouUiInstrumentedTest {
         composeRule.waitUntil(5_000) {
             composeRule.onAllNodesWithText("辅助设置").fetchSemanticsNodes().isNotEmpty()
         }
-        composeRule.onNodeWithText("辅助设置").assertIsDisplayed()
+        composeRule.onNodeWithText("辅助设置").performScrollTo().assertIsDisplayed()
+    }
+
+    @Test
+    fun baselineCanStartAndComplete() {
+        val startNodes = composeRule.onAllNodesWithText("开始基线").fetchSemanticsNodes()
+        if (startNodes.isNotEmpty()) {
+            composeRule.onNodeWithText("开始基线").performScrollTo().performClick()
+        } else {
+            composeRule.onNodeWithText("重新开始").performScrollTo().performClick()
+        }
+        val answers = listOf("圆形", "蓝色", "方形", "小球", "先拿杯子", "自己试试")
+        answers.forEach { answer ->
+            composeRule.onAllNodesWithText(answer).onFirst().performScrollTo().performClick()
+        }
+        composeRule.waitUntil(5_000) {
+            composeRule.onAllNodesWithText("已完成六题起点小测").fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onNodeWithText("已完成六题起点小测").performScrollTo().assertIsDisplayed()
     }
 
     @Test

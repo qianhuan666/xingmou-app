@@ -18,6 +18,9 @@ import com.xingmou.core.agent.RoomAgentEventStore
 import com.xingmou.core.agent.SessionResumedEvent
 import com.xingmou.core.agent.TrainingCompletedEvent
 import com.xingmou.core.domain.AnalysisEngine
+import com.xingmou.core.domain.BaselineEngine
+import com.xingmou.core.domain.BaselineSession
+import com.xingmou.core.domain.BaselineStatus
 import com.xingmou.core.domain.KnowledgeRetriever
 import com.xingmou.core.domain.KnowledgeRoute
 import com.xingmou.core.domain.PlanActor
@@ -35,6 +38,9 @@ import com.xingmou.data.db.QizhiDatabase
 import com.xingmou.data.db.ReviewRequestEntity
 import com.xingmou.data.db.SeedData
 import com.xingmou.data.db.ConsentEntity
+import com.xingmou.data.db.AbilityProfileEntity
+import com.xingmou.data.catalog.QuestionCatalog
+import com.xingmou.BaselineUiState
 import java.util.UUID
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -52,6 +58,7 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
     )
     private val knowledgeRetriever = KnowledgeRetriever()
     private val analysisEngine = AnalysisEngine()
+    private val baselineEngine = BaselineEngine()
     private val planStateMachine = PlanStateMachine()
     private var activeChildId: String? = null
     private val localUserId = SeedData.DEMO_USER_ID
@@ -84,6 +91,7 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
 
     private var activePlan: PlanVersionEntity? = null
     private var activeReview: ReviewRequestEntity? = null
+    private var baselineSession = BaselineSession()
 
     init {
         viewModelScope.launch {
@@ -98,6 +106,8 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                     )
                 }
                 current?.let { loadConsentState(it.childId) }
+                current?.let { loadBaseline(it) }
+                current?.let { loadCourseProgress(it.childId) }
             }
         }
         refreshProfessionalAnalysis()
@@ -109,6 +119,8 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
             activeChildId = child.childId
             _uiState.update { it.copy(activeChildId = child.childId, activeChildAlias = child.alias) }
             refreshProfessionalAnalysis()
+            loadBaseline(child)
+            loadCourseProgress(child.childId)
         }
     }
 
@@ -157,6 +169,44 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
 
     fun setExportConsent(granted: Boolean) = setConsent("export", granted)
 
+    fun startBaseline() {
+        if (_uiState.value.baseline.status == BaselineStatus.IN_PROGRESS) return
+        baselineSession = baselineEngine.newSession(System.currentTimeMillis())
+        publishBaseline()
+        persistBaseline()
+    }
+
+    fun restartBaseline() {
+        baselineSession = baselineEngine.newSession(System.currentTimeMillis())
+        publishBaseline()
+        persistBaseline()
+    }
+
+    fun answerBaseline(option: Int) {
+        if (_uiState.value.baseline.status != BaselineStatus.IN_PROGRESS || _uiState.value.baseline.isWorking) return
+        _uiState.update { it.copy(baseline = it.baseline.copy(isWorking = true)) }
+        viewModelScope.launch {
+            baselineSession = baselineEngine.answer(baselineSession, option, System.currentTimeMillis())
+            persistBaseline()
+            if (baselineSession.status == BaselineStatus.COMPLETED) {
+                val now = System.currentTimeMillis()
+                val scores = baselineEngine.scores(baselineSession)
+                database.abilityProfileDao().upsert(
+                    AbilityProfileEntity(
+                        profileId = "baseline-${childId}-${baselineSession.version}-${now}",
+                        childId = childId,
+                        status = "completed",
+                        scoresJson = com.google.gson.Gson().toJson(scores),
+                        confidence = if (baselineSession.answers.size == 6) 1.0 else 0.5,
+                        evidenceJson = com.google.gson.Gson().toJson(baselineSession.answers),
+                        createdAt = now
+                    )
+                )
+            }
+            publishBaseline()
+        }
+    }
+
     private fun setConsent(purpose: String, granted: Boolean) {
         val childId = activeChildId ?: return
         viewModelScope.launch {
@@ -188,6 +238,58 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                 remoteAiConsent = consents["remote_ai"]?.status == "granted",
                 exportConsent = consents["export"]?.status == "granted"
             )
+        }
+    }
+
+    private suspend fun loadBaseline(child: ChildEntity) {
+        baselineSession = baselineEngine.fromJson(child.baselineJson) ?: BaselineSession()
+        publishBaseline()
+    }
+
+    private suspend fun loadCourseProgress(childId: String) {
+        val records = database.trainingRecordDao().recentForChild(childId, 100)
+            .filter { it.taskId.startsWith("M02-L1-") || it.taskId == "图片配对" }
+        val progress = records.size.coerceAtMost(QuestionCatalog.firstCourseQuestions.size)
+        val question = QuestionCatalog.firstCourseQuestions.getOrNull(progress)
+        _uiState.update {
+            it.copy(child = it.child.copy(
+                instruction = question?.prompt ?: "第一关完成了，可以休息一下",
+                options = question?.options ?: it.child.options,
+                courseProgress = progress,
+                courseTotal = QuestionCatalog.firstCourseQuestions.size,
+                courseQuestionId = question?.id
+            ))
+        }
+    }
+
+    private fun publishBaseline() {
+        val question = baselineEngine.currentQuestion(baselineSession)
+        _uiState.update {
+            it.copy(
+                baseline = BaselineUiState(
+                    status = baselineSession.status,
+                    currentIndex = baselineSession.currentIndex,
+                    totalCount = com.xingmou.data.catalog.QuestionCatalog.baselineQuestions.size,
+                    question = question,
+                    message = when (baselineSession.status) {
+                        BaselineStatus.NOT_STARTED -> "先做几个小练习，帮助小星找到合适的起点。"
+                        BaselineStatus.IN_PROGRESS -> "第 ${baselineSession.currentIndex + 1} 题，慢慢来。"
+                        BaselineStatus.COMPLETED -> "基线完成了。我们会根据过程表现安排下一步。"
+                        BaselineStatus.NEEDS_RETEST -> "这次可以稍后重新开始。"
+                    },
+                    scores = baselineEngine.scores(baselineSession),
+                    isWorking = false
+                )
+            )
+        }
+    }
+
+    private fun persistBaseline() {
+        val currentId = activeChildId ?: return
+        viewModelScope.launch {
+            val current = database.childDao().findById(currentId) ?: return@launch
+            val nextVersion = if (baselineSession.status == BaselineStatus.COMPLETED) current.profileVersion + 1 else current.profileVersion
+            database.childDao().updateBaseline(currentId, baselineEngine.toJson(baselineSession), nextVersion, System.currentTimeMillis())
         }
     }
 
@@ -231,7 +333,7 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
             runCatching {
                 val now = System.currentTimeMillis()
                 val result = TrainingResult(
-                    taskId = "图片配对",
+                    taskId = snapshot.courseQuestionId ?: "图片配对",
                     correct = correct,
                     firstCorrect = correct,
                     reactionMs = 1_500L,
@@ -258,6 +360,7 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                     instruction = if (correct) "再找一次圆形" else "看一看，再选一次"
                 )
                 _uiState.update { it.copy(child = updated) }
+                loadCourseProgress(childId)
                 refreshProfessionalAnalysis()
             }.onFailure { error ->
                 _uiState.update {

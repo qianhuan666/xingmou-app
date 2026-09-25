@@ -35,6 +35,7 @@ abstract class QizhiDatabase : RoomDatabase() {
     abstract fun childDao(): ChildDao
     abstract fun childBindingDao(): ChildBindingDao
     abstract fun trainingRecordDao(): TrainingRecordDao
+    abstract fun abilityProfileDao(): AbilityProfileDao
     abstract fun knowledgeDao(): KnowledgeDao
     abstract fun safetyFlagDao(): SafetyFlagDao
     abstract fun planDao(): PlanDao

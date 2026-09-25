@@ -7,6 +7,8 @@ import com.xingmou.core.domain.PlanActor
 import com.xingmou.core.domain.PlanStateMachine
 import com.xingmou.core.domain.PlanStatus
 import com.xingmou.core.domain.TrainingResult
+import com.xingmou.core.domain.BaselineStatus
+import com.xingmou.data.catalog.QuestionDefinition
 import com.xingmou.core.model.Port
 import com.xingmou.core.model.SupportLevel
 
@@ -18,6 +20,7 @@ data class XingmouUiState(
     val remoteAiConsent: Boolean = false,
     val exportConsent: Boolean = false,
     val child: ChildUiState = ChildUiState(),
+    val baseline: BaselineUiState = BaselineUiState(),
     val parent: ParentUiState = ParentUiState(),
     val professional: ProfessionalUiState = ProfessionalUiState(),
     val accessibility: AccessibilityUiState = AccessibilityUiState(),
@@ -25,6 +28,16 @@ data class XingmouUiState(
 )
 
 data class ChildSummaryUi(val childId: String, val alias: String, val ageBand: String, val status: String)
+
+data class BaselineUiState(
+    val status: BaselineStatus = BaselineStatus.NOT_STARTED,
+    val currentIndex: Int = 0,
+    val totalCount: Int = 6,
+    val question: QuestionDefinition? = null,
+    val message: String = "先做几个小练习，帮助小星找到合适的起点。",
+    val scores: Map<String, Int> = emptyMap(),
+    val isWorking: Boolean = false
+)
 
 data class AccessibilityUiState(
     val speechEnabled: Boolean = true,
@@ -41,6 +54,9 @@ fun normalizeSpeechVolume(volume: Float): Float = volume.coerceIn(0.5f, 1.0f)
 data class ChildUiState(
     val instruction: String = "找到圆形",
     val options: List<String> = listOf("圆形", "三角形"),
+    val courseProgress: Int = 0,
+    val courseTotal: Int = 5,
+    val courseQuestionId: String? = null,
     val difficulty: Int = 1,
     val supportLevel: SupportLevel = SupportLevel.L1,
     val message: String = "慢慢看，选一个就好。",

@@ -23,8 +23,20 @@ interface ChildDao {
     @Query("UPDATE children SET alias = :alias, ageBand = :ageBand, updatedAt = :updatedAt WHERE childId = :childId")
     suspend fun updateBasicProfile(childId: String, alias: String, ageBand: String, updatedAt: Long)
 
+    @Query("UPDATE children SET baselineJson = :baselineJson, profileVersion = :profileVersion, updatedAt = :updatedAt WHERE childId = :childId")
+    suspend fun updateBaseline(childId: String, baselineJson: String, profileVersion: Int, updatedAt: Long)
+
     @Query("UPDATE children SET status = 'archived', updatedAt = :updatedAt WHERE childId = :childId")
     suspend fun archive(childId: String, updatedAt: Long)
+}
+
+@Dao
+interface AbilityProfileDao {
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(profile: AbilityProfileEntity)
+
+    @Query("SELECT * FROM ability_profiles WHERE childId = :childId ORDER BY createdAt DESC LIMIT 1")
+    suspend fun latestForChild(childId: String): AbilityProfileEntity?
 }
 
 @Dao
