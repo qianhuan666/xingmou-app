@@ -125,8 +125,17 @@ data class ProfessionalUiState(
     val agentStatus: String = "本地待命",
     val recentEvent: String = "尚无事件",
     val evidence: List<String> = listOf("RiskEngine", "AnalysisEngine", "PlanStateMachine"),
+    val reportMetrics: List<ReportMetricUi> = listOf(
+        ReportMetricUi("正确率", "—", "至少 3 条记录后计算"),
+        ReportMetricUi("独立完成率", "—", "L0 或无需提示"),
+        ReportMetricUi("提示依赖", "—", "提示等级越低越独立"),
+        ReportMetricUi("平均反应时", "—", "仅统计有反应时记录"),
+        ReportMetricUi("趋势", "数据不足", "按前后半段比较")
+    ),
     val recentHomeFeedback: List<HomeFeedbackUi> = emptyList()
 )
+
+data class ReportMetricUi(val label: String, val value: String, val detail: String)
 
 data class HomeFeedbackUi(
     val createdAt: Long,

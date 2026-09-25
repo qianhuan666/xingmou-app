@@ -54,6 +54,8 @@ class XingmouUiInstrumentedTest {
         composeRule.onNodeWithText("保存今天的观察").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("专业端").performClick()
         composeRule.onNodeWithText("专业审核工作台").assertIsDisplayed()
+        composeRule.onNodeWithText("训练报表").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("正确率").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("家庭反馈").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("儿童端").performClick()
         composeRule.onNodeWithText("和小星一起练习").assertIsDisplayed()
@@ -71,6 +73,6 @@ class XingmouUiInstrumentedTest {
         composeRule.waitUntil(5_000) {
             composeRule.onAllNodesWithText("心情：平稳", substring = true).fetchSemanticsNodes().isNotEmpty()
         }
-        composeRule.onNodeWithText("心情：平稳", substring = true).assertIsDisplayed()
+        composeRule.onNodeWithText("心情：平稳", substring = true).performScrollTo().assertIsDisplayed()
     }
 }

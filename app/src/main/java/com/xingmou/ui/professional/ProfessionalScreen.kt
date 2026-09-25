@@ -53,6 +53,7 @@ fun ProfessionalScreen(
                 Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                         AnalysisPanel(state, onRefresh)
+                        ReportPanel(state)
                         HomeFeedbackPanel(state)
                         AgentPanel(state)
                     }
@@ -61,6 +62,7 @@ fun ProfessionalScreen(
             } else {
                 Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                     AnalysisPanel(state, onRefresh)
+                    ReportPanel(state)
                     HomeFeedbackPanel(state)
                     PlanPanel(state, onReviewCommentChange, onCreateDraft, onConfirm, onActivate, onReject, Modifier.fillMaxWidth())
                     AgentPanel(state)
@@ -79,6 +81,22 @@ private fun HomeFeedbackPanel(state: ProfessionalUiState) {
             state.recentHomeFeedback.forEach { feedback ->
                 Text("${java.text.SimpleDateFormat("MM-dd HH:mm", java.util.Locale.getDefault()).format(java.util.Date(feedback.createdAt))} · ${feedback.taskTitle}", style = MaterialTheme.typography.labelMedium)
                 Text("心情：${feedback.mood} · 疲劳：${feedback.fatigue}${feedback.note.takeIf { it.isNotBlank() }?.let { " · $it" } ?: ""}", modifier = Modifier.padding(bottom = 10.dp))
+            }
+        }
+    }
+}
+
+@Composable
+private fun ReportPanel(state: ProfessionalUiState) {
+    SectionSurface(title = "训练报表", supporting = "指标来自当前儿童的本地训练记录，不等同于能力评估或医学诊断。") {
+        state.reportMetrics.forEachIndexed { index, metric ->
+            if (index > 0) HorizontalDivider(Modifier.padding(vertical = 8.dp))
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Column(Modifier.weight(1f)) {
+                    Text(metric.label, style = MaterialTheme.typography.titleSmall)
+                    Text(metric.detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Text(metric.value, style = MaterialTheme.typography.titleMedium)
             }
         }
     }

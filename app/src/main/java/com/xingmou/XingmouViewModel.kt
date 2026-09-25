@@ -44,6 +44,7 @@ import com.xingmou.data.db.HomeFeedbackEntity
 import com.xingmou.data.db.HomeTaskEntity
 import com.xingmou.data.catalog.QuestionCatalog
 import com.xingmou.BaselineUiState
+import com.xingmou.ReportMetricUi
 import java.util.UUID
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -785,6 +786,13 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                             dataSufficient = analysis.dataSufficient,
                             analysisSummary = analysis.observations + if (analysis.dataSufficient) listOf("趋势：${analysis.trend.name}") else emptyList(),
                             warningSignals = analysis.warningSignals,
+                            reportMetrics = listOf(
+                                ReportMetricUi("正确率", analysis.accuracy.percentLabel(), "整体正确作答比例"),
+                                ReportMetricUi("独立完成率", analysis.independentCompletionRate.percentLabel(), "L0 或无需提示的记录比例"),
+                                ReportMetricUi("提示依赖", analysis.averagePromptLevel?.let { "等级 %.1f".format(it) } ?: "—", "平均提示等级，越低越独立"),
+                                ReportMetricUi("平均反应时", analysis.averageReactionMs?.let { "%.0f ms".format(it) } ?: "—", "仅统计有反应时记录"),
+                                ReportMetricUi("趋势", analysis.trend.label(), "按训练记录前后半段比较")
+                            ),
                             planStatus = latestPlan?.status?.uppercase()?.let { status -> runCatching { PlanStatus.valueOf(status) }.getOrNull() } ?: it.professional.planStatus,
                             planSummary = if (latestPlan != null) "当前方案 V${latestPlan.version} · ${latestPlan.status.uppercase()}" else if (analysis.dataSufficient || it.professional.planStatus != null) it.professional.planSummary else "达到 3 条有效记录后，可生成方案草案。",
                             recentEvent = if (analysis.sampleCount >= 3) "RECORDS_THRESHOLD_REACHED" else it.professional.recentEvent,
@@ -829,6 +837,15 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
 
     private fun jsonString(json: String, key: String): String? =
         Regex("\\\"${Regex.escape(key)}\\\"\\s*:\\s*\\\"([^\\\"]*)\\\"").find(json)?.groupValues?.getOrNull(1)
+
+    private fun Double?.percentLabel(): String = this?.let { "%.0f%%".format(it * 100) } ?: "—"
+
+    private fun com.xingmou.core.domain.Trend.label(): String = when (this) {
+        com.xingmou.core.domain.Trend.IMPROVING -> "改善"
+        com.xingmou.core.domain.Trend.STABLE -> "稳定"
+        com.xingmou.core.domain.Trend.DECLINING -> "下降"
+        com.xingmou.core.domain.Trend.INSUFFICIENT_DATA -> "数据不足"
+    }
 
     private fun session() = SessionContext(
         childAlias = "小星",

@@ -58,6 +58,21 @@ class DomainEnginesTest {
         assertTrue(analysis.warningSignals.any { it.contains("人工复核") })
     }
 
+    @Test fun analysisProvidesReportMetricsForProfessionalView() {
+        val analysis = AnalysisEngine().analyze(
+            listOf(
+                record(1, true, 500, "L0"),
+                record(2, true, 700, "L1"),
+                record(3, false, 900, "L2")
+            )
+        )
+        assertEquals(3, analysis.sampleCount)
+        assertEquals(2.0 / 3.0, analysis.accuracy!!, 0.0001)
+        assertEquals(1.0 / 3.0, analysis.independentCompletionRate!!, 0.0001)
+        assertEquals(700.0, analysis.averageReactionMs!!, 0.0001)
+        assertEquals(4.0 / 3.0, analysis.averagePromptLevel!!, 0.0001)
+    }
+
     private fun record(index: Int, correct: Boolean, reaction: Long, support: String) = TrainingRecordEntity(
         "r$index", "child", "认知", "图片配对", 2, support, reaction, if (correct) null else "wrong", correct, correct, if (support == "L0") 0 else 2, index.toLong()
     )
