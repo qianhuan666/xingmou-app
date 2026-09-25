@@ -60,6 +60,7 @@ data class ChildUiState(
     val courseQuestionId: String? = null,
     val courseUnlocked: Boolean = false,
     val courseOpen: Boolean = true,
+    val courseSummary: String = "尚无第一关记录",
     val difficulty: Int = 1,
     val supportLevel: SupportLevel = SupportLevel.L1,
     val message: String = "慢慢看，选一个就好。",

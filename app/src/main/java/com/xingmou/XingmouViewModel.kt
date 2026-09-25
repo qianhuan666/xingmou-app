@@ -21,6 +21,7 @@ import com.xingmou.core.domain.AnalysisEngine
 import com.xingmou.core.domain.BaselineEngine
 import com.xingmou.core.domain.BaselineSession
 import com.xingmou.core.domain.BaselineStatus
+import com.xingmou.core.domain.CourseProgressEngine
 import com.xingmou.core.domain.KnowledgeRetriever
 import com.xingmou.core.domain.KnowledgeRoute
 import com.xingmou.core.domain.PlanActor
@@ -59,6 +60,7 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
     private val knowledgeRetriever = KnowledgeRetriever()
     private val analysisEngine = AnalysisEngine()
     private val baselineEngine = BaselineEngine()
+    private val courseProgressEngine = CourseProgressEngine()
     private val planStateMachine = PlanStateMachine()
     private var activeChildId: String? = null
     private val localUserId = SeedData.DEMO_USER_ID
@@ -278,17 +280,18 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
     private suspend fun loadCourseProgress(childId: String) {
         val records = database.trainingRecordDao().recentForChild(childId, 100)
             .filter { it.taskId.startsWith("M02-L1-") || it.taskId == "图片配对" }
-        val progress = records.filter { it.correct }.map { it.taskId }.toSet()
-            .size.coerceAtMost(QuestionCatalog.firstCourseQuestions.size)
-        val question = QuestionCatalog.firstCourseQuestions.getOrNull(progress)
+        val progress = courseProgressEngine.summarize(records)
+        val question = progress.nextQuestion
         _uiState.update {
             it.copy(child = it.child.copy(
                 instruction = question?.prompt ?: "第一关完成了，可以休息一下",
                 options = question?.options ?: it.child.options,
-                courseProgress = progress,
-                courseTotal = QuestionCatalog.firstCourseQuestions.size,
+                courseProgress = progress.completedCount,
+                courseTotal = progress.total,
                 courseQuestionId = question?.id,
-                courseUnlocked = baselineSession.status == BaselineStatus.COMPLETED
+                courseUnlocked = baselineSession.status == BaselineStatus.COMPLETED,
+                courseOpen = true,
+                courseSummary = progress.summary
             ))
         }
     }

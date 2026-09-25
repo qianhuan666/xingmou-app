@@ -146,6 +146,8 @@ fun ChildScreen(
             StatusLine("支持", state.supportLevel.name)
             Spacer(Modifier.height(8.dp))
             StatusLine("最近状态", state.lastEvent)
+            Spacer(Modifier.height(8.dp))
+            StatusLine("课程记录", state.courseSummary)
             Text(
                 "这里不展示分数和排名，只记录下一步需要多少支持。",
                 modifier = Modifier.padding(top = 16.dp),
