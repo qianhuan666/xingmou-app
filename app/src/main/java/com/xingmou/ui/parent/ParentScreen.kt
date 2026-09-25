@@ -88,12 +88,17 @@ private fun HomeTaskPanel(
         Text(state.homeTaskTitle, style = MaterialTheme.typography.titleLarge)
         Text(state.homeTaskDescription, modifier = Modifier.padding(top = 8.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.height(10.dp))
+        Text("安排：${state.homeTaskFrequency} · ${state.homeTaskDurationMinutes} 分钟 · 支持 ${state.homeTaskSupportLevel}", modifier = Modifier.padding(top = 6.dp))
+        Text("停止条件：${state.homeTaskStopConditions}", modifier = Modifier.padding(top = 4.dp), color = Warning)
+        if (state.homeTaskSafetyStopped) {
+            Text("当前有安全暂停标记，家庭任务已暂时禁用，请先联系专业人员确认。", modifier = Modifier.padding(top = 8.dp), color = Warning)
+        }
         StatusLine("任务状态", homeStatusLabel(state.homeTaskStatus))
         Spacer(Modifier.height(10.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-            Button(onClick = onComplete, enabled = state.homeTaskStatus == "pending", modifier = Modifier.weight(1f)) { Text("完成") }
-            OutlinedButton(onClick = onPause, enabled = state.homeTaskStatus == "pending", modifier = Modifier.weight(1f)) { Text("暂停") }
-            TextButton(onClick = onSkip, enabled = state.homeTaskStatus == "pending", modifier = Modifier.weight(1f)) { Text("跳过") }
+            Button(onClick = onComplete, enabled = state.homeTaskStatus == "pending" && !state.homeTaskSafetyStopped, modifier = Modifier.weight(1f)) { Text("完成") }
+            OutlinedButton(onClick = onPause, enabled = state.homeTaskStatus == "pending" && !state.homeTaskSafetyStopped, modifier = Modifier.weight(1f)) { Text("暂停") }
+            TextButton(onClick = onSkip, enabled = state.homeTaskStatus == "pending" && !state.homeTaskSafetyStopped, modifier = Modifier.weight(1f)) { Text("跳过") }
         }
         HorizontalDivider(Modifier.padding(vertical = 14.dp))
         Text("今天的状态", style = MaterialTheme.typography.titleMedium)

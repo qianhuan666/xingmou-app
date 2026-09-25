@@ -96,4 +96,25 @@ class QizhiDatabaseInstrumentedTest {
         assertEquals(1, database.homeFeedbackDao().recentForChild("child-a").size)
         assertEquals(0, database.homeFeedbackDao().recentForChild("child-b").size)
     }
+
+    @Test
+    fun homeTaskKeepsPlanMappingAndFeedbackTimeline() = runBlocking {
+        database.homeTaskDao().upsert(
+            HomeTaskEntity(
+                taskId = "home-plan-v2", childId = "child-a", title = "专业下发：图片配对短练习",
+                description = "按方案执行", status = "pending", planId = "plan-v2", planVersion = 2,
+                frequency = "每日 1–2 次", durationMinutes = 8, supportLevel = "L2",
+                stopConditions = "出现疲劳时暂停", source = "PLAN_V2", updatedAt = 3L
+            )
+        )
+        database.homeFeedbackDao().insert(
+            HomeFeedbackEntity("feedback-v2", "child-a", "home-plan-v2", "平稳", "较少", "愿意参与", 4L)
+        )
+        val task = database.homeTaskDao().latestForChild("child-a")
+        val feedback = database.homeFeedbackDao().recentForChild("child-a").single()
+        assertEquals("plan-v2", task?.planId)
+        assertEquals(8, task?.durationMinutes)
+        assertEquals("PLAN_V2", task?.source)
+        assertEquals("home-plan-v2", feedback.taskId)
+    }
 }

@@ -22,6 +22,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.xingmou.ProfessionalUiState
+import com.xingmou.HomeFeedbackUi
 import com.xingmou.core.domain.PlanStatus
 import com.xingmou.ui.components.SectionSurface
 import com.xingmou.ui.components.StatusLine
@@ -76,7 +77,8 @@ private fun HomeFeedbackPanel(state: ProfessionalUiState) {
             Text("暂无家庭反馈。家长完成任务后可保存今天的观察。", color = MaterialTheme.colorScheme.onSurfaceVariant)
         } else {
             state.recentHomeFeedback.forEach { feedback ->
-                Text("• $feedback", modifier = Modifier.padding(bottom = 6.dp))
+                Text("${java.text.SimpleDateFormat("MM-dd HH:mm", java.util.Locale.getDefault()).format(java.util.Date(feedback.createdAt))} · ${feedback.taskTitle}", style = MaterialTheme.typography.labelMedium)
+                Text("心情：${feedback.mood} · 疲劳：${feedback.fatigue}${feedback.note.takeIf { it.isNotBlank() }?.let { " · $it" } ?: ""}", modifier = Modifier.padding(bottom = 10.dp))
             }
         }
     }

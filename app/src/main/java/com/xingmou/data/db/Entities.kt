@@ -46,6 +46,13 @@ data class HomeTaskEntity(
     val description: String,
     val status: String = "pending",
     val dueAt: Long? = null,
+    val planId: String? = null,
+    val planVersion: Int? = null,
+    val frequency: String = "按需",
+    val durationMinutes: Int = 5,
+    val supportLevel: String = "L1",
+    val stopConditions: String = "出现疲劳、拒绝或风险时暂停",
+    val source: String = "LOCAL_TEMPLATE",
     val updatedAt: Long
 )
 

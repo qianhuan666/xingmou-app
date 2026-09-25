@@ -30,7 +30,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         ReviewRequestEntity::class,
         DecisionTraceEntity::class
     ],
-    version = 4,
+    version = 5,
     exportSchema = false
 )
 abstract class QizhiDatabase : RoomDatabase() {
@@ -57,7 +57,7 @@ abstract class QizhiDatabase : RoomDatabase() {
                     context.applicationContext,
                     QizhiDatabase::class.java,
                     "qizhi_training.db"
-                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4).build().also {
+                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5).build().also {
                     INSTANCE = it
                     DatabaseSeeder.seedAsync(it)
                 }
@@ -143,6 +143,18 @@ abstract class QizhiDatabase : RoomDatabase() {
                 )
                 db.execSQL("CREATE INDEX IF NOT EXISTS `index_home_feedback_childId` ON `home_feedback` (`childId`)")
                 db.execSQL("CREATE INDEX IF NOT EXISTS `index_home_feedback_childId_createdAt` ON `home_feedback` (`childId`, `createdAt`)")
+            }
+        }
+
+        val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE home_tasks ADD COLUMN planId TEXT")
+                db.execSQL("ALTER TABLE home_tasks ADD COLUMN planVersion INTEGER")
+                db.execSQL("ALTER TABLE home_tasks ADD COLUMN frequency TEXT NOT NULL DEFAULT '按需'")
+                db.execSQL("ALTER TABLE home_tasks ADD COLUMN durationMinutes INTEGER NOT NULL DEFAULT 5")
+                db.execSQL("ALTER TABLE home_tasks ADD COLUMN supportLevel TEXT NOT NULL DEFAULT 'L1'")
+                db.execSQL("ALTER TABLE home_tasks ADD COLUMN stopConditions TEXT NOT NULL DEFAULT '出现疲劳、拒绝或风险时暂停'")
+                db.execSQL("ALTER TABLE home_tasks ADD COLUMN source TEXT NOT NULL DEFAULT 'LOCAL_TEMPLATE'")
             }
         }
     }

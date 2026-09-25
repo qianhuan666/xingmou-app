@@ -59,6 +59,9 @@ interface HomeTaskDao {
     @Query("SELECT * FROM home_tasks WHERE childId = :childId ORDER BY updatedAt DESC LIMIT 1")
     suspend fun latestForChild(childId: String): HomeTaskEntity?
 
+    @Query("SELECT * FROM home_tasks WHERE childId = :childId ORDER BY updatedAt DESC")
+    suspend fun allForChild(childId: String): List<HomeTaskEntity>
+
     @Query("UPDATE home_tasks SET status = :status, updatedAt = :updatedAt WHERE taskId = :taskId AND childId = :childId")
     suspend fun updateStatus(childId: String, taskId: String, status: String, updatedAt: Long)
 }
@@ -169,4 +172,10 @@ interface AgentDao {
 
     @Query("SELECT * FROM agent_events WHERE runId = :runId ORDER BY createdAt ASC")
     suspend fun events(runId: String): List<AgentEventEntity>
+
+    @Query("SELECT * FROM review_requests WHERE childId = :childId AND status = 'pending' ORDER BY createdAt DESC LIMIT 1")
+    suspend fun pendingReviewForChild(childId: String): ReviewRequestEntity?
+
+    @Query("SELECT * FROM review_requests WHERE targetId = :targetId ORDER BY createdAt DESC LIMIT 1")
+    suspend fun latestReviewForTarget(targetId: String): ReviewRequestEntity?
 }

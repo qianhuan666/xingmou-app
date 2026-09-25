@@ -98,6 +98,12 @@ data class ParentUiState(
     val homeTaskTitle: String = "五分钟图片配对陪练",
     val homeTaskDescription: String = "准备两个熟悉的图片，先示范一次，再邀请孩子自己试试。出现疲劳或拒绝时暂停。",
     val homeTaskStatus: String = "pending",
+    val homeTaskPlanVersion: Int? = null,
+    val homeTaskFrequency: String = "按需",
+    val homeTaskDurationMinutes: Int = 5,
+    val homeTaskSupportLevel: String = "L1",
+    val homeTaskStopConditions: String = "出现疲劳、拒绝或风险时暂停",
+    val homeTaskSafetyStopped: Boolean = false,
     val feedbackMood: String = "平稳",
     val feedbackFatigue: String = "不确定",
     val feedbackNote: String = "",
@@ -118,7 +124,15 @@ data class ProfessionalUiState(
     val agentStatus: String = "本地待命",
     val recentEvent: String = "尚无事件",
     val evidence: List<String> = listOf("RiskEngine", "AnalysisEngine", "PlanStateMachine"),
-    val recentHomeFeedback: List<String> = emptyList()
+    val recentHomeFeedback: List<HomeFeedbackUi> = emptyList()
+)
+
+data class HomeFeedbackUi(
+    val createdAt: Long,
+    val taskTitle: String,
+    val mood: String,
+    val fatigue: String,
+    val note: String
 )
 
 enum class PlanUiAction { CONFIRM, ACTIVATE, REJECT }

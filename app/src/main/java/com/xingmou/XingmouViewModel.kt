@@ -479,6 +479,10 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
 
     private fun updateHomeTaskStatus(status: String) {
         val current = _uiState.value.parent
+        if (current.homeTaskSafetyStopped) {
+            _uiState.update { it.copy(parent = it.parent.copy(feedbackMessage = "当前有安全暂停标记，家庭任务暂不可操作。")) }
+            return
+        }
         viewModelScope.launch {
             val task = database.homeTaskDao().latestForChild(childId) ?: return@launch
             database.homeTaskDao().updateStatus(childId, task.taskId, status, System.currentTimeMillis())
@@ -560,20 +564,35 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
     }
 
     private suspend fun loadHomeSupport(childId: String) {
+        val latestPlan = database.planDao().latest(childId)?.takeIf { it.status == "active" }
         val existing = database.homeTaskDao().latestForChild(childId)
-        val task = existing ?: HomeTaskEntity(
+        val task = if (latestPlan != null && existing?.planId != latestPlan.planId) {
+            createHomeTaskFromPlan(latestPlan).also { database.homeTaskDao().upsert(it) }
+        } else existing ?: HomeTaskEntity(
             taskId = "home-$childId-matching",
             childId = childId,
             title = "五分钟图片配对陪练",
             description = "准备两个熟悉的图片，先示范一次，再邀请孩子自己试试。出现疲劳或拒绝时暂停。",
             status = "pending",
+            frequency = "每日 1–2 次",
+            durationMinutes = 5,
+            supportLevel = "L1",
+            stopConditions = "出现疲劳、拒绝或风险时暂停",
+            source = "LOCAL_TEMPLATE",
             updatedAt = System.currentTimeMillis()
         ).also { database.homeTaskDao().upsert(it) }
+        val safetyStopped = database.safetyFlagDao().observeActive(childId).first().isNotEmpty()
         _uiState.update {
             it.copy(parent = it.parent.copy(
                 homeTaskTitle = task.title,
                 homeTaskDescription = task.description,
-                homeTaskStatus = task.status
+                homeTaskStatus = task.status,
+                homeTaskPlanVersion = task.planVersion,
+                homeTaskFrequency = task.frequency,
+                homeTaskDurationMinutes = task.durationMinutes,
+                homeTaskSupportLevel = task.supportLevel,
+                homeTaskStopConditions = task.stopConditions,
+                homeTaskSafetyStopped = safetyStopped
             ))
         }
     }
@@ -615,7 +634,7 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                     version = version,
                     status = "draft",
                     reviewRequired = true,
-                    payloadJson = """{"priority_domain":"A","observable_goal":"在低支持下完成图片配对","task":"图片配对","difficulty":${_uiState.value.child.difficulty},"support_level":"${_uiState.value.child.supportLevel.name}","frequency":"短时练习","duration":"5-10分钟"}""",
+                    payloadJson = """{"priority_domain":"A","observable_goal":"在低支持下完成图片配对","task":"图片配对","difficulty":${_uiState.value.child.difficulty},"support_level":"${_uiState.value.child.supportLevel.name}","frequency":"每日 1–2 次","duration":"5 分钟","stop_conditions":"出现疲劳、拒绝或风险时暂停"}""",
                     createdAt = now,
                     updatedAt = now
                 )
@@ -733,7 +752,16 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                 val records = database.trainingRecordDao().recentForChild(childId)
                 val analysis = analysisEngine.analyze(records)
                 val latestPlan = database.planDao().latest(childId)
+                val review = latestPlan?.let { database.agentDao().latestReviewForTarget(it.planId) }
                 val feedback = database.homeFeedbackDao().recentForChild(childId)
+                val homeTasks = database.homeTaskDao().allForChild(childId).associateBy { it.taskId }
+                if (latestPlan != null && latestPlan.status in setOf("draft", "confirmed") && review != null) {
+                    activePlan = latestPlan
+                    activeReview = review
+                } else if (latestPlan == null || latestPlan.status !in setOf("draft", "confirmed")) {
+                    activePlan = null
+                    activeReview = null
+                }
                 _uiState.update {
                     it.copy(
                         parent = it.parent.copy(recordCount = records.size),
@@ -745,7 +773,9 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                             planStatus = latestPlan?.status?.uppercase()?.let { status -> runCatching { PlanStatus.valueOf(status) }.getOrNull() } ?: it.professional.planStatus,
                             planSummary = if (latestPlan != null) "当前方案 V${latestPlan.version} · ${latestPlan.status.uppercase()}" else if (analysis.dataSufficient || it.professional.planStatus != null) it.professional.planSummary else "达到 3 条有效记录后，可生成方案草案。",
                             recentEvent = if (analysis.sampleCount >= 3) "RECORDS_THRESHOLD_REACHED" else it.professional.recentEvent,
-                            recentHomeFeedback = feedback.map { item -> "心情：${item.mood} · 疲劳：${item.fatigue}${item.note.takeIf { note -> note.isNotBlank() }?.let { " · $it" } ?: ""}" }
+                            recentHomeFeedback = feedback.map { item ->
+                                HomeFeedbackUi(item.createdAt, homeTasks[item.taskId]?.title ?: "家庭观察", item.mood, item.fatigue, item.note)
+                            }
                         )
                     )
                 }
@@ -754,18 +784,36 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
     }
 
     private suspend fun publishActivePlanToHomeTask(plan: PlanVersionEntity) {
-        database.homeTaskDao().upsert(
-            HomeTaskEntity(
-                taskId = "home-$childId-plan-${plan.version}",
-                childId = childId,
-                title = "专业下发：图片配对短练习",
-                description = "已签署方案 V${plan.version}。按当前支持等级完成一次 5–10 分钟练习；出现疲劳、拒绝或风险时暂停并记录观察。",
-                status = "pending",
-                updatedAt = System.currentTimeMillis()
-            )
-        )
+        database.homeTaskDao().upsert(createHomeTaskFromPlan(plan))
         loadHomeSupport(childId)
     }
+
+    private fun createHomeTaskFromPlan(plan: PlanVersionEntity): HomeTaskEntity {
+        val payload = plan.payloadJson
+        val task = jsonString(payload, "task") ?: "图片配对"
+        val frequency = jsonString(payload, "frequency") ?: "每日 1–2 次"
+        val duration = jsonString(payload, "duration")?.filter { it.isDigit() }?.toIntOrNull()?.coerceIn(1, 60) ?: 5
+        val support = jsonString(payload, "support_level") ?: _uiState.value.child.supportLevel.name
+        val stop = jsonString(payload, "stop_conditions") ?: "出现疲劳、拒绝或风险时暂停"
+        return HomeTaskEntity(
+            taskId = "home-$childId-plan-${plan.version}",
+            childId = childId,
+            title = "专业下发：${task}短练习",
+            description = "按方案 V${plan.version} 执行 ${task}，支持等级 $support；$stop。",
+            status = "pending",
+            planId = plan.planId,
+            planVersion = plan.version,
+            frequency = frequency,
+            durationMinutes = duration,
+            supportLevel = support,
+            stopConditions = stop,
+            source = "PLAN_V${plan.version}",
+            updatedAt = System.currentTimeMillis()
+        )
+    }
+
+    private fun jsonString(json: String, key: String): String? =
+        Regex("\\\"${Regex.escape(key)}\\\"\\s*:\\s*\\\"([^\\\"]*)\\\"").find(json)?.groupValues?.getOrNull(1)
 
     private fun session() = SessionContext(
         childAlias = "小星",
