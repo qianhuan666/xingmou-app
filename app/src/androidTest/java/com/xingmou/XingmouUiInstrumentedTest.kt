@@ -1,10 +1,12 @@
 package com.xingmou
 
 import android.content.Context
+import android.content.pm.ActivityInfo
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.test.core.app.ApplicationProvider
@@ -43,6 +45,17 @@ class XingmouUiInstrumentedTest {
     @Test
     fun baselineEntryIsReachable() {
         composeRule.onNodeWithText("六题起点小测").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("开始六题起点小测").assertIsDisplayed()
+    }
+
+    @Test
+    fun coreScreenRemainsReachableInLandscapeAndPortrait() {
+        composeRule.activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText("和小星一起练习").assertIsDisplayed()
+        composeRule.activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText("和小星一起练习").assertIsDisplayed()
     }
 
     @Test

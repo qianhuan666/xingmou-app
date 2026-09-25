@@ -27,6 +27,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.xingmou.AccessibilityUiState
@@ -98,18 +100,18 @@ fun ChildScreen(
             } else if (state.isPaused) {
                 Button(
                     onClick = onResume,
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp),
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp).semantics { contentDescription = "恢复儿童训练" },
                     enabled = !state.isWorking
                 ) { Text(if (state.isWorking) "请稍等" else "准备好了，继续") }
             } else if (!state.courseUnlocked) {
                 Text("完成六题起点小测后，就可以开始第一关。", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 OutlinedButton(
                     onClick = onPause,
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp),
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp).semantics { contentDescription = "让儿童休息" },
                     enabled = !state.isWorking
                 ) { Text("先休息") }
             } else if (!state.courseOpen) {
-                Button(onClick = onResumeCourse, modifier = Modifier.fillMaxWidth().heightIn(min = 60.dp)) {
+                Button(onClick = onResumeCourse, modifier = Modifier.fillMaxWidth().heightIn(min = 60.dp).semantics { contentDescription = "继续第一关课程" }) {
                     Text("继续第一关")
                 }
             } else {
@@ -133,10 +135,10 @@ fun ChildScreen(
                 Spacer(Modifier.height(12.dp))
                 OutlinedButton(
                     onClick = onPause,
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp),
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp).semantics { contentDescription = "让儿童休息" },
                     enabled = !state.isWorking
                 ) { Text("先休息") }
-                TextButton(onClick = onLeaveCourse, modifier = Modifier.fillMaxWidth()) { Text("暂时离开这一关") }
+                TextButton(onClick = onLeaveCourse, modifier = Modifier.fillMaxWidth().semantics { contentDescription = "暂时离开第一关" }) { Text("暂时离开这一关") }
             }
         }
 
@@ -205,12 +207,12 @@ private fun BaselineCard(
     ) {
         when (state.status) {
             BaselineStatus.NOT_STARTED, BaselineStatus.NEEDS_RETEST -> {
-                Button(onClick = onStart, modifier = Modifier.fillMaxWidth().heightIn(min = 60.dp)) {
+                Button(onClick = onStart, modifier = Modifier.fillMaxWidth().heightIn(min = 60.dp).semantics { contentDescription = "开始六题起点小测" }) {
                     Text("开始基线")
                 }
             }
             BaselineStatus.IN_PROGRESS -> if (!state.isOpen) {
-                Button(onClick = onResume, modifier = Modifier.fillMaxWidth().heightIn(min = 60.dp)) {
+                Button(onClick = onResume, modifier = Modifier.fillMaxWidth().heightIn(min = 60.dp).semantics { contentDescription = "继续六题起点小测" }) {
                     Text("继续基线")
                 }
             } else {
@@ -221,17 +223,17 @@ private fun BaselineCard(
                         OutlinedButton(
                             onClick = { onAnswer(index) },
                             enabled = !state.isWorking,
-                            modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).semantics { contentDescription = "回答起点小测：$option" }
                         ) { Text(option) }
                         Spacer(Modifier.height(8.dp))
                     }
-                    TextButton(onClick = onLeave, modifier = Modifier.fillMaxWidth()) { Text("暂时离开基线") }
+                    TextButton(onClick = onLeave, modifier = Modifier.fillMaxWidth().semantics { contentDescription = "暂时离开六题起点小测" }) { Text("暂时离开基线") }
                 }
             }
             BaselineStatus.COMPLETED -> {
                 Text("已完成六题起点小测", style = MaterialTheme.typography.titleMedium)
                 Text("记录的是过程表现，不是诊断或排名。", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                OutlinedButton(onClick = onRestart, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)) {
+                OutlinedButton(onClick = onRestart, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).semantics { contentDescription = "重新开始六题起点小测" }) {
                     Text("重新开始")
                 }
             }
@@ -254,7 +256,7 @@ private fun SettingRow(title: String, supporting: String, checked: Boolean, onCh
 private fun ChoiceButton(label: String, correct: Boolean, onChoice: (Boolean) -> Unit, modifier: Modifier, enabled: Boolean) {
     OutlinedButton(
         onClick = { onChoice(correct) },
-        modifier = modifier.heightIn(min = 76.dp),
+        modifier = modifier.heightIn(min = 76.dp).semantics { contentDescription = "选择$label" },
         enabled = enabled
     ) {
         Text(label, style = MaterialTheme.typography.titleLarge)
