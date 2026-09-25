@@ -15,6 +15,8 @@ data class XingmouUiState(
     val activeChildId: String = "child-seed",
     val activeChildAlias: String = "小星",
     val availableChildren: List<ChildSummaryUi> = emptyList(),
+    val remoteAiConsent: Boolean = false,
+    val exportConsent: Boolean = false,
     val child: ChildUiState = ChildUiState(),
     val parent: ParentUiState = ParentUiState(),
     val professional: ProfessionalUiState = ProfessionalUiState(),

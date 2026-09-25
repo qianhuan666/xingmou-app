@@ -34,6 +34,7 @@ import com.xingmou.data.db.ChildEntity
 import com.xingmou.data.db.QizhiDatabase
 import com.xingmou.data.db.ReviewRequestEntity
 import com.xingmou.data.db.SeedData
+import com.xingmou.data.db.ConsentEntity
 import java.util.UUID
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -53,6 +54,7 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
     private val analysisEngine = AnalysisEngine()
     private val planStateMachine = PlanStateMachine()
     private var activeChildId: String? = null
+    private val localUserId = SeedData.DEMO_USER_ID
     private val childId: String
         get() = activeChildId ?: SeedData.defaultChild.childId
 
@@ -95,6 +97,7 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                         availableChildren = children.map(::toChildSummary)
                     )
                 }
+                current?.let { loadConsentState(it.childId) }
             }
         }
         refreshProfessionalAnalysis()
@@ -147,6 +150,44 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
             if (count <= 1) return@launch
             database.childDao().archive(id, System.currentTimeMillis())
             activeChildId = database.childDao().firstActive()?.childId
+        }
+    }
+
+    fun setRemoteAiConsent(granted: Boolean) = setConsent("remote_ai", granted)
+
+    fun setExportConsent(granted: Boolean) = setConsent("export", granted)
+
+    private fun setConsent(purpose: String, granted: Boolean) {
+        val childId = activeChildId ?: return
+        viewModelScope.launch {
+            val now = System.currentTimeMillis()
+            database.consentDao().upsert(
+                ConsentEntity(
+                    consentId = "consent-$childId-$purpose",
+                    childId = childId,
+                    purpose = purpose,
+                    status = if (granted) "granted" else "revoked",
+                    grantedAt = if (granted) now else null,
+                    revokedAt = if (granted) null else now
+                )
+            )
+            _uiState.update {
+                when (purpose) {
+                    "remote_ai" -> it.copy(remoteAiConsent = granted)
+                    "export" -> it.copy(exportConsent = granted)
+                    else -> it
+                }
+            }
+        }
+    }
+
+    private suspend fun loadConsentState(childId: String) {
+        val consents = database.consentDao().forChild(childId).associateBy { it.purpose }
+        _uiState.update {
+            it.copy(
+                remoteAiConsent = consents["remote_ai"]?.status == "granted",
+                exportConsent = consents["export"]?.status == "granted"
+            )
         }
     }
 

@@ -22,6 +22,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Switch
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
@@ -53,7 +54,9 @@ fun XingmouApp(viewModel: XingmouViewModel) {
                         onSelectChild = viewModel::selectChild,
                         onCreateChild = viewModel::createLocalChild,
                         onUpdateChild = viewModel::updateActiveChild,
-                        onArchiveChild = viewModel::archiveActiveChild
+                        onArchiveChild = viewModel::archiveActiveChild,
+                        onRemoteAiConsentChange = viewModel::setRemoteAiConsent,
+                        onExportConsentChange = viewModel::setExportConsent
                     )
                 },
                 bottomBar = { AppStatusBand(aiConfigured = state.aiConfigured) }
@@ -82,12 +85,15 @@ private fun ChildContextBar(
     onSelectChild: (String) -> Unit,
     onCreateChild: (String, String) -> Unit,
     onUpdateChild: (String, String) -> Unit,
-    onArchiveChild: () -> Unit
+    onArchiveChild: () -> Unit,
+    onRemoteAiConsentChange: (Boolean) -> Unit,
+    onExportConsentChange: (Boolean) -> Unit
 ) {
     val expandedState = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
     val dialogMode = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<String?>(null) }
     val aliasState = androidx.compose.runtime.remember(state.activeChildAlias) { androidx.compose.runtime.mutableStateOf(state.activeChildAlias) }
     val ageBandState = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf("学龄期") }
+    val consentOpen = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
     Surface(color = MaterialTheme.colorScheme.surface, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
@@ -98,6 +104,7 @@ private fun ChildContextBar(
             TextButton(onClick = { aliasState.value = ""; ageBandState.value = "学龄期"; dialogMode.value = "create" }) { Text("新建") }
             TextButton(onClick = { dialogMode.value = "edit" }) { Text("编辑") }
             TextButton(onClick = onArchiveChild, enabled = state.availableChildren.size > 1) { Text("归档") }
+            TextButton(onClick = { consentOpen.value = true }) { Text("授权") }
             DropdownMenu(expanded = expandedState.value, onDismissRequest = { expandedState.value = false }) {
                 state.availableChildren.forEach { child ->
                     DropdownMenuItem(
@@ -126,6 +133,31 @@ private fun ChildContextBar(
                 }) { Text("保存") }
             },
             dismissButton = { TextButton(onClick = { dialogMode.value = null }) { Text("取消") } }
+        )
+    }
+    if (consentOpen.value) {
+        AlertDialog(
+            onDismissRequest = { consentOpen.value = false },
+            title = { Text("数据授权") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("远程 AI", style = MaterialTheme.typography.titleMedium)
+                            Text("仅在明确同意后允许发送脱敏请求。", style = MaterialTheme.typography.bodySmall)
+                        }
+                        Switch(checked = state.remoteAiConsent, onCheckedChange = onRemoteAiConsentChange)
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("数据导出", style = MaterialTheme.typography.titleMedium)
+                            Text("仅导出当前儿童授权范围内的数据。", style = MaterialTheme.typography.bodySmall)
+                        }
+                        Switch(checked = state.exportConsent, onCheckedChange = onExportConsentChange)
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { consentOpen.value = false }) { Text("完成") } }
         )
     }
 }
