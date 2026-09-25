@@ -845,10 +845,14 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                 val records = database.trainingRecordDao().recentForChild(childId)
                 val analysis = analysisEngine.analyze(records)
                 val latestPlan = database.planDao().latest(childId)
+                val planVersions = database.planDao().observeVersions(childId).first()
                 val review = latestPlan?.let { database.agentDao().latestReviewForTarget(it.planId) }
                 val feedback = database.homeFeedbackDao().recentForChild(childId)
                 val homeTasks = database.homeTaskDao().allForChild(childId).associateBy { it.taskId }
                 val assessments = database.assessmentRecordDao().recentForChild(childId)
+                val previousPlan = planVersions.firstOrNull { it.planId != latestPlan?.planId }
+                val planDiffs = if (latestPlan != null && previousPlan != null) planDiffs(previousPlan.payloadJson, latestPlan.payloadJson) else emptyList()
+                val latestAssessment = assessments.firstOrNull()
                 val reportGroups = records.groupBy { it.domain to it.taskId }.map { (key, group) ->
                     ReportGroupUi(
                         domain = key.first,
@@ -904,8 +908,10 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                                     item.notes
                                 )
                             },
+                            profileVersionSummary = latestAssessment?.let { "最近量表：${it.assessmentName} V${it.version} · ${it.recordType} · ${it.assessmentDate}" } ?: "尚无量表复评记录。",
                             planStatus = latestPlan?.status?.uppercase()?.let { status -> runCatching { PlanStatus.valueOf(status) }.getOrNull() } ?: it.professional.planStatus,
                             planSummary = if (latestPlan != null) "当前方案 V${latestPlan.version} · ${latestPlan.status.uppercase()}" else if (analysis.dataSufficient || it.professional.planStatus != null) it.professional.planSummary else "达到 3 条有效记录后，可生成方案草案。",
+                            planDiffs = planDiffs,
                             recentEvent = if (analysis.sampleCount >= 3) "RECORDS_THRESHOLD_REACHED" else it.professional.recentEvent,
                             recentHomeFeedback = feedback.map { item ->
                                 HomeFeedbackUi(item.createdAt, homeTasks[item.taskId]?.title ?: "家庭观察", item.mood, item.fatigue, item.note)
@@ -948,6 +954,29 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
 
     private fun jsonString(json: String, key: String): String? =
         Regex("\\\"${Regex.escape(key)}\\\"\\s*:\\s*\\\"([^\\\"]*)\\\"").find(json)?.groupValues?.getOrNull(1)
+
+    private fun planDiffs(previousJson: String, currentJson: String): List<PlanDiffUi> {
+        val fields = listOf(
+            "priority_domain" to "优先领域",
+            "observable_goal" to "可观察目标",
+            "task" to "训练任务",
+            "difficulty" to "难度",
+            "support_level" to "支持等级",
+            "frequency" to "频率",
+            "duration" to "时长",
+            "stop_conditions" to "停止条件"
+        )
+        return fields.mapNotNull { (key, label) ->
+            val previous = jsonValue(previousJson, key) ?: return@mapNotNull null
+            val current = jsonValue(currentJson, key) ?: return@mapNotNull null
+            if (previous == current) null else PlanDiffUi(label, previous, current)
+        }
+    }
+
+    private fun jsonValue(json: String, key: String): String? {
+        jsonString(json, key)?.let { return it }
+        return Regex("\\\"${Regex.escape(key)}\\\"\\s*:\\s*([^,}]+)").find(json)?.groupValues?.getOrNull(1)?.trim()?.trim('"')
+    }
 
     private fun currentDateLabel(): String = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
 

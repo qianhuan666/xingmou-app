@@ -201,6 +201,7 @@ private fun AnalysisPanel(state: ProfessionalUiState, onRefresh: () -> Unit) {
         StatusLine("数据充分性", if (state.dataSufficient) "可生成过程分析" else "不足 3 条", valueColor = if (state.dataSufficient) Success else Warning)
         HorizontalDivider(Modifier.padding(vertical = 14.dp))
         state.analysisSummary.forEach { Text("• $it", modifier = Modifier.padding(bottom = 6.dp)) }
+        Text(state.profileVersionSummary, modifier = Modifier.padding(top = 6.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
         state.warningSignals.forEach { Text("注意：$it", modifier = Modifier.padding(top = 6.dp), color = Warning) }
         OutlinedButton(onClick = onRefresh, modifier = Modifier.fillMaxWidth().padding(top = 12.dp)) { Text("刷新本地记录") }
     }
@@ -225,6 +226,13 @@ private fun PlanPanel(
         StatusLine("当前状态", state.planStatus?.name ?: "尚未创建")
         Spacer(Modifier.height(12.dp))
         Text(state.planSummary, style = MaterialTheme.typography.bodyLarge)
+        if (state.planDiffs.isNotEmpty()) {
+            HorizontalDivider(Modifier.padding(vertical = 14.dp))
+            Text("与上一版本的差异", style = MaterialTheme.typography.titleMedium)
+            state.planDiffs.forEach { diff ->
+                Text("${diff.field}：${diff.previous} → ${diff.current}", modifier = Modifier.padding(top = 6.dp))
+            }
+        }
         if (state.isWorking) LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 12.dp))
         Spacer(Modifier.height(16.dp))
         OutlinedTextField(

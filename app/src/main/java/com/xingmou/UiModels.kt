@@ -118,6 +118,7 @@ data class ProfessionalUiState(
     val warningSignals: List<String> = emptyList(),
     val planStatus: PlanStatus? = null,
     val planSummary: String = "达到 3 条有效记录后，可生成方案草案。",
+    val planDiffs: List<PlanDiffUi> = emptyList(),
     val reviewComment: String = "",
     val reviewMessage: String = "方案需由专业人员确认后才能生效。",
     val isWorking: Boolean = false,
@@ -142,6 +143,7 @@ data class ProfessionalUiState(
     val assessmentNotes: String = "",
     val assessmentMessage: String = "量表仅作为专业转录记录，不用于平台自动诊断。",
     val recentAssessments: List<AssessmentRecordUi> = emptyList(),
+    val profileVersionSummary: String = "尚无量表复评记录。",
     val recentHomeFeedback: List<HomeFeedbackUi> = emptyList()
 )
 
@@ -174,6 +176,8 @@ data class AssessmentRecordUi(
     val scores: String,
     val notes: String
 )
+
+data class PlanDiffUi(val field: String, val previous: String, val current: String)
 
 data class HomeFeedbackUi(
     val createdAt: Long,
