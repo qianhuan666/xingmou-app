@@ -36,6 +36,7 @@ fun ParentScreen(
     onCompleteTask: () -> Unit,
     onSkipTask: () -> Unit,
     onPauseTask: () -> Unit,
+    onAdvanceDemo: () -> Unit,
     onMoodChange: (String) -> Unit,
     onFatigueChange: (String) -> Unit,
     onFeedbackNoteChange: (String) -> Unit,
@@ -49,7 +50,7 @@ fun ParentScreen(
         Text("家庭观察与支持", style = MaterialTheme.typography.headlineMedium)
         Text("先记录事实，再从本地已审核知识中寻找可执行建议。", color = MaterialTheme.colorScheme.onSurfaceVariant)
 
-        HomeTaskPanel(state, onCompleteTask, onSkipTask, onPauseTask, onMoodChange, onFatigueChange, onFeedbackNoteChange, onSubmitFeedback)
+        HomeTaskPanel(state, onCompleteTask, onSkipTask, onPauseTask, onAdvanceDemo, onMoodChange, onFatigueChange, onFeedbackNoteChange, onSubmitFeedback)
 
         BoxWithConstraints(Modifier.fillMaxWidth()) {
             val wide = maxWidth >= 860.dp
@@ -79,6 +80,7 @@ private fun HomeTaskPanel(
     onComplete: () -> Unit,
     onSkip: () -> Unit,
     onPause: () -> Unit,
+    onAdvanceDemo: () -> Unit,
     onMoodChange: (String) -> Unit,
     onFatigueChange: (String) -> Unit,
     onNoteChange: (String) -> Unit,
@@ -101,6 +103,15 @@ private fun HomeTaskPanel(
             TextButton(onClick = onSkip, enabled = state.homeTaskStatus == "pending" && !state.homeTaskSafetyStopped, modifier = Modifier.weight(1f)) { Text("跳过") }
         }
         HorizontalDivider(Modifier.padding(vertical = 14.dp))
+        Text("5 分钟陪练示范", style = MaterialTheme.typography.titleMedium)
+        Text("按儿童状态逐步完成，不必一次做完。", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        DemoSteps(state.homeDemoStep, state.homeTaskSafetyStopped)
+        OutlinedButton(
+            onClick = onAdvanceDemo,
+            enabled = !state.homeTaskSafetyStopped,
+            modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+        ) { Text(if (state.homeDemoStep >= 4) "重新开始示范" else "完成本步") }
+        HorizontalDivider(Modifier.padding(vertical = 14.dp))
         Text("今天的状态", style = MaterialTheme.typography.titleMedium)
         ChoiceRow("心情", listOf("平稳", "兴奋", "抗拒"), state.feedbackMood, onMoodChange)
         ChoiceRow("疲劳", listOf("不确定", "较少", "明显"), state.feedbackFatigue, onFatigueChange)
@@ -113,6 +124,26 @@ private fun HomeTaskPanel(
             label = { Text("补充观察（可选）") }
         )
         Button(onClick = onSubmit, modifier = Modifier.fillMaxWidth().padding(top = 10.dp)) { Text("保存今天的观察") }
+    }
+}
+
+@Composable
+private fun DemoSteps(current: Int, disabled: Boolean) {
+    val steps = listOf("准备", "示范", "邀请", "回应", "结束")
+    Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+        steps.forEachIndexed { index, step ->
+            Text(
+                text = if (index <= current) "✓ $step" else "○ $step",
+                modifier = Modifier.weight(1f),
+                color = when {
+                    disabled -> MaterialTheme.colorScheme.onSurfaceVariant
+                    index == current -> MaterialTheme.colorScheme.primary
+                    index < current -> MaterialTheme.colorScheme.onSurface
+                    else -> MaterialTheme.colorScheme.onSurfaceVariant
+                },
+                style = MaterialTheme.typography.labelMedium
+            )
+        }
     }
 }
 

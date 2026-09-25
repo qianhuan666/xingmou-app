@@ -104,6 +104,7 @@ data class ParentUiState(
     val homeTaskSupportLevel: String = "L1",
     val homeTaskStopConditions: String = "出现疲劳、拒绝或风险时暂停",
     val homeTaskSafetyStopped: Boolean = false,
+    val homeDemoStep: Int = 0,
     val feedbackMood: String = "平稳",
     val feedbackFatigue: String = "不确定",
     val feedbackNote: String = "",

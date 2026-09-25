@@ -195,6 +195,7 @@ private fun PortContent(viewModel: XingmouViewModel, port: Port, modifier: Modif
             onCompleteTask = viewModel::completeHomeTask,
             onSkipTask = viewModel::skipHomeTask,
             onPauseTask = viewModel::pauseHomeTask,
+            onAdvanceDemo = viewModel::advanceHomeDemo,
             onMoodChange = viewModel::updateFeedbackMood,
             onFatigueChange = viewModel::updateFeedbackFatigue,
             onFeedbackNoteChange = viewModel::updateFeedbackNote,

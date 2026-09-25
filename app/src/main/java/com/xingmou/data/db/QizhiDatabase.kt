@@ -30,7 +30,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         ReviewRequestEntity::class,
         DecisionTraceEntity::class
     ],
-    version = 5,
+    version = 6,
     exportSchema = false
 )
 abstract class QizhiDatabase : RoomDatabase() {
@@ -57,7 +57,7 @@ abstract class QizhiDatabase : RoomDatabase() {
                     context.applicationContext,
                     QizhiDatabase::class.java,
                     "qizhi_training.db"
-                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5).build().also {
+                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6).build().also {
                     INSTANCE = it
                     DatabaseSeeder.seedAsync(it)
                 }
@@ -155,6 +155,12 @@ abstract class QizhiDatabase : RoomDatabase() {
                 db.execSQL("ALTER TABLE home_tasks ADD COLUMN supportLevel TEXT NOT NULL DEFAULT 'L1'")
                 db.execSQL("ALTER TABLE home_tasks ADD COLUMN stopConditions TEXT NOT NULL DEFAULT '出现疲劳、拒绝或风险时暂停'")
                 db.execSQL("ALTER TABLE home_tasks ADD COLUMN source TEXT NOT NULL DEFAULT 'LOCAL_TEMPLATE'")
+            }
+        }
+
+        val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE home_tasks ADD COLUMN demoStep INTEGER NOT NULL DEFAULT 0")
             }
         }
     }

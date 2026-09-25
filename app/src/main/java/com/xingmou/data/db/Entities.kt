@@ -53,6 +53,7 @@ data class HomeTaskEntity(
     val supportLevel: String = "L1",
     val stopConditions: String = "出现疲劳、拒绝或风险时暂停",
     val source: String = "LOCAL_TEMPLATE",
+    val demoStep: Int = 0,
     val updatedAt: Long
 )
 

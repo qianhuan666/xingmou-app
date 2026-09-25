@@ -50,11 +50,27 @@ class XingmouUiInstrumentedTest {
         composeRule.onNodeWithText("家长端").performClick()
         composeRule.onNodeWithText("家庭观察与支持").assertIsDisplayed()
         composeRule.onNodeWithText("今日家庭任务").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("5 分钟陪练示范").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("保存今天的观察").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("专业端").performClick()
         composeRule.onNodeWithText("专业审核工作台").assertIsDisplayed()
         composeRule.onNodeWithText("家庭反馈").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("儿童端").performClick()
         composeRule.onNodeWithText("和小星一起练习").assertIsDisplayed()
+    }
+
+    @Test
+    fun parentFeedbackAppearsOnProfessionalTimelineAfterRefresh() {
+        composeRule.onNodeWithText("家长端").performClick()
+        composeRule.onNodeWithText("保存今天的观察").performScrollTo().performClick()
+        composeRule.waitUntil(5_000) {
+            composeRule.onAllNodesWithText("观察已保存到当前儿童档案。", substring = true).fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onNodeWithText("专业端").performClick()
+        composeRule.onNodeWithText("刷新本地记录").performScrollTo().performClick()
+        composeRule.waitUntil(5_000) {
+            composeRule.onAllNodesWithText("心情：平稳", substring = true).fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onNodeWithText("心情：平稳", substring = true).assertIsDisplayed()
     }
 }

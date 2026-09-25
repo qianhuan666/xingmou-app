@@ -477,6 +477,20 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
 
     fun pauseHomeTask() = updateHomeTaskStatus("paused")
 
+    fun advanceHomeDemo() {
+        val current = _uiState.value.parent
+        if (current.homeTaskSafetyStopped) {
+            _uiState.update { it.copy(parent = it.parent.copy(feedbackMessage = "当前有安全暂停标记，陪练示范暂不可操作。")) }
+            return
+        }
+        viewModelScope.launch {
+            val task = database.homeTaskDao().latestForChild(childId) ?: return@launch
+            val next = if (task.demoStep >= HOME_DEMO_STEPS.lastIndex) 0 else task.demoStep + 1
+            database.homeTaskDao().updateDemoStep(childId, task.taskId, next, System.currentTimeMillis())
+            _uiState.update { it.copy(parent = it.parent.copy(homeDemoStep = next, feedbackMessage = if (next == HOME_DEMO_STEPS.lastIndex) "陪练示范已完成，可以结束并记录今天的状态。" else "已完成：${HOME_DEMO_STEPS[task.demoStep]}")) }
+        }
+    }
+
     private fun updateHomeTaskStatus(status: String) {
         val current = _uiState.value.parent
         if (current.homeTaskSafetyStopped) {
@@ -592,7 +606,8 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                 homeTaskDurationMinutes = task.durationMinutes,
                 homeTaskSupportLevel = task.supportLevel,
                 homeTaskStopConditions = task.stopConditions,
-                homeTaskSafetyStopped = safetyStopped
+                homeTaskSafetyStopped = safetyStopped,
+                homeDemoStep = task.demoStep.coerceIn(0, HOME_DEMO_STEPS.lastIndex)
             ))
         }
     }
@@ -828,3 +843,5 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
 
     private fun toChildSummary(child: ChildEntity) = ChildSummaryUi(child.childId, child.alias, child.ageBand, child.status)
 }
+
+private val HOME_DEMO_STEPS = listOf("准备", "示范", "邀请", "回应", "结束")

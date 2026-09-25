@@ -64,6 +64,9 @@ interface HomeTaskDao {
 
     @Query("UPDATE home_tasks SET status = :status, updatedAt = :updatedAt WHERE taskId = :taskId AND childId = :childId")
     suspend fun updateStatus(childId: String, taskId: String, status: String, updatedAt: Long)
+
+    @Query("UPDATE home_tasks SET demoStep = :demoStep, updatedAt = :updatedAt WHERE taskId = :taskId AND childId = :childId")
+    suspend fun updateDemoStep(childId: String, taskId: String, demoStep: Int, updatedAt: Long)
 }
 
 @Dao

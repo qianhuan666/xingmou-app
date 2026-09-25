@@ -104,7 +104,7 @@ class QizhiDatabaseInstrumentedTest {
                 taskId = "home-plan-v2", childId = "child-a", title = "专业下发：图片配对短练习",
                 description = "按方案执行", status = "pending", planId = "plan-v2", planVersion = 2,
                 frequency = "每日 1–2 次", durationMinutes = 8, supportLevel = "L2",
-                stopConditions = "出现疲劳时暂停", source = "PLAN_V2", updatedAt = 3L
+                stopConditions = "出现疲劳时暂停", source = "PLAN_V2", demoStep = 2, updatedAt = 3L
             )
         )
         database.homeFeedbackDao().insert(
@@ -115,6 +115,7 @@ class QizhiDatabaseInstrumentedTest {
         assertEquals("plan-v2", task?.planId)
         assertEquals(8, task?.durationMinutes)
         assertEquals("PLAN_V2", task?.source)
+        assertEquals(2, task?.demoStep)
         assertEquals("home-plan-v2", feedback.taskId)
     }
 }
