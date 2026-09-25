@@ -42,6 +42,7 @@ fun ProfessionalScreen(
     state: ProfessionalUiState,
     onReviewCommentChange: (String) -> Unit,
     onPlanTaskChange: (String) -> Unit,
+    onPlanGoalChange: (String) -> Unit,
     onPlanDifficultyChange: (String) -> Unit,
     onPlanSupportLevelChange: (String) -> Unit,
     onPlanFrequencyChange: (String) -> Unit,
@@ -88,7 +89,7 @@ fun ProfessionalScreen(
                         HomeFeedbackPanel(state)
                         AgentPanel(state)
                     }
-                    PlanPanel(state, onReviewCommentChange, onPlanTaskChange, onPlanDifficultyChange, onPlanSupportLevelChange, onPlanFrequencyChange, onPlanDurationChange, onPlanStopConditionsChange, onCreateRevision, onCreateDraft, onConfirm, onActivate, onReject, Modifier.weight(1.12f))
+                    PlanPanel(state, onReviewCommentChange, onPlanTaskChange, onPlanGoalChange, onPlanDifficultyChange, onPlanSupportLevelChange, onPlanFrequencyChange, onPlanDurationChange, onPlanStopConditionsChange, onCreateRevision, onCreateDraft, onConfirm, onActivate, onReject, Modifier.weight(1.12f))
                 }
             } else {
                 Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -100,7 +101,7 @@ fun ProfessionalScreen(
                     MethodLibraryPanel()
                     CareWorkflowPanel(state, onAdvanceCareStage, onCareNoteChange, onCareClosureReasonChange, onCareFollowUpPlanChange, onCareFollowUpDateChange)
                     HomeFeedbackPanel(state)
-                    PlanPanel(state, onReviewCommentChange, onPlanTaskChange, onPlanDifficultyChange, onPlanSupportLevelChange, onPlanFrequencyChange, onPlanDurationChange, onPlanStopConditionsChange, onCreateRevision, onCreateDraft, onConfirm, onActivate, onReject, Modifier.fillMaxWidth())
+                    PlanPanel(state, onReviewCommentChange, onPlanTaskChange, onPlanGoalChange, onPlanDifficultyChange, onPlanSupportLevelChange, onPlanFrequencyChange, onPlanDurationChange, onPlanStopConditionsChange, onCreateRevision, onCreateDraft, onConfirm, onActivate, onReject, Modifier.fillMaxWidth())
                     AgentPanel(state)
                 }
             }
@@ -221,6 +222,18 @@ private fun ReportPanel(state: ProfessionalUiState) {
                 Text(metric.value, style = MaterialTheme.typography.titleMedium)
             }
         }
+        HorizontalDivider(Modifier.padding(vertical = 12.dp))
+        Text("分段正确率趋势", style = MaterialTheme.typography.titleMedium)
+        Text("按训练记录时间分段，仅用于回看过程变化。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (state.reportTrend.isEmpty()) {
+            Text("暂无足够记录生成趋势。", modifier = Modifier.padding(top = 8.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
+        } else state.reportTrend.forEach { point ->
+            Row(modifier = Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("第${point.label}段", modifier = Modifier.weight(0.22f), style = MaterialTheme.typography.labelMedium)
+                LinearProgressIndicator(progress = { point.accuracy }, modifier = Modifier.weight(0.55f).padding(top = 3.dp))
+                Text("${(point.accuracy * 100).toInt()}% · ${point.sampleCount}条", modifier = Modifier.weight(0.23f), style = MaterialTheme.typography.labelSmall)
+            }
+        }
     }
 }
 
@@ -336,6 +349,7 @@ private fun PlanPanel(
     state: ProfessionalUiState,
     onReviewCommentChange: (String) -> Unit,
     onPlanTaskChange: (String) -> Unit,
+    onPlanGoalChange: (String) -> Unit,
     onPlanDifficultyChange: (String) -> Unit,
     onPlanSupportLevelChange: (String) -> Unit,
     onPlanFrequencyChange: (String) -> Unit,
@@ -368,6 +382,7 @@ private fun PlanPanel(
             HorizontalDivider(Modifier.padding(vertical = 14.dp))
             Text("编辑并创建新版本", style = MaterialTheme.typography.titleMedium)
             OutlinedTextField(state.planTask, onPlanTaskChange, modifier = Modifier.fillMaxWidth().padding(top = 8.dp), label = { Text("训练任务") })
+            OutlinedTextField(state.planGoal, onPlanGoalChange, modifier = Modifier.fillMaxWidth().padding(top = 8.dp), minLines = 2, maxLines = 3, label = { Text("可观察目标") }, placeholder = { Text("例如：在 L1 支持下完成 4/5 次") })
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
                 OutlinedTextField(state.planDifficulty, onPlanDifficultyChange, modifier = Modifier.weight(1f), label = { Text("难度 1–5") })
                 OutlinedTextField(state.planSupportLevel, onPlanSupportLevelChange, modifier = Modifier.weight(1f), label = { Text("支持等级") })

@@ -49,6 +49,7 @@ import com.xingmou.data.catalog.QuestionCatalog
 import com.xingmou.data.catalog.AssessmentCatalog
 import com.xingmou.BaselineUiState
 import com.xingmou.ReportMetricUi
+import com.xingmou.ReportTrendPointUi
 import java.util.UUID
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -70,7 +71,7 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
     private val knowledgeRetriever = KnowledgeRetriever()
     private val analysisEngine = AnalysisEngine()
     private val baselineEngine = BaselineEngine()
-    private val courseProgressEngine = CourseProgressEngine()
+    private val courseProgressEngine = CourseProgressEngine(QuestionCatalog.fullCourseQuestions)
     private val planStateMachine = PlanStateMachine()
     private var activeChildId: String? = null
     private val localUserId = SeedData.DEMO_USER_ID
@@ -94,7 +95,8 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                 speechRate = normalizeSpeechRate(accessibilityPreferences.getFloat("speech_rate", 1.0f)),
                 speechVolume = normalizeSpeechVolume(accessibilityPreferences.getFloat("speech_volume", 1.0f)),
                 largeText = accessibilityPreferences.getBoolean("large_text", false),
-                highContrast = accessibilityPreferences.getBoolean("high_contrast", false)
+                highContrast = accessibilityPreferences.getBoolean("high_contrast", false),
+                slowMotion = accessibilityPreferences.getBoolean("slow_motion", false)
             ),
             aiConfigured = DeepSeekClientFactory.isConfigured()
         )
@@ -290,26 +292,31 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
     }
 
     private suspend fun loadCourseProgress(childId: String) {
-        val records = database.trainingRecordDao().recentForChild(childId, 100)
-            .filter { it.taskId.startsWith("M02-L1-") || it.taskId == "图片配对" }
+        val fullCourseIds = QuestionCatalog.fullCourseQuestions.map { it.id }.toSet()
+        val records = database.trainingRecordDao().recentForChild(childId, 200)
+            .filter { it.taskId in fullCourseIds || it.taskId == "图片配对" }
         val progress = courseProgressEngine.summarize(records)
         val encouragement = courseProgressEngine.encouragement(progress, records)
+        val completedLevels = progress.completedCount / 5
         val courseMap = V08_COURSE_LEVELS.mapIndexed { index, level ->
             val status = when {
                 baselineSession.status != BaselineStatus.COMPLETED && index == 0 -> "完成基线后解锁"
-                index == 0 && progress.isComplete -> "已完成"
-                index == 0 -> "进行中"
-                else -> "待补齐"
+                index < completedLevels -> "已完成"
+                index == completedLevels -> "进行中"
+                else -> "待解锁"
             }
             level.copy(status = status)
         }
         val question = progress.nextQuestion
+        val currentLevel = (progress.completedCount / 5 + 1).coerceIn(1, V08_COURSE_LEVELS.size)
         _uiState.update {
             it.copy(child = it.child.copy(
-                instruction = question?.prompt ?: "第一关完成了，可以休息一下",
+                instruction = question?.prompt ?: "课程完成了，可以休息一下",
                 options = question?.options ?: it.child.options,
                 courseProgress = progress.completedCount,
                 courseTotal = progress.total,
+                currentCourseLevel = currentLevel,
+                courseTitle = question?.let { q -> V08_COURSE_LEVELS.getOrNull(currentLevel - 1)?.title ?: q.moduleId } ?: "课程完成",
                 courseQuestionId = question?.id,
                 courseUnlocked = baselineSession.status == BaselineStatus.COMPLETED,
                 courseOpen = true,
@@ -387,9 +394,19 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
         _uiState.update { it.copy(accessibility = it.accessibility.copy(highContrast = enabled)) }
     }
 
+    fun setSlowMotion(enabled: Boolean) {
+        accessibilityPreferences.edit().putBoolean("slow_motion", enabled).apply()
+        _uiState.update { it.copy(accessibility = it.accessibility.copy(slowMotion = enabled)) }
+    }
+
+    fun selectInterest(value: String) {
+        _uiState.update { it.copy(child = it.child.copy(interest = value)) }
+    }
+
     fun completeChildTask(correct: Boolean) {
         val snapshot = _uiState.value.child
         if (snapshot.isWorking || snapshot.isSafetyStopped || !snapshot.courseUnlocked || !snapshot.courseOpen || snapshot.courseQuestionId == null || snapshot.courseProgress >= snapshot.courseTotal) return
+        val question = QuestionCatalog.fullCourseQuestions.firstOrNull { it.id == snapshot.courseQuestionId }
         _uiState.update { it.copy(child = it.child.copy(isWorking = true)) }
         viewModelScope.launch {
             runCatching {
@@ -408,7 +425,7 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                         runId = newId("child-run"),
                         childId = childId,
                         occurredAt = now,
-                        domain = "A",
+                        domain = question?.domain ?: "A",
                         currentDifficulty = snapshot.difficulty,
                         currentSupportLevel = snapshot.supportLevel,
                         result = result,
@@ -619,6 +636,12 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
             updatedAt = System.currentTimeMillis()
         ).also { database.homeTaskDao().upsert(it) }
         val safetyStopped = database.safetyFlagDao().observeActive(childId).first().isNotEmpty()
+        val weekStart = System.currentTimeMillis() - 7 * 24 * 60 * 60 * 1000L
+        val weekTasks = database.homeTaskDao().allForChild(childId).filter { it.updatedAt >= weekStart }
+        val weekFeedback = database.homeFeedbackDao().recentForChild(childId, 20).filter { it.createdAt >= weekStart }
+        val completed = weekTasks.count { it.status == "completed" }
+        val weekRate = if (weekTasks.isEmpty()) "暂无本周完成记录" else "${completed}/${weekTasks.size} 次（${completed * 100 / weekTasks.size}%）"
+        val latestFeedback = weekFeedback.firstOrNull()
         _uiState.update {
             it.copy(parent = it.parent.copy(
                 homeTaskTitle = task.title,
@@ -630,7 +653,15 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                 homeTaskSupportLevel = task.supportLevel,
                 homeTaskStopConditions = task.stopConditions,
                 homeTaskSafetyStopped = safetyStopped,
-                homeDemoStep = task.demoStep.coerceIn(0, HOME_DEMO_STEPS.lastIndex)
+                homeDemoStep = task.demoStep.coerceIn(0, HOME_DEMO_STEPS.lastIndex),
+                weekCompletionRate = weekRate,
+                weekStatusSummary = latestFeedback?.let { "最近：心情 ${it.mood} · 疲劳 ${it.fatigue}" } ?: "本周还没有状态日记",
+                weekSuggestion = when {
+                    safetyStopped -> "当前有安全暂停标记，请先联系专业人员确认。"
+                    latestFeedback?.fatigue == "明显" -> "下一次可以缩短时长，优先让孩子恢复。"
+                    completed > 0 -> "保持短时、可停止的练习节奏。"
+                    else -> "完成一次短时任务后，再记录孩子当时的状态。"
+                }
             ))
         }
     }
@@ -732,6 +763,7 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun updatePlanTask(value: String) = _uiState.update { it.copy(professional = it.professional.copy(planTask = value.take(80))) }
+    fun updatePlanGoal(value: String) = _uiState.update { it.copy(professional = it.professional.copy(planGoal = value.take(160))) }
     fun updatePlanDifficulty(value: String) = _uiState.update { it.copy(professional = it.professional.copy(planDifficulty = value.take(8))) }
     fun updatePlanSupportLevel(value: String) = _uiState.update { it.copy(professional = it.professional.copy(planSupportLevel = value.take(8))) }
     fun updatePlanFrequency(value: String) = _uiState.update { it.copy(professional = it.professional.copy(planFrequency = value.take(80))) }
@@ -847,7 +879,7 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                     version = version,
                     status = "draft",
                     reviewRequired = true,
-                    payloadJson = """{"priority_domain":"A","observable_goal":"在低支持下完成图片配对","task":"图片配对","difficulty":${_uiState.value.child.difficulty},"support_level":"${_uiState.value.child.supportLevel.name}","frequency":"每日 1–2 次","duration":"5 分钟","stop_conditions":"出现疲劳、拒绝或风险时暂停"}""",
+                    payloadJson = """{"priority_domain":"A","observable_goal":"${jsonEscape(_uiState.value.professional.planGoal)}","task":"图片配对","difficulty":${_uiState.value.child.difficulty},"support_level":"${_uiState.value.child.supportLevel.name}","frequency":"每日 1–2 次","duration":"5 分钟","stop_conditions":"出现疲劳、拒绝或风险时暂停"}""",
                     createdAt = now,
                     updatedAt = now
                 )
@@ -874,6 +906,7 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                         planStatus = PlanStatus.DRAFT,
                         planSummary = "优先领域 A · 图片配对 · 难度 ${_uiState.value.child.difficulty} · 支持 ${_uiState.value.child.supportLevel.name} · 每次 5–10 分钟",
                         planTask = "图片配对",
+                        planGoal = _uiState.value.professional.planGoal,
                         planDifficulty = _uiState.value.child.difficulty.toString(),
                         planSupportLevel = _uiState.value.child.supportLevel.name,
                         planFrequency = "每日 1–2 次",
@@ -1009,6 +1042,16 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                 val planVersions = database.planDao().observeVersions(childId).first()
                 val review = latestPlan?.let { database.agentDao().latestReviewForTarget(it.planId) }
                 val feedback = database.homeFeedbackDao().recentForChild(childId)
+                val trendPoints = records.sortedBy { it.createdAt }
+                    .chunked((records.size / 5).coerceAtLeast(1))
+                    .takeLast(5)
+                    .mapIndexed { index, chunk ->
+                        ReportTrendPointUi(
+                            label = "${index + 1}",
+                            accuracy = if (chunk.isEmpty()) 0f else chunk.count { it.correct }.toFloat() / chunk.size,
+                            sampleCount = chunk.size
+                        )
+                    }
                 val homeTasks = database.homeTaskDao().allForChild(childId).associateBy { it.taskId }
                 val assessments = database.assessmentRecordDao().recentForChild(childId)
                 val latestProfile = database.abilityProfileDao().latestForChild(childId)
@@ -1075,6 +1118,7 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                                 ReportMetricUi("趋势", analysis.trend.label(), "按训练记录前后半段比较")
                             ),
                             reportGroups = reportGroups,
+                            reportTrend = trendPoints,
                             recentTrainingDetails = trainingDetails,
                             recentAssessments = assessments.map { item ->
                                 AssessmentRecordUi(
@@ -1105,6 +1149,7 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                             planSummary = if (latestPlan != null) "当前方案 V${latestPlan.version} · ${latestPlan.status.uppercase()}" else if (analysis.dataSufficient || it.professional.planStatus != null) it.professional.planSummary else "达到 3 条有效记录后，可生成方案草案。",
                             planDiffs = planDiffs,
                             planTask = latestPlan?.let { jsonValue(it.payloadJson, "task") } ?: it.professional.planTask,
+                            planGoal = latestPlan?.let { jsonValue(it.payloadJson, "observable_goal") } ?: it.professional.planGoal,
                             planDifficulty = latestPlan?.let { jsonValue(it.payloadJson, "difficulty") } ?: it.professional.planDifficulty,
                             planSupportLevel = latestPlan?.let { jsonValue(it.payloadJson, "support_level") } ?: it.professional.planSupportLevel,
                             planFrequency = latestPlan?.let { jsonValue(it.payloadJson, "frequency") } ?: it.professional.planFrequency,
@@ -1154,7 +1199,7 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
         Regex("\\\"${Regex.escape(key)}\\\"\\s*:\\s*\\\"([^\\\"]*)\\\"").find(json)?.groupValues?.getOrNull(1)
 
     private fun planPayload(state: ProfessionalUiState): String =
-        """{"priority_domain":"A","observable_goal":"${jsonEscape("在当前支持等级下完成训练")}","task":"${jsonEscape(state.planTask.ifBlank { "图片配对" })}","difficulty":${state.planDifficulty.toIntOrNull()?.coerceIn(1, 5) ?: 1},"support_level":"${jsonEscape(state.planSupportLevel.ifBlank { "L1" })}","frequency":"${jsonEscape(state.planFrequency.ifBlank { "每日 1–2 次" })}","duration":"${jsonEscape(state.planDuration.ifBlank { "5 分钟" })}","stop_conditions":"${jsonEscape(state.planStopConditions.ifBlank { "出现疲劳、拒绝或风险时暂停" })}"}"""
+        """{"priority_domain":"A","observable_goal":"${jsonEscape(state.planGoal.ifBlank { "在当前支持等级下完成训练" })}","task":"${jsonEscape(state.planTask.ifBlank { "图片配对" })}","difficulty":${state.planDifficulty.toIntOrNull()?.coerceIn(1, 5) ?: 1},"support_level":"${jsonEscape(state.planSupportLevel.ifBlank { "L1" })}","frequency":"${jsonEscape(state.planFrequency.ifBlank { "每日 1–2 次" })}","duration":"${jsonEscape(state.planDuration.ifBlank { "5 分钟" })}","stop_conditions":"${jsonEscape(state.planStopConditions.ifBlank { "出现疲劳、拒绝或风险时暂停" })}"}"""
 
     private fun diffJson(diffs: List<PlanDiffUi>): String =
         diffs.joinToString(prefix = "[", postfix = "]") { "{\"field\":\"${jsonEscape(it.field)}\",\"previous\":\"${jsonEscape(it.previous)}\",\"current\":\"${jsonEscape(it.current)}\"}" }

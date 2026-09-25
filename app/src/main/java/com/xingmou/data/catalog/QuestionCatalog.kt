@@ -34,4 +34,39 @@ object QuestionCatalog {
         QuestionDefinition("M02-L1-04", 1, "M02", "B", QuestionType.MEMORY, "找到相同的图片", listOf("小树", "小球"), 1),
         QuestionDefinition("M02-L1-05", 1, "M02", "B", QuestionType.MEMORY, "找到相同的图片", listOf("小球", "小树"), 0)
     )
+
+    /** V0.8 完整课程题库：前 20 个模块各 5 个活动，保留模块、版本和来源引用。 */
+    private val v08CourseTasks = listOfNotNull(TaskCatalog.find("M02")) + TaskCatalog.all.filter { it.id != "M02" }.take(19)
+
+    val moduleQuestionBank: List<QuestionDefinition> = buildQuestions(TaskCatalog.all)
+
+    val fullCourseQuestions: List<QuestionDefinition> = buildQuestions(v08CourseTasks)
+
+    private fun buildQuestions(tasks: List<TaskDefinition>): List<QuestionDefinition> = tasks.flatMapIndexed { levelIndex, task ->
+        (1..5).map { variant ->
+            val options = when (task.engine) {
+                "sequence" -> listOf("先做第一步", "先做第二步")
+                "observed" -> listOf("自己试试", "找大人帮忙")
+                "audio" -> listOf("跟着读一次", "先听一遍")
+                "sorting" -> listOf("放到一起", "分开摆放")
+                else -> listOf("找到${task.name}", "再看看")
+            }
+            QuestionDefinition(
+                id = "${task.id}-L${levelIndex + 1}-${variant.toString().padStart(2, '0')}",
+                version = 1,
+                moduleId = task.id,
+                domain = task.domain,
+                type = when (task.engine) {
+                    "memory_match" -> QuestionType.MEMORY
+                    "sequence" -> QuestionType.SEQUENCE
+                    "observed" -> QuestionType.OBSERVED
+                    else -> QuestionType.CHOICE
+                },
+                prompt = "${task.name}：${task.goal}",
+                options = options,
+                correctOption = if (task.engine == "observed") null else 0,
+                sourceRef = "LOCAL_COURSE_V0.8_${task.id}"
+            )
+        }
+    }
 }

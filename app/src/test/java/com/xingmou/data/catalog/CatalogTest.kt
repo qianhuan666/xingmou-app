@@ -20,4 +20,11 @@ class CatalogTest {
         assertEquals(12, RehabilitationMethods.all.size)
         assertTrue(RehabilitationMethods.all.any { it.id == "FAMILY" })
     }
+
+    @Test fun v08QuestionAssetsCoverTwentyTwoModulesAndTwentyLevels() {
+        assertEquals(110, QuestionCatalog.moduleQuestionBank.size)
+        assertEquals(100, QuestionCatalog.fullCourseQuestions.size)
+        assertEquals(22, QuestionCatalog.moduleQuestionBank.map { it.moduleId }.toSet().size)
+        assertTrue(QuestionCatalog.moduleQuestionBank.all { it.version == 1 && it.sourceRef.startsWith("LOCAL_COURSE_V0.8_") })
+    }
 }

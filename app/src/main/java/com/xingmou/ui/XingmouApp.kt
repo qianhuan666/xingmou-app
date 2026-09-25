@@ -186,6 +186,8 @@ private fun PortContent(viewModel: XingmouViewModel, port: Port, modifier: Modif
             onSpeechVolumeChange = viewModel::setSpeechVolume,
             onLargeTextChange = viewModel::setLargeText,
             onHighContrastChange = viewModel::setHighContrast,
+            onSlowMotionChange = viewModel::setSlowMotion,
+            onInterestChange = viewModel::selectInterest,
             modifier = modifier
         )
         Port.PARENT -> ParentScreen(
@@ -206,6 +208,7 @@ private fun PortContent(viewModel: XingmouViewModel, port: Port, modifier: Modif
             state = state.professional,
             onReviewCommentChange = viewModel::updateReviewComment,
             onPlanTaskChange = viewModel::updatePlanTask,
+            onPlanGoalChange = viewModel::updatePlanGoal,
             onPlanDifficultyChange = viewModel::updatePlanDifficulty,
             onPlanSupportLevelChange = viewModel::updatePlanSupportLevel,
             onPlanFrequencyChange = viewModel::updatePlanFrequency,

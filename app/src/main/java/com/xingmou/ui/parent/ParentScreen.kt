@@ -52,6 +52,13 @@ fun ParentScreen(
 
         HomeTaskPanel(state, onCompleteTask, onSkipTask, onPauseTask, onAdvanceDemo, onMoodChange, onFatigueChange, onFeedbackNoteChange, onSubmitFeedback)
 
+        SectionSurface(title = "本周家庭回顾", supporting = "只汇总当前儿童最近 7 天的本地记录。") {
+            StatusLine("任务完成率", state.weekCompletionRate)
+            Spacer(Modifier.height(8.dp))
+            StatusLine("状态变化", state.weekStatusSummary)
+            Text(state.weekSuggestion, modifier = Modifier.padding(top = 10.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+
         BoxWithConstraints(Modifier.fillMaxWidth()) {
             val wide = maxWidth >= 860.dp
             if (wide) {

@@ -45,7 +45,8 @@ data class AccessibilityUiState(
     val speechRate: Float = 1.0f,
     val speechVolume: Float = 1.0f,
     val largeText: Boolean = false,
-    val highContrast: Boolean = false
+    val highContrast: Boolean = false,
+    val slowMotion: Boolean = false
 )
 
 fun normalizeSpeechRate(rate: Float): Float = rate.coerceIn(0.75f, 1.25f)
@@ -57,6 +58,8 @@ data class ChildUiState(
     val options: List<String> = listOf("圆形", "三角形"),
     val courseProgress: Int = 0,
     val courseTotal: Int = 5,
+    val currentCourseLevel: Int = 1,
+    val courseTitle: String = "图片配对",
     val courseQuestionId: String? = null,
     val courseUnlocked: Boolean = false,
     val courseOpen: Boolean = true,
@@ -65,6 +68,8 @@ data class ChildUiState(
     val completedRounds: Int = 0,
     val encouragementTrend: String = "刚刚开始",
     val rewardMessage: String = "先完成一个小活动，就会点亮第一颗小星星。",
+    val interest: String = "图片",
+    val interestOptions: List<String> = listOf("图片", "动物", "交通", "生活用品"),
     val courseMap: List<CourseLevelUi> = V08_COURSE_LEVELS,
     val difficulty: Int = 1,
     val supportLevel: SupportLevel = SupportLevel.L1,
@@ -122,6 +127,9 @@ data class ParentUiState(
     val homeTaskSupportLevel: String = "L1",
     val homeTaskStopConditions: String = "出现疲劳、拒绝或风险时暂停",
     val homeTaskSafetyStopped: Boolean = false,
+    val weekCompletionRate: String = "暂无本周完成记录",
+    val weekStatusSummary: String = "本周状态等待记录",
+    val weekSuggestion: String = "完成一次短时任务后，再记录孩子当时的状态。",
     val homeDemoStep: Int = 0,
     val feedbackMood: String = "平稳",
     val feedbackFatigue: String = "不确定",
@@ -138,6 +146,7 @@ data class ProfessionalUiState(
     val planSummary: String = "达到 3 条有效记录后，可生成方案草案。",
     val planDiffs: List<PlanDiffUi> = emptyList(),
     val planTask: String = "图片配对",
+    val planGoal: String = "在当前支持等级下完成训练",
     val planDifficulty: String = "1",
     val planSupportLevel: String = "L1",
     val planFrequency: String = "每日 1–2 次",
@@ -157,6 +166,7 @@ data class ProfessionalUiState(
         ReportMetricUi("平均反应时", "—", "仅统计有反应时记录"),
         ReportMetricUi("趋势", "数据不足", "按前后半段比较")
     ),
+    val reportTrend: List<ReportTrendPointUi> = emptyList(),
     val reportGroups: List<ReportGroupUi> = emptyList(),
     val recentTrainingDetails: List<TrainingDetailUi> = emptyList(),
     val assessmentId: String = "GESELL",
@@ -194,6 +204,8 @@ data class ReportGroupUi(
     val independentRate: String,
     val averageReaction: String
 )
+
+data class ReportTrendPointUi(val label: String, val accuracy: Float, val sampleCount: Int)
 
 data class TrainingDetailUi(
     val timestamp: Long,

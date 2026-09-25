@@ -61,6 +61,8 @@ fun ChildScreen(
     onSpeechVolumeChange: (Float) -> Unit,
     onLargeTextChange: (Boolean) -> Unit,
     onHighContrastChange: (Boolean) -> Unit,
+    onSlowMotionChange: (Boolean) -> Unit,
+    onInterestChange: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -115,7 +117,7 @@ fun ChildScreen(
                     Text("继续第一关")
                 }
             } else {
-                Text("图片配对 · 第 ${state.courseProgress.coerceAtMost(state.courseTotal)} / ${state.courseTotal} 个活动", style = MaterialTheme.typography.labelLarge)
+                Text("${state.courseTitle} · 第 ${state.currentCourseLevel} 关 · ${state.courseProgress.coerceAtMost(state.courseTotal)} / ${state.courseTotal} 个活动", style = MaterialTheme.typography.labelLarge)
                 if (state.courseProgress >= state.courseTotal) {
                     Text("第一关完成了，可以休息一下。", style = MaterialTheme.typography.titleMedium)
                 } else BoxWithConstraints(Modifier.fillMaxWidth()) {
@@ -173,6 +175,17 @@ fun ChildScreen(
             )
         }
 
+        SectionSurface(title = "我喜欢的主题", supporting = "主题只用来调整示例素材，不改变训练目标。") {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                state.interestOptions.forEach { option ->
+                    OutlinedButton(onClick = { onInterestChange(option) }, enabled = option != state.interest) {
+                        Text(option)
+                    }
+                }
+            }
+            Text("当前主题：${state.interest}", modifier = Modifier.padding(top = 8.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+
         SectionSurface(title = "课程地图（20关）", supporting = "当前先开放第一关，其余关卡会在内容审核完成后逐步开放。") {
             state.courseMap.forEach { level ->
                 Text(
@@ -212,6 +225,8 @@ fun ChildScreen(
             SettingRow("大字体", "增加界面文字大小", accessibility.largeText) { onLargeTextChange(it) }
             Spacer(Modifier.height(8.dp))
             SettingRow("高对比", "提高文字与表面的对比度", accessibility.highContrast) { onHighContrastChange(it) }
+            Spacer(Modifier.height(8.dp))
+            SettingRow("慢动效", "放慢页面变化，给更多反应时间", accessibility.slowMotion) { onSlowMotionChange(it) }
         }
     }
 }
