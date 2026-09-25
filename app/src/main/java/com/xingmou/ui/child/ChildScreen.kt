@@ -19,6 +19,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -44,8 +45,13 @@ fun ChildScreen(
     accessibility: AccessibilityUiState,
     onChoice: (Boolean) -> Unit,
     onStartBaseline: () -> Unit,
+    onResumeBaseline: () -> Unit,
+    onLeaveBaseline: () -> Unit,
     onRestartBaseline: () -> Unit,
     onBaselineAnswer: (Int) -> Unit,
+    onStartCourse: () -> Unit,
+    onLeaveCourse: () -> Unit,
+    onResumeCourse: () -> Unit,
     onPause: () -> Unit,
     onResume: () -> Unit,
     onSpeechEnabledChange: (Boolean) -> Unit,
@@ -80,7 +86,7 @@ fun ChildScreen(
             }
         }
 
-        BaselineCard(baseline, onStartBaseline, onRestartBaseline, onBaselineAnswer)
+        BaselineCard(baseline, onStartBaseline, onResumeBaseline, onLeaveBaseline, onRestartBaseline, onBaselineAnswer)
 
         SectionSurface(
             title = if (state.isSafetyStopped) "先找身边的大人" else if (state.isPaused) "休息时间" else state.instruction,
@@ -95,9 +101,22 @@ fun ChildScreen(
                     modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp),
                     enabled = !state.isWorking
                 ) { Text(if (state.isWorking) "请稍等" else "准备好了，继续") }
+            } else if (!state.courseUnlocked) {
+                Text("完成六题起点小测后，就可以开始第一关。", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                OutlinedButton(
+                    onClick = onPause,
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp),
+                    enabled = !state.isWorking
+                ) { Text("先休息") }
+            } else if (!state.courseOpen) {
+                Button(onClick = onResumeCourse, modifier = Modifier.fillMaxWidth().heightIn(min = 60.dp)) {
+                    Text("继续第一关")
+                }
             } else {
                 Text("图片配对 · 第 ${state.courseProgress.coerceAtMost(state.courseTotal)} / ${state.courseTotal} 个活动", style = MaterialTheme.typography.labelLarge)
-                BoxWithConstraints(Modifier.fillMaxWidth()) {
+                if (state.courseProgress >= state.courseTotal) {
+                    Text("第一关完成了，可以休息一下。", style = MaterialTheme.typography.titleMedium)
+                } else BoxWithConstraints(Modifier.fillMaxWidth()) {
                     val horizontal = maxWidth >= 520.dp
                     if (horizontal) {
                         Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -117,6 +136,7 @@ fun ChildScreen(
                     modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp),
                     enabled = !state.isWorking
                 ) { Text("先休息") }
+                TextButton(onClick = onLeaveCourse, modifier = Modifier.fillMaxWidth()) { Text("暂时离开这一关") }
             }
         }
 
@@ -171,6 +191,8 @@ fun ChildScreen(
 private fun BaselineCard(
     state: BaselineUiState,
     onStart: () -> Unit,
+    onResume: () -> Unit,
+    onLeave: () -> Unit,
     onRestart: () -> Unit,
     onAnswer: (Int) -> Unit
 ) {
@@ -185,7 +207,11 @@ private fun BaselineCard(
                     Text("开始基线")
                 }
             }
-            BaselineStatus.IN_PROGRESS -> {
+            BaselineStatus.IN_PROGRESS -> if (!state.isOpen) {
+                Button(onClick = onResume, modifier = Modifier.fillMaxWidth().heightIn(min = 60.dp)) {
+                    Text("继续基线")
+                }
+            } else {
                 state.question?.let { question ->
                     Text("${state.currentIndex + 1} / ${state.totalCount}", style = MaterialTheme.typography.labelLarge)
                     Text(question.prompt, style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(vertical = 8.dp))
@@ -197,6 +223,7 @@ private fun BaselineCard(
                         ) { Text(option) }
                         Spacer(Modifier.height(8.dp))
                     }
+                    TextButton(onClick = onLeave, modifier = Modifier.fillMaxWidth()) { Text("暂时离开基线") }
                 }
             }
             BaselineStatus.COMPLETED -> {

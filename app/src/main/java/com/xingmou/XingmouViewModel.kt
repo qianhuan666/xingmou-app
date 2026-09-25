@@ -170,16 +170,44 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
     fun setExportConsent(granted: Boolean) = setConsent("export", granted)
 
     fun startBaseline() {
-        if (_uiState.value.baseline.status == BaselineStatus.IN_PROGRESS) return
+        if (_uiState.value.baseline.status != BaselineStatus.IN_PROGRESS) {
+            baselineSession = baselineEngine.newSession(System.currentTimeMillis())
+            persistBaseline()
+        }
+        publishBaseline(isOpen = true)
+    }
+
+    fun resumeBaseline() {
+        if (_uiState.value.baseline.status == BaselineStatus.IN_PROGRESS) publishBaseline(isOpen = true)
+    }
+
+    fun leaveBaseline() {
+        if (_uiState.value.baseline.status == BaselineStatus.IN_PROGRESS) publishBaseline(isOpen = false)
+    }
+
+    fun startCourse() {
+        if (_uiState.value.child.courseUnlocked) {
+            _uiState.update { it.copy(child = it.child.copy(courseOpen = true)) }
+        }
+    }
+
+    fun leaveCourse() {
+        _uiState.update { it.copy(child = it.child.copy(courseOpen = false)) }
+    }
+
+    fun resumeCourse() {
+        startCourse()
+    }
+
+    private fun resetBaselineSession() {
         baselineSession = baselineEngine.newSession(System.currentTimeMillis())
-        publishBaseline()
+        publishBaseline(isOpen = false)
         persistBaseline()
     }
 
     fun restartBaseline() {
-        baselineSession = baselineEngine.newSession(System.currentTimeMillis())
-        publishBaseline()
-        persistBaseline()
+        resetBaselineSession()
+        publishBaseline(isOpen = true)
     }
 
     fun answerBaseline(option: Int) {
@@ -203,7 +231,8 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                     )
                 )
             }
-            publishBaseline()
+            publishBaseline(isOpen = true)
+            loadCourseProgress(childId)
         }
     }
 
@@ -243,13 +272,14 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
 
     private suspend fun loadBaseline(child: ChildEntity) {
         baselineSession = baselineEngine.fromJson(child.baselineJson) ?: BaselineSession()
-        publishBaseline()
+        publishBaseline(isOpen = false)
     }
 
     private suspend fun loadCourseProgress(childId: String) {
         val records = database.trainingRecordDao().recentForChild(childId, 100)
             .filter { it.taskId.startsWith("M02-L1-") || it.taskId == "图片配对" }
-        val progress = records.size.coerceAtMost(QuestionCatalog.firstCourseQuestions.size)
+        val progress = records.filter { it.correct }.map { it.taskId }.toSet()
+            .size.coerceAtMost(QuestionCatalog.firstCourseQuestions.size)
         val question = QuestionCatalog.firstCourseQuestions.getOrNull(progress)
         _uiState.update {
             it.copy(child = it.child.copy(
@@ -257,12 +287,13 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                 options = question?.options ?: it.child.options,
                 courseProgress = progress,
                 courseTotal = QuestionCatalog.firstCourseQuestions.size,
-                courseQuestionId = question?.id
+                courseQuestionId = question?.id,
+                courseUnlocked = baselineSession.status == BaselineStatus.COMPLETED
             ))
         }
     }
 
-    private fun publishBaseline() {
+    private fun publishBaseline(isOpen: Boolean = _uiState.value.baseline.isOpen) {
         val question = baselineEngine.currentQuestion(baselineSession)
         _uiState.update {
             it.copy(
@@ -278,7 +309,8 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                         BaselineStatus.NEEDS_RETEST -> "这次可以稍后重新开始。"
                     },
                     scores = baselineEngine.scores(baselineSession),
-                    isWorking = false
+                    isWorking = false,
+                    isOpen = isOpen && baselineSession.status == BaselineStatus.IN_PROGRESS
                 )
             )
         }
@@ -327,7 +359,7 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
 
     fun completeChildTask(correct: Boolean) {
         val snapshot = _uiState.value.child
-        if (snapshot.isWorking || snapshot.isSafetyStopped) return
+        if (snapshot.isWorking || snapshot.isSafetyStopped || !snapshot.courseUnlocked || !snapshot.courseOpen || snapshot.courseQuestionId == null || snapshot.courseProgress >= snapshot.courseTotal) return
         _uiState.update { it.copy(child = it.child.copy(isWorking = true)) }
         viewModelScope.launch {
             runCatching {

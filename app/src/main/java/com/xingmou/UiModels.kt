@@ -36,7 +36,8 @@ data class BaselineUiState(
     val question: QuestionDefinition? = null,
     val message: String = "先做几个小练习，帮助小星找到合适的起点。",
     val scores: Map<String, Int> = emptyMap(),
-    val isWorking: Boolean = false
+    val isWorking: Boolean = false,
+    val isOpen: Boolean = false
 )
 
 data class AccessibilityUiState(
@@ -57,6 +58,8 @@ data class ChildUiState(
     val courseProgress: Int = 0,
     val courseTotal: Int = 5,
     val courseQuestionId: String? = null,
+    val courseUnlocked: Boolean = false,
+    val courseOpen: Boolean = true,
     val difficulty: Int = 1,
     val supportLevel: SupportLevel = SupportLevel.L1,
     val message: String = "慢慢看，选一个就好。",
