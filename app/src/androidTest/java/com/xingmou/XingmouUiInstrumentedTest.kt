@@ -56,6 +56,14 @@ class XingmouUiInstrumentedTest {
     }
 
     @Test
+    fun childCourseMapShowsTwentyLevelsAndHonestAvailability() {
+        composeRule.onNodeWithText("课程地图（20关）").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("1. 图片配对", substring = true).performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("20. 生活顺序", substring = true).performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("当前先开放第一关", substring = true).performScrollTo().assertIsDisplayed()
+    }
+
+    @Test
     fun coreScreenRemainsReachableInLandscapeAndPortrait() {
         composeRule.activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
         composeRule.waitForIdle()

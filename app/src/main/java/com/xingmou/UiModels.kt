@@ -65,6 +65,7 @@ data class ChildUiState(
     val completedRounds: Int = 0,
     val encouragementTrend: String = "刚刚开始",
     val rewardMessage: String = "先完成一个小活动，就会点亮第一颗小星星。",
+    val courseMap: List<CourseLevelUi> = V08_COURSE_LEVELS,
     val difficulty: Int = 1,
     val supportLevel: SupportLevel = SupportLevel.L1,
     val message: String = "慢慢看，选一个就好。",
@@ -75,6 +76,19 @@ data class ChildUiState(
     val isWorking: Boolean = false,
     val lastEvent: String = "等待开始"
 )
+
+data class CourseLevelUi(
+    val level: Int,
+    val title: String,
+    val status: String
+)
+
+val V08_COURSE_LEVELS: List<CourseLevelUi> = listOf(
+    "图片配对", "颜色辨别", "形状匹配", "目标搜索", "即时记忆",
+    "顺序记忆", "分类推理", "大小排序", "按顺序放图片", "找不同",
+    "指认物品", "跟读词语", "理解指令", "替代沟通", "情绪识别",
+    "互动轮流", "情境选择", "生活工具", "模仿动作", "生活顺序"
+).mapIndexed { index, title -> CourseLevelUi(index + 1, title, "待补齐") }
 
 fun ChildUiState.apply(decision: AgentEventDecision): ChildUiState = copy(
     difficulty = decision.nextDifficulty ?: difficulty,

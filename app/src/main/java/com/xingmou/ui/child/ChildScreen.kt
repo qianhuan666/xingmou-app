@@ -173,6 +173,17 @@ fun ChildScreen(
             )
         }
 
+        SectionSurface(title = "课程地图（20关）", supporting = "当前先开放第一关，其余关卡会在内容审核完成后逐步开放。") {
+            state.courseMap.forEach { level ->
+                Text(
+                    "${level.level}. ${level.title} · ${level.status}",
+                    modifier = Modifier.padding(vertical = 3.dp),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = if (level.status == "待补齐") MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface
+                )
+            }
+        }
+
         SectionSurface(title = "辅助设置", supporting = "设置只保存在本机，用来调整小星的呈现方式。") {
             SettingRow("小星朗读", "朗读儿童端短句", accessibility.speechEnabled) { onSpeechEnabledChange(it) }
             Spacer(Modifier.height(8.dp))

@@ -294,6 +294,15 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
             .filter { it.taskId.startsWith("M02-L1-") || it.taskId == "图片配对" }
         val progress = courseProgressEngine.summarize(records)
         val encouragement = courseProgressEngine.encouragement(progress, records)
+        val courseMap = V08_COURSE_LEVELS.mapIndexed { index, level ->
+            val status = when {
+                baselineSession.status != BaselineStatus.COMPLETED && index == 0 -> "完成基线后解锁"
+                index == 0 && progress.isComplete -> "已完成"
+                index == 0 -> "进行中"
+                else -> "待补齐"
+            }
+            level.copy(status = status)
+        }
         val question = progress.nextQuestion
         _uiState.update {
             it.copy(child = it.child.copy(
@@ -308,7 +317,8 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                 coursePoints = encouragement.points,
                 completedRounds = encouragement.completedRounds,
                 encouragementTrend = encouragement.trendLabel,
-                rewardMessage = encouragement.rewardMessage
+                rewardMessage = encouragement.rewardMessage,
+                courseMap = courseMap
             ))
         }
     }
