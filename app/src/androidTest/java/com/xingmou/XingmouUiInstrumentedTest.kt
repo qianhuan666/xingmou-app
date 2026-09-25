@@ -56,6 +56,8 @@ class XingmouUiInstrumentedTest {
         composeRule.onNodeWithText("专业审核工作台").assertIsDisplayed()
         composeRule.onNodeWithText("训练报表").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("正确率").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("六域 / 模块聚合").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("最近训练记录").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("家庭反馈").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("儿童端").performClick()
         composeRule.onNodeWithText("和小星一起练习").assertIsDisplayed()

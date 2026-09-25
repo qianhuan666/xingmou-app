@@ -771,6 +771,26 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                 val review = latestPlan?.let { database.agentDao().latestReviewForTarget(it.planId) }
                 val feedback = database.homeFeedbackDao().recentForChild(childId)
                 val homeTasks = database.homeTaskDao().allForChild(childId).associateBy { it.taskId }
+                val reportGroups = records.groupBy { it.domain to it.taskId }.map { (key, group) ->
+                    ReportGroupUi(
+                        domain = key.first,
+                        task = key.second,
+                        sampleCount = group.size,
+                        accuracy = "%.0f%%".format(group.count { it.correct }.toDouble() / group.size * 100),
+                        independentRate = "%.0f%%".format(group.count { it.supportLevel.equals("L0", true) || it.promptLevel == 0 }.toDouble() / group.size * 100),
+                        averageReaction = group.mapNotNull { it.reactionMs }.takeIf { it.isNotEmpty() }?.let { "%.0f ms".format(it.average()) } ?: "—"
+                    )
+                }.sortedWith(compareBy({ it.domain }, { it.task }))
+                val trainingDetails = records.take(10).map { item ->
+                    TrainingDetailUi(
+                        timestamp = item.createdAt,
+                        domain = item.domain,
+                        task = item.taskId,
+                        result = if (item.correct) "完成" else "需再试",
+                        support = "${item.supportLevel} / 提示 ${item.promptLevel}",
+                        reaction = item.reactionMs?.let { "$it ms" } ?: "—"
+                    )
+                }
                 if (latestPlan != null && latestPlan.status in setOf("draft", "confirmed") && review != null) {
                     activePlan = latestPlan
                     activeReview = review
@@ -793,6 +813,8 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                                 ReportMetricUi("平均反应时", analysis.averageReactionMs?.let { "%.0f ms".format(it) } ?: "—", "仅统计有反应时记录"),
                                 ReportMetricUi("趋势", analysis.trend.label(), "按训练记录前后半段比较")
                             ),
+                            reportGroups = reportGroups,
+                            recentTrainingDetails = trainingDetails,
                             planStatus = latestPlan?.status?.uppercase()?.let { status -> runCatching { PlanStatus.valueOf(status) }.getOrNull() } ?: it.professional.planStatus,
                             planSummary = if (latestPlan != null) "当前方案 V${latestPlan.version} · ${latestPlan.status.uppercase()}" else if (analysis.dataSufficient || it.professional.planStatus != null) it.professional.planSummary else "达到 3 条有效记录后，可生成方案草案。",
                             recentEvent = if (analysis.sampleCount >= 3) "RECORDS_THRESHOLD_REACHED" else it.professional.recentEvent,

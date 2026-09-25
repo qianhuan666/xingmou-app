@@ -73,6 +73,19 @@ class DomainEnginesTest {
         assertEquals(4.0 / 3.0, analysis.averagePromptLevel!!, 0.0001)
     }
 
+    @Test fun analysisInputCanBeGroupedByDomainAndTask() {
+        val records = listOf(
+            record(1, true, 500, "L0"),
+            record(2, false, 800, "L1"),
+            record(3, true, 600, "L0")
+        )
+        val grouped = records.groupBy { it.domain to it.taskId }
+        val group = grouped.getValue("认知" to "图片配对")
+        assertEquals(3, group.size)
+        assertEquals(2, group.count { it.correct })
+        assertEquals(2, group.count { it.supportLevel == "L0" })
+    }
+
     private fun record(index: Int, correct: Boolean, reaction: Long, support: String) = TrainingRecordEntity(
         "r$index", "child", "认知", "图片配对", 2, support, reaction, if (correct) null else "wrong", correct, correct, if (support == "L0") 0 else 2, index.toLong()
     )

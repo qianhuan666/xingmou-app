@@ -132,10 +132,30 @@ data class ProfessionalUiState(
         ReportMetricUi("平均反应时", "—", "仅统计有反应时记录"),
         ReportMetricUi("趋势", "数据不足", "按前后半段比较")
     ),
+    val reportGroups: List<ReportGroupUi> = emptyList(),
+    val recentTrainingDetails: List<TrainingDetailUi> = emptyList(),
     val recentHomeFeedback: List<HomeFeedbackUi> = emptyList()
 )
 
 data class ReportMetricUi(val label: String, val value: String, val detail: String)
+
+data class ReportGroupUi(
+    val domain: String,
+    val task: String,
+    val sampleCount: Int,
+    val accuracy: String,
+    val independentRate: String,
+    val averageReaction: String
+)
+
+data class TrainingDetailUi(
+    val timestamp: Long,
+    val domain: String,
+    val task: String,
+    val result: String,
+    val support: String,
+    val reaction: String
+)
 
 data class HomeFeedbackUi(
     val createdAt: Long,

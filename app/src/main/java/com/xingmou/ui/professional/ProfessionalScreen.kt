@@ -54,6 +54,8 @@ fun ProfessionalScreen(
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                         AnalysisPanel(state, onRefresh)
                         ReportPanel(state)
+                        GroupReportPanel(state)
+                        TrainingDetailsPanel(state)
                         HomeFeedbackPanel(state)
                         AgentPanel(state)
                     }
@@ -63,6 +65,8 @@ fun ProfessionalScreen(
                 Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                     AnalysisPanel(state, onRefresh)
                     ReportPanel(state)
+                    GroupReportPanel(state)
+                    TrainingDetailsPanel(state)
                     HomeFeedbackPanel(state)
                     PlanPanel(state, onReviewCommentChange, onCreateDraft, onConfirm, onActivate, onReject, Modifier.fillMaxWidth())
                     AgentPanel(state)
@@ -97,6 +101,36 @@ private fun ReportPanel(state: ProfessionalUiState) {
                     Text(metric.detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 Text(metric.value, style = MaterialTheme.typography.titleMedium)
+            }
+        }
+    }
+}
+
+@Composable
+private fun GroupReportPanel(state: ProfessionalUiState) {
+    SectionSurface(title = "六域 / 模块聚合", supporting = "点击回溯前的只读摘要；按当前儿童记录聚合。") {
+        if (state.reportGroups.isEmpty()) {
+            Text("暂无足够记录可聚合。", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        } else {
+            state.reportGroups.forEachIndexed { index, group ->
+                if (index > 0) HorizontalDivider(Modifier.padding(vertical = 8.dp))
+                Text("${group.domain} 域 · ${group.task}", style = MaterialTheme.typography.titleSmall)
+                Text("${group.sampleCount} 条 · 正确率 ${group.accuracy} · 独立完成 ${group.independentRate} · 反应时 ${group.averageReaction}", modifier = Modifier.padding(top = 4.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+    }
+}
+
+@Composable
+private fun TrainingDetailsPanel(state: ProfessionalUiState) {
+    SectionSurface(title = "最近训练记录", supporting = "只读明细，可用于回到原始训练过程核对。") {
+        if (state.recentTrainingDetails.isEmpty()) {
+            Text("暂无训练记录。", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        } else {
+            state.recentTrainingDetails.forEachIndexed { index, detail ->
+                if (index > 0) HorizontalDivider(Modifier.padding(vertical = 8.dp))
+                Text("${java.text.SimpleDateFormat("MM-dd HH:mm", java.util.Locale.getDefault()).format(java.util.Date(detail.timestamp))} · ${detail.domain}/${detail.task}", style = MaterialTheme.typography.titleSmall)
+                Text("${detail.result} · ${detail.support} · 反应时 ${detail.reaction}", modifier = Modifier.padding(top = 4.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }
