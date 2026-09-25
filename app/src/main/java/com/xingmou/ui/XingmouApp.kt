@@ -205,6 +205,13 @@ private fun PortContent(viewModel: XingmouViewModel, port: Port, modifier: Modif
         Port.PROFESSIONAL -> ProfessionalScreen(
             state = state.professional,
             onReviewCommentChange = viewModel::updateReviewComment,
+            onPlanTaskChange = viewModel::updatePlanTask,
+            onPlanDifficultyChange = viewModel::updatePlanDifficulty,
+            onPlanSupportLevelChange = viewModel::updatePlanSupportLevel,
+            onPlanFrequencyChange = viewModel::updatePlanFrequency,
+            onPlanDurationChange = viewModel::updatePlanDuration,
+            onPlanStopConditionsChange = viewModel::updatePlanStopConditions,
+            onCreateRevision = viewModel::createPlanRevision,
             onAssessmentSelect = viewModel::selectAssessment,
             onAssessmentDateChange = viewModel::updateAssessmentDate,
             onAssessmentSourceChange = viewModel::updateAssessmentSource,

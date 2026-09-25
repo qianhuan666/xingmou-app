@@ -629,6 +629,13 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
         _uiState.update { it.copy(professional = it.professional.copy(reviewComment = text.take(300))) }
     }
 
+    fun updatePlanTask(value: String) = _uiState.update { it.copy(professional = it.professional.copy(planTask = value.take(80))) }
+    fun updatePlanDifficulty(value: String) = _uiState.update { it.copy(professional = it.professional.copy(planDifficulty = value.take(8))) }
+    fun updatePlanSupportLevel(value: String) = _uiState.update { it.copy(professional = it.professional.copy(planSupportLevel = value.take(8))) }
+    fun updatePlanFrequency(value: String) = _uiState.update { it.copy(professional = it.professional.copy(planFrequency = value.take(80))) }
+    fun updatePlanDuration(value: String) = _uiState.update { it.copy(professional = it.professional.copy(planDuration = value.take(40))) }
+    fun updatePlanStopConditions(value: String) = _uiState.update { it.copy(professional = it.professional.copy(planStopConditions = value.take(160))) }
+
     fun selectAssessment(assessmentId: String) {
         val definition = AssessmentCatalog.all.firstOrNull { it.id == assessmentId } ?: return
         _uiState.update {
@@ -753,6 +760,12 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                     it.copy(professional = it.professional.copy(
                         planStatus = PlanStatus.DRAFT,
                         planSummary = "优先领域 A · 图片配对 · 难度 ${_uiState.value.child.difficulty} · 支持 ${_uiState.value.child.supportLevel.name} · 每次 5–10 分钟",
+                        planTask = "图片配对",
+                        planDifficulty = _uiState.value.child.difficulty.toString(),
+                        planSupportLevel = _uiState.value.child.supportLevel.name,
+                        planFrequency = "每日 1–2 次",
+                        planDuration = "5 分钟",
+                        planStopConditions = "出现疲劳、拒绝或风险时暂停",
                         reviewMessage = "草案已生成，需先确认，再签署生效。",
                         isWorking = false,
                         agentRunId = runId,
@@ -762,6 +775,41 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                 }
             }.onFailure { error ->
                 _uiState.update { it.copy(professional = it.professional.copy(isWorking = false, reviewMessage = "草案生成失败：${error.message ?: "未知错误"}")) }
+            }
+        }
+    }
+
+    fun createPlanRevision() {
+        val professional = _uiState.value.professional
+        if (professional.isWorking || professional.planStatus != PlanStatus.ACTIVE) return
+        _uiState.update { it.copy(professional = it.professional.copy(isWorking = true, reviewMessage = "正在创建方案新版本…")) }
+        viewModelScope.launch {
+            runCatching {
+                val previous = database.planDao().latest(childId) ?: error("当前没有可编辑的已生效方案")
+                check(planStateMachine.createDraft(PlanActor.MODEL).accepted)
+                val now = System.currentTimeMillis()
+                val runId = newId("professional-revision-run")
+                val version = previous.version + 1
+                val payload = planPayload(professional)
+                val plan = PlanVersionEntity(newId("plan"), childId, version, "draft", true, payload, now, now)
+                val diff = planDiffs(previous.payloadJson, payload)
+                val review = ReviewRequestEntity(newId("review"), childId, runId, "plan", plan.planId, payload, diffJson(diff), "pending", null, null, now, null)
+                database.planDao().upsert(plan)
+                database.agentDao().upsertReview(review)
+                activePlan = plan
+                activeReview = review
+                _uiState.update { it.copy(professional = it.professional.copy(
+                    planStatus = PlanStatus.DRAFT,
+                    planSummary = "当前方案 V$version · DRAFT",
+                    planDiffs = diff,
+                    reviewMessage = "新版本已创建，需确认后才能签署生效。",
+                    isWorking = false,
+                    agentRunId = runId,
+                    agentStatus = "PROFESSIONAL_EDIT",
+                    recentEvent = "PLAN_REVISION_CREATED"
+                )) }
+            }.onFailure { error ->
+                _uiState.update { it.copy(professional = it.professional.copy(isWorking = false, reviewMessage = "新版本创建失败：${error.message ?: "未知错误"}")) }
             }
         }
     }
@@ -912,6 +960,12 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                             planStatus = latestPlan?.status?.uppercase()?.let { status -> runCatching { PlanStatus.valueOf(status) }.getOrNull() } ?: it.professional.planStatus,
                             planSummary = if (latestPlan != null) "当前方案 V${latestPlan.version} · ${latestPlan.status.uppercase()}" else if (analysis.dataSufficient || it.professional.planStatus != null) it.professional.planSummary else "达到 3 条有效记录后，可生成方案草案。",
                             planDiffs = planDiffs,
+                            planTask = latestPlan?.let { jsonValue(it.payloadJson, "task") } ?: it.professional.planTask,
+                            planDifficulty = latestPlan?.let { jsonValue(it.payloadJson, "difficulty") } ?: it.professional.planDifficulty,
+                            planSupportLevel = latestPlan?.let { jsonValue(it.payloadJson, "support_level") } ?: it.professional.planSupportLevel,
+                            planFrequency = latestPlan?.let { jsonValue(it.payloadJson, "frequency") } ?: it.professional.planFrequency,
+                            planDuration = latestPlan?.let { jsonValue(it.payloadJson, "duration") } ?: it.professional.planDuration,
+                            planStopConditions = latestPlan?.let { jsonValue(it.payloadJson, "stop_conditions") } ?: it.professional.planStopConditions,
                             recentEvent = if (analysis.sampleCount >= 3) "RECORDS_THRESHOLD_REACHED" else it.professional.recentEvent,
                             recentHomeFeedback = feedback.map { item ->
                                 HomeFeedbackUi(item.createdAt, homeTasks[item.taskId]?.title ?: "家庭观察", item.mood, item.fatigue, item.note)
@@ -954,6 +1008,14 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
 
     private fun jsonString(json: String, key: String): String? =
         Regex("\\\"${Regex.escape(key)}\\\"\\s*:\\s*\\\"([^\\\"]*)\\\"").find(json)?.groupValues?.getOrNull(1)
+
+    private fun planPayload(state: ProfessionalUiState): String =
+        """{"priority_domain":"A","observable_goal":"${jsonEscape("在当前支持等级下完成训练")}","task":"${jsonEscape(state.planTask.ifBlank { "图片配对" })}","difficulty":${state.planDifficulty.toIntOrNull()?.coerceIn(1, 5) ?: 1},"support_level":"${jsonEscape(state.planSupportLevel.ifBlank { "L1" })}","frequency":"${jsonEscape(state.planFrequency.ifBlank { "每日 1–2 次" })}","duration":"${jsonEscape(state.planDuration.ifBlank { "5 分钟" })}","stop_conditions":"${jsonEscape(state.planStopConditions.ifBlank { "出现疲劳、拒绝或风险时暂停" })}"}"""
+
+    private fun diffJson(diffs: List<PlanDiffUi>): String =
+        diffs.joinToString(prefix = "[", postfix = "]") { "{\"field\":\"${jsonEscape(it.field)}\",\"previous\":\"${jsonEscape(it.previous)}\",\"current\":\"${jsonEscape(it.current)}\"}" }
+
+    private fun jsonEscape(value: String): String = value.replace("\\", "\\\\").replace("\"", "\\\"")
 
     private fun planDiffs(previousJson: String, currentJson: String): List<PlanDiffUi> {
         val fields = listOf(

@@ -40,6 +40,13 @@ import com.xingmou.ui.theme.Warning
 fun ProfessionalScreen(
     state: ProfessionalUiState,
     onReviewCommentChange: (String) -> Unit,
+    onPlanTaskChange: (String) -> Unit,
+    onPlanDifficultyChange: (String) -> Unit,
+    onPlanSupportLevelChange: (String) -> Unit,
+    onPlanFrequencyChange: (String) -> Unit,
+    onPlanDurationChange: (String) -> Unit,
+    onPlanStopConditionsChange: (String) -> Unit,
+    onCreateRevision: () -> Unit,
     onAssessmentSelect: (String) -> Unit,
     onAssessmentDateChange: (String) -> Unit,
     onAssessmentSourceChange: (String) -> Unit,
@@ -73,7 +80,7 @@ fun ProfessionalScreen(
                         HomeFeedbackPanel(state)
                         AgentPanel(state)
                     }
-                    PlanPanel(state, onReviewCommentChange, onCreateDraft, onConfirm, onActivate, onReject, Modifier.weight(1.12f))
+                    PlanPanel(state, onReviewCommentChange, onPlanTaskChange, onPlanDifficultyChange, onPlanSupportLevelChange, onPlanFrequencyChange, onPlanDurationChange, onPlanStopConditionsChange, onCreateRevision, onCreateDraft, onConfirm, onActivate, onReject, Modifier.weight(1.12f))
                 }
             } else {
                 Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -83,7 +90,7 @@ fun ProfessionalScreen(
                     TrainingDetailsPanel(state)
                     AssessmentPanel(state, onAssessmentSelect, onAssessmentDateChange, onAssessmentSourceChange, onAssessmentScoresChange, onAssessmentNotesChange, onSaveAssessment)
                     HomeFeedbackPanel(state)
-                    PlanPanel(state, onReviewCommentChange, onCreateDraft, onConfirm, onActivate, onReject, Modifier.fillMaxWidth())
+                    PlanPanel(state, onReviewCommentChange, onPlanTaskChange, onPlanDifficultyChange, onPlanSupportLevelChange, onPlanFrequencyChange, onPlanDurationChange, onPlanStopConditionsChange, onCreateRevision, onCreateDraft, onConfirm, onActivate, onReject, Modifier.fillMaxWidth())
                     AgentPanel(state)
                 }
             }
@@ -211,6 +218,13 @@ private fun AnalysisPanel(state: ProfessionalUiState, onRefresh: () -> Unit) {
 private fun PlanPanel(
     state: ProfessionalUiState,
     onReviewCommentChange: (String) -> Unit,
+    onPlanTaskChange: (String) -> Unit,
+    onPlanDifficultyChange: (String) -> Unit,
+    onPlanSupportLevelChange: (String) -> Unit,
+    onPlanFrequencyChange: (String) -> Unit,
+    onPlanDurationChange: (String) -> Unit,
+    onPlanStopConditionsChange: (String) -> Unit,
+    onCreateRevision: () -> Unit,
     onCreateDraft: () -> Unit,
     onConfirm: () -> Unit,
     onActivate: () -> Unit,
@@ -232,6 +246,19 @@ private fun PlanPanel(
             state.planDiffs.forEach { diff ->
                 Text("${diff.field}：${diff.previous} → ${diff.current}", modifier = Modifier.padding(top = 6.dp))
             }
+        }
+        if (state.planStatus == PlanStatus.ACTIVE) {
+            HorizontalDivider(Modifier.padding(vertical = 14.dp))
+            Text("编辑并创建新版本", style = MaterialTheme.typography.titleMedium)
+            OutlinedTextField(state.planTask, onPlanTaskChange, modifier = Modifier.fillMaxWidth().padding(top = 8.dp), label = { Text("训练任务") })
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+                OutlinedTextField(state.planDifficulty, onPlanDifficultyChange, modifier = Modifier.weight(1f), label = { Text("难度 1–5") })
+                OutlinedTextField(state.planSupportLevel, onPlanSupportLevelChange, modifier = Modifier.weight(1f), label = { Text("支持等级") })
+            }
+            OutlinedTextField(state.planFrequency, onPlanFrequencyChange, modifier = Modifier.fillMaxWidth().padding(top = 8.dp), label = { Text("频率") })
+            OutlinedTextField(state.planDuration, onPlanDurationChange, modifier = Modifier.fillMaxWidth().padding(top = 8.dp), label = { Text("单次时长") })
+            OutlinedTextField(state.planStopConditions, onPlanStopConditionsChange, modifier = Modifier.fillMaxWidth().padding(top = 8.dp), minLines = 2, maxLines = 4, label = { Text("停止条件") })
+            OutlinedButton(onClick = onCreateRevision, modifier = Modifier.fillMaxWidth().padding(top = 10.dp), enabled = !state.isWorking) { Text("创建新版本草案") }
         }
         if (state.isWorking) LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 12.dp))
         Spacer(Modifier.height(16.dp))
