@@ -110,6 +110,16 @@ class XingmouUiInstrumentedTest {
     }
 
     @Test
+    fun localOrganizationAndRoleSettingsAreReachable() {
+        composeRule.onNodeWithText("专业端").performClick()
+        composeRule.onNodeWithText("机构设置").performClick()
+        composeRule.onNodeWithText("本地机构与角色").assertIsDisplayed()
+        composeRule.onNodeWithText("机构名称").assertIsDisplayed()
+        composeRule.onNodeWithText("新增本地用户").assertIsDisplayed()
+        composeRule.onNodeWithText("关闭").performClick()
+    }
+
+    @Test
     fun agentAuditReplayEntryIsReachable() {
         composeRule.onNodeWithText("专业端").performClick()
         composeRule.onNodeWithText("审计回放").performScrollTo().assertIsDisplayed()

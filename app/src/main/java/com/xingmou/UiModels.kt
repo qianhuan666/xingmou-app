@@ -28,10 +28,17 @@ data class XingmouUiState(
     val professional: ProfessionalUiState = ProfessionalUiState(),
     val accessibility: AccessibilityUiState = AccessibilityUiState(),
     val aiConfigured: Boolean = false,
-    val apiKeyMessage: String = "未设置 API Key；当前使用本地安全模式。"
+    val apiKeyMessage: String = "未设置 API Key；当前使用本地安全模式。",
+    val organizationName: String = "星眸本地试点机构",
+    val localUserName: String = "本地专业人员",
+    val localUserRole: String = "professional",
+    val institutionMessage: String = "本地机构模式",
+    val localUsers: List<LocalUserUi> = emptyList()
 )
 
 data class ChildSummaryUi(val childId: String, val alias: String, val ageBand: String, val status: String)
+
+data class LocalUserUi(val userId: String, val displayName: String, val login: String, val role: String, val status: String)
 
 data class BaselineUiState(
     val status: BaselineStatus = BaselineStatus.NOT_STARTED,

@@ -25,6 +25,8 @@ import com.xingmou.core.agent.TrainingCompletedEvent
 import com.xingmou.core.consent.ConsentStatus
 import com.xingmou.core.consent.DataRightsManager
 import com.xingmou.core.consent.AuthorizedImportManager
+import com.xingmou.core.organization.LocalCapability
+import com.xingmou.core.organization.LocalRolePolicy
 import com.xingmou.core.llm.DirectDeepSeekGateway
 import com.xingmou.core.llm.GatewayCallRequest
 import com.xingmou.core.llm.GatewayPolicy
@@ -57,6 +59,9 @@ import com.xingmou.data.db.HomeTaskEntity
 import com.xingmou.data.db.AssessmentRecordEntity
 import com.xingmou.data.db.CareRecordEntity
 import com.xingmou.data.db.AgentEventEntity
+import com.xingmou.data.db.OrganizationEntity
+import com.xingmou.data.db.LocalSessionEntity
+import com.xingmou.data.db.LocalUserEntity
 import com.xingmou.data.catalog.QuestionCatalog
 import com.xingmou.data.catalog.AssessmentCatalog
 import com.xingmou.BaselineUiState
@@ -125,6 +130,7 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
 
     init {
         viewModelScope.launch {
+            loadLocalOrganization()
             database.childDao().observeActive().collect { children ->
                 val current = children.firstOrNull { it.childId == activeChildId } ?: children.firstOrNull()
                 activeChildId = current?.childId ?: SeedData.defaultChild.childId
@@ -142,6 +148,62 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
             }
         }
         refreshProfessionalAnalysis()
+    }
+
+    private suspend fun loadLocalOrganization() {
+        val organization = database.organizationDao().active() ?: SeedData.defaultOrganization
+        val user = database.localUserDao().findById(localUserId) ?: SeedData.defaultUser
+        database.organizationDao().upsert(organization)
+        database.localUserDao().upsert(user)
+        database.localSessionDao().revokeAllActive()
+        database.localSessionDao().upsert(LocalSessionEntity(newId("session"), user.userId, user.role, createdAt = System.currentTimeMillis(), expiresAt = null))
+        val users = database.localUserDao().activeForOrganization(organization.organizationId)
+        _uiState.update { it.copy(organizationName = organization.name, localUserName = user.displayName, localUserRole = user.role, institutionMessage = "已启用本地角色：${LocalRolePolicy.normalize(user.role).label}", localUsers = users.map { LocalUserUi(it.userId, it.displayName, it.login, it.role, it.status) }) }
+    }
+
+    fun saveLocalOrganization(name: String, displayName: String, role: String) {
+        val normalizedName = name.trim().take(80)
+        val normalizedDisplay = displayName.trim().take(40)
+        val normalizedRole = LocalRolePolicy.normalize(role).name.lowercase()
+        if (normalizedName.isBlank() || normalizedDisplay.isBlank()) return
+        viewModelScope.launch {
+            val now = System.currentTimeMillis()
+            database.organizationDao().upsert(OrganizationEntity(SeedData.DEMO_ORGANIZATION_ID, normalizedName, createdAt = 0L, updatedAt = now))
+            database.localUserDao().update(localUserId, normalizedDisplay, normalizedRole, "active", now)
+            database.localSessionDao().revokeAllActive()
+            database.localSessionDao().upsert(LocalSessionEntity(newId("session"), localUserId, normalizedRole, createdAt = now, expiresAt = null))
+            val users = database.localUserDao().activeForOrganization(SeedData.DEMO_ORGANIZATION_ID)
+            _uiState.update { it.copy(organizationName = normalizedName, localUserName = normalizedDisplay, localUserRole = normalizedRole, institutionMessage = "已切换本地角色：${LocalRolePolicy.normalize(normalizedRole).label}", localUsers = users.map { LocalUserUi(it.userId, it.displayName, it.login, it.role, it.status) }) }
+        }
+    }
+
+    fun createLocalRoleUser(displayName: String, login: String, role: String) {
+        if (!LocalRolePolicy.can(_uiState.value.localUserRole, LocalCapability.MANAGE_USERS)) return
+        val name = displayName.trim().take(40)
+        val account = login.trim().lowercase().take(40)
+        if (name.isBlank() || account.isBlank()) return
+        viewModelScope.launch {
+            runCatching {
+                val now = System.currentTimeMillis()
+                database.localUserDao().upsert(LocalUserEntity(newId("user"), SeedData.DEMO_ORGANIZATION_ID, name, account, LocalRolePolicy.normalize(role).name.lowercase(), createdAt = now, updatedAt = now))
+                database.localUserDao().activeForOrganization(SeedData.DEMO_ORGANIZATION_ID)
+            }.onSuccess { users ->
+                _uiState.update { it.copy(localUsers = users.map { user -> LocalUserUi(user.userId, user.displayName, user.login, user.role, user.status) }, institutionMessage = "已新增本地角色用户。") }
+            }.onFailure { error ->
+                _uiState.update { it.copy(institutionMessage = "新增用户失败：${error.message ?: "login 可能重复"}") }
+            }
+        }
+    }
+
+    fun updateLocalRoleUser(userId: String, displayName: String, role: String, active: Boolean) {
+        if (!LocalRolePolicy.can(_uiState.value.localUserRole, LocalCapability.MANAGE_USERS)) return
+        if (userId == localUserId && !active) return
+        viewModelScope.launch {
+            val now = System.currentTimeMillis()
+            database.localUserDao().update(userId, displayName.trim().take(40), LocalRolePolicy.normalize(role).name.lowercase(), if (active) "active" else "disabled", now)
+            val users = database.localUserDao().activeForOrganization(SeedData.DEMO_ORGANIZATION_ID)
+            _uiState.update { it.copy(localUsers = users.map { user -> LocalUserUi(user.userId, user.displayName, user.login, user.role, user.status) }, institutionMessage = "本地角色已更新。") }
+        }
     }
 
     fun selectChild(childId: String) {
@@ -561,6 +623,15 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun selectPort(port: Port) {
+        val capability = when (port) {
+            Port.CHILD -> LocalCapability.TRAIN_CHILD
+            Port.PARENT -> LocalCapability.RECORD_HOME
+            Port.PROFESSIONAL -> LocalCapability.REVIEW_PLAN
+        }
+        if (!LocalRolePolicy.can(_uiState.value.localUserRole, capability)) {
+            _uiState.update { it.copy(institutionMessage = "当前角色无权进入${port.name}端。") }
+            return
+        }
         _uiState.update { it.copy(selectedPort = port) }
         if (port == Port.PROFESSIONAL) refreshProfessionalAnalysis()
     }

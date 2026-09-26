@@ -9,6 +9,9 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
     entities = [
+        OrganizationEntity::class,
+        LocalUserEntity::class,
+        LocalSessionEntity::class,
         ChildEntity::class,
         ChildBindingEntity::class,
         HomeTaskEntity::class,
@@ -33,11 +36,14 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         ReviewRequestEntity::class,
         DecisionTraceEntity::class
     ],
-    version = 12,
+    version = 13,
     exportSchema = false
 )
 abstract class QizhiDatabase : RoomDatabase() {
     abstract fun childDao(): ChildDao
+    abstract fun organizationDao(): OrganizationDao
+    abstract fun localUserDao(): LocalUserDao
+    abstract fun localSessionDao(): LocalSessionDao
     abstract fun childBindingDao(): ChildBindingDao
     abstract fun homeTaskDao(): HomeTaskDao
     abstract fun homeFeedbackDao(): HomeFeedbackDao
@@ -63,7 +69,7 @@ abstract class QizhiDatabase : RoomDatabase() {
                     context.applicationContext,
                     QizhiDatabase::class.java,
                     "qizhi_training.db"
-                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12).build().also {
+                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13).build().also {
                     INSTANCE = it
                     DatabaseSeeder.seedAsync(it)
                 }
@@ -259,6 +265,18 @@ abstract class QizhiDatabase : RoomDatabase() {
                 )
                 db.execSQL("CREATE INDEX IF NOT EXISTS `index_data_requests_childId` ON `data_requests` (`childId`)")
                 db.execSQL("CREATE INDEX IF NOT EXISTS `index_data_requests_childId_requestedAt` ON `data_requests` (`childId`, `requestedAt`)")
+            }
+        }
+
+        val MIGRATION_12_13 = object : Migration(12, 13) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE IF NOT EXISTS `organizations` (`organizationId` TEXT NOT NULL, `name` TEXT NOT NULL, `status` TEXT NOT NULL, `createdAt` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, PRIMARY KEY(`organizationId`))")
+                db.execSQL("CREATE TABLE IF NOT EXISTS `local_users` (`userId` TEXT NOT NULL, `organizationId` TEXT NOT NULL, `displayName` TEXT NOT NULL, `login` TEXT NOT NULL, `role` TEXT NOT NULL, `status` TEXT NOT NULL, `createdAt` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, PRIMARY KEY(`userId`))")
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_local_users_organizationId_login` ON `local_users` (`organizationId`, `login`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_local_users_organizationId` ON `local_users` (`organizationId`)")
+                db.execSQL("CREATE TABLE IF NOT EXISTS `local_sessions` (`sessionId` TEXT NOT NULL, `userId` TEXT NOT NULL, `role` TEXT NOT NULL, `status` TEXT NOT NULL, `createdAt` INTEGER NOT NULL, `expiresAt` INTEGER, PRIMARY KEY(`sessionId`))")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_local_sessions_userId` ON `local_sessions` (`userId`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_local_sessions_status` ON `local_sessions` (`status`)")
             }
         }
     }

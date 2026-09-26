@@ -8,6 +8,24 @@ import kotlinx.coroutines.launch
 
 object SeedData {
     const val DEMO_USER_ID = "local-professional"
+    const val DEMO_ORGANIZATION_ID = "local-organization"
+
+    val defaultOrganization = OrganizationEntity(
+        organizationId = DEMO_ORGANIZATION_ID,
+        name = "星眸本地试点机构",
+        createdAt = 0L,
+        updatedAt = 0L
+    )
+
+    val defaultUser = LocalUserEntity(
+        userId = DEMO_USER_ID,
+        organizationId = DEMO_ORGANIZATION_ID,
+        displayName = "本地机构管理员",
+        login = "professional",
+        role = "admin",
+        createdAt = 0L,
+        updatedAt = 0L
+    )
 
     val defaultChild = ChildEntity(
         childId = "child-seed",
@@ -94,6 +112,8 @@ class SeedDatabaseCallback : RoomDatabase.Callback() {
 
 object DatabaseSeeder {
     suspend fun seed(database: QizhiDatabase) {
+        database.organizationDao().upsert(SeedData.defaultOrganization)
+        database.localUserDao().upsert(SeedData.defaultUser)
         database.childDao().upsert(SeedData.defaultChild)
         database.childBindingDao().upsert(SeedData.defaultBinding)
         database.knowledgeDao().insertAll(SeedData.knowledgeItems + SeedData.taskItems)

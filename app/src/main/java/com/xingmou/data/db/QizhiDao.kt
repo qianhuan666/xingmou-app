@@ -8,6 +8,42 @@ import androidx.room.Transaction
 import kotlinx.coroutines.flow.Flow
 
 @Dao
+interface OrganizationDao {
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(organization: OrganizationEntity)
+
+    @Query("SELECT * FROM organizations WHERE status = 'active' ORDER BY updatedAt DESC LIMIT 1")
+    suspend fun active(): OrganizationEntity?
+}
+
+@Dao
+interface LocalUserDao {
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(user: LocalUserEntity)
+
+    @Query("SELECT * FROM local_users WHERE organizationId = :organizationId AND status = 'active' ORDER BY displayName")
+    suspend fun activeForOrganization(organizationId: String): List<LocalUserEntity>
+
+    @Query("SELECT * FROM local_users WHERE userId = :userId LIMIT 1")
+    suspend fun findById(userId: String): LocalUserEntity?
+
+    @Query("UPDATE local_users SET displayName = :displayName, role = :role, status = :status, updatedAt = :updatedAt WHERE userId = :userId")
+    suspend fun update(userId: String, displayName: String, role: String, status: String, updatedAt: Long): Int
+}
+
+@Dao
+interface LocalSessionDao {
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(session: LocalSessionEntity)
+
+    @Query("UPDATE local_sessions SET status = 'revoked' WHERE status = 'active'")
+    suspend fun revokeAllActive(): Int
+
+    @Query("SELECT * FROM local_sessions WHERE status = 'active' ORDER BY createdAt DESC LIMIT 1")
+    suspend fun active(): LocalSessionEntity?
+}
+
+@Dao
 interface ChildDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(child: ChildEntity)

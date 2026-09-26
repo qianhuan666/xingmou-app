@@ -82,6 +82,9 @@ fun XingmouApp(viewModel: XingmouViewModel) {
                         onDeleteChild = viewModel::deleteActiveChild,
                         onSaveApiKey = viewModel::saveInstitutionApiKey,
                         onClearApiKey = viewModel::clearInstitutionApiKey
+                        ,onSaveLocalOrganization = viewModel::saveLocalOrganization,
+                        onCreateLocalRoleUser = viewModel::createLocalRoleUser,
+                        onUpdateLocalRoleUser = viewModel::updateLocalRoleUser
                     )
                 },
                 bottomBar = { AppStatusBand(aiConfigured = state.aiConfigured, remoteAiConsent = state.remoteAiConsent) }
@@ -121,6 +124,9 @@ private fun ChildContextBar(
     onDeleteChild: () -> Unit,
     onSaveApiKey: (String) -> Unit,
     onClearApiKey: () -> Unit
+    ,onSaveLocalOrganization: (String, String, String) -> Unit,
+    onCreateLocalRoleUser: (String, String, String) -> Unit,
+    onUpdateLocalRoleUser: (String, String, String, Boolean) -> Unit
 ) {
     val expandedState = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
     val dialogMode = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<String?>(null) }
@@ -129,6 +135,13 @@ private fun ChildContextBar(
     val consentOpen = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
     val deleteConfirm = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
     val apiKeyOpen = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+    val institutionOpen = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+    val institutionName = androidx.compose.runtime.remember(state.organizationName) { androidx.compose.runtime.mutableStateOf(state.organizationName) }
+    val userName = androidx.compose.runtime.remember(state.localUserName) { androidx.compose.runtime.mutableStateOf(state.localUserName) }
+    val role = androidx.compose.runtime.remember(state.localUserRole) { androidx.compose.runtime.mutableStateOf(state.localUserRole) }
+    val newUserName = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf("") }
+    val newUserLogin = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf("") }
+    val newUserRole = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf("professional") }
     val apiKeyInput = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf("") }
     Surface(color = MaterialTheme.colorScheme.surface, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)) {
         Row(
@@ -142,6 +155,7 @@ private fun ChildContextBar(
             TextButton(onClick = onArchiveChild, enabled = state.availableChildren.size > 1) { Text("归档") }
             TextButton(onClick = { consentOpen.value = true }) { Text("授权") }
             if (state.selectedPort == Port.PROFESSIONAL) {
+                TextButton(onClick = { institutionOpen.value = true }) { Text("机构设置") }
                 TextButton(onClick = { apiKeyInput.value = ""; apiKeyOpen.value = true }) { Text("机构 API Key") }
             }
             DropdownMenu(expanded = expandedState.value, onDismissRequest = { expandedState.value = false }) {
@@ -184,6 +198,33 @@ private fun ChildContextBar(
             dismissButton = {
                 TextButton(onClick = { apiKeyInput.value = ""; apiKeyOpen.value = false }) { Text("关闭") }
             }
+        )
+    }
+    if (institutionOpen.value) {
+        AlertDialog(
+            onDismissRequest = { institutionOpen.value = false },
+            title = { Text("本地机构与角色") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("${state.institutionMessage}；本地角色只在当前设备生效，不提供跨设备账号认证。", style = MaterialTheme.typography.bodySmall)
+                    OutlinedTextField(institutionName.value, { institutionName.value = it.take(80) }, label = { Text("机构名称") }, singleLine = true)
+                    OutlinedTextField(userName.value, { userName.value = it.take(40) }, label = { Text("当前用户名称") }, singleLine = true)
+                    OutlinedTextField(role.value, { role.value = it.take(20) }, label = { Text("当前角色：admin / professional / parent / viewer") }, singleLine = true)
+                    Text("本地用户", style = MaterialTheme.typography.titleSmall)
+                    state.localUsers.forEach { user -> Text("${user.displayName} · ${user.login} · ${user.role} · ${user.status}") }
+                    if (state.localUserRole == "admin") {
+                        OutlinedTextField(newUserName.value, { newUserName.value = it.take(40) }, label = { Text("新增用户名称") }, singleLine = true)
+                        OutlinedTextField(newUserLogin.value, { newUserLogin.value = it.take(40) }, label = { Text("登录标识") }, singleLine = true)
+                        OutlinedTextField(newUserRole.value, { newUserRole.value = it.take(20) }, label = { Text("角色") }, singleLine = true)
+                        OutlinedButton(onClick = {
+                            onCreateLocalRoleUser(newUserName.value, newUserLogin.value, newUserRole.value)
+                            newUserName.value = ""; newUserLogin.value = ""
+                        }) { Text("新增本地用户") }
+                    }
+                }
+            },
+            confirmButton = { Button(onClick = { onSaveLocalOrganization(institutionName.value, userName.value, role.value); institutionOpen.value = false }) { Text("保存并建立会话") } },
+            dismissButton = { TextButton(onClick = { institutionOpen.value = false }) { Text("关闭") } }
         )
     }
     dialogMode.value?.let { mode ->

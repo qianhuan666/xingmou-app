@@ -3,6 +3,37 @@ package com.xingmou.data.db
 import androidx.room.Entity
 import androidx.room.Index
 
+@Entity(tableName = "organizations")
+data class OrganizationEntity(
+    @androidx.room.PrimaryKey val organizationId: String,
+    val name: String,
+    val status: String = "active",
+    val createdAt: Long,
+    val updatedAt: Long
+)
+
+@Entity(tableName = "local_users", indices = [Index("organizationId"), Index(value = ["organizationId", "login"], unique = true)])
+data class LocalUserEntity(
+    @androidx.room.PrimaryKey val userId: String,
+    val organizationId: String,
+    val displayName: String,
+    val login: String,
+    val role: String,
+    val status: String = "active",
+    val createdAt: Long,
+    val updatedAt: Long
+)
+
+@Entity(tableName = "local_sessions", indices = [Index("userId"), Index("status")])
+data class LocalSessionEntity(
+    @androidx.room.PrimaryKey val sessionId: String,
+    val userId: String,
+    val role: String,
+    val status: String = "active",
+    val createdAt: Long,
+    val expiresAt: Long?
+)
+
 @Entity(tableName = "children")
 data class ChildEntity(
     @androidx.room.PrimaryKey val childId: String,
