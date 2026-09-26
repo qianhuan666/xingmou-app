@@ -3,11 +3,15 @@ package com.xingmou.core.consent
 import com.google.gson.Gson
 import com.google.gson.JsonParser
 import com.xingmou.data.db.AssessmentRecordEntity
+import com.xingmou.data.db.AbilityProfileEntity
 import com.xingmou.data.db.ChildEntity
 import com.xingmou.data.db.CareRecordEntity
 import com.xingmou.data.db.HomeFeedbackEntity
 import com.xingmou.data.db.HomeTaskEntity
 import com.xingmou.data.db.TrainingRecordEntity
+import com.xingmou.data.db.PlanVersionEntity
+import com.xingmou.data.db.ReviewRequestEntity
+import com.xingmou.data.db.ConsentEntity
 
 enum class DataRequestType { EXPORT, DELETE }
 
@@ -18,14 +22,40 @@ data class DataRightsDecision(
 
 data class AuthorizedChildExport(
     val schema: String = "xingmou_authorized_child_export",
-    val schemaVersion: Int = 1,
+    val schemaVersion: Int = 2,
     val exportedAt: Long,
     val child: ExportedChild,
     val trainingRecords: List<ExportedTrainingRecord>,
     val homeTasks: List<ExportedHomeTask>,
     val homeFeedback: List<ExportedHomeFeedback>,
     val assessments: List<ExportedAssessment>,
-    val careRecords: List<ExportedCareRecord>
+    val careRecords: List<ExportedCareRecord>,
+    val abilityProfiles: List<ExportedAbilityProfile>,
+    val plans: List<ExportedPlan>,
+    val reviews: List<ExportedReview>,
+    val consents: List<ExportedConsent>
+)
+
+data class ExportedAbilityProfile(
+    val profileId: String, val status: String, val scoresJson: String,
+    val confidence: Double, val assessmentRecordIdsJson: String, val createdAt: Long
+)
+
+data class ExportedPlan(
+    val planId: String, val version: Int, val status: String, val reviewRequired: Boolean,
+    val priorityDomain: String?, val observableGoal: String?, val task: String?,
+    val difficulty: Int?, val supportLevel: String?, val frequency: String?,
+    val duration: String?, val stopConditions: String?, val createdAt: Long, val updatedAt: Long
+)
+
+data class ExportedReview(
+    val reviewId: String, val runId: String?, val targetType: String, val targetId: String,
+    val status: String, val reviewerId: String?, val reviewerComment: String?,
+    val createdAt: Long, val resolvedAt: Long?
+)
+
+data class ExportedConsent(
+    val purpose: String, val status: String, val grantedAt: Long?, val revokedAt: Long?
 )
 
 data class ExportedChild(
@@ -130,7 +160,11 @@ class DataRightsManager(private val gson: Gson = Gson()) {
         homeFeedback: List<HomeFeedbackEntity>,
         assessments: List<AssessmentRecordEntity>,
         careRecords: List<CareRecordEntity>,
-        exportedAt: Long
+        exportedAt: Long,
+        abilityProfiles: List<AbilityProfileEntity> = emptyList(),
+        plans: List<PlanVersionEntity> = emptyList(),
+        reviews: List<ReviewRequestEntity> = emptyList(),
+        consents: List<ConsentEntity> = emptyList()
     ): String {
         val decision = checkExport(consentStatus)
         check(decision.allowed) { decision.reason }
@@ -139,6 +173,10 @@ class DataRightsManager(private val gson: Gson = Gson()) {
         check(homeFeedback.all { it.childId == child.childId }) { "export_child_scope_mismatch" }
         check(assessments.all { it.childId == child.childId }) { "export_child_scope_mismatch" }
         check(careRecords.all { it.childId == child.childId }) { "export_child_scope_mismatch" }
+        check(abilityProfiles.all { it.childId == child.childId }) { "export_child_scope_mismatch" }
+        check(plans.all { it.childId == child.childId }) { "export_child_scope_mismatch" }
+        check(reviews.all { it.childId == child.childId }) { "export_child_scope_mismatch" }
+        check(consents.all { it.childId == child.childId }) { "export_child_scope_mismatch" }
 
         return gson.toJson(
             AuthorizedChildExport(
@@ -178,6 +216,26 @@ class DataRightsManager(private val gson: Gson = Gson()) {
                         updatedAt = it.updatedAt,
                         professionalSignedAt = it.professionalSignedAt
                     )
+                },
+                abilityProfiles = abilityProfiles.map {
+                    ExportedAbilityProfile(it.profileId, it.status, it.scoresJson, it.confidence,
+                        it.assessmentRecordIdsJson, it.createdAt)
+                },
+                plans = plans.map {
+                    val payload = runCatching { JsonParser.parseString(it.payloadJson).asJsonObject }.getOrNull()
+                    fun string(name: String): String? = payload?.get(name)?.takeIf { value -> value.isJsonPrimitive }?.asString
+                    ExportedPlan(it.planId, it.version, it.status, it.reviewRequired,
+                        string("priority_domain"), string("observable_goal"), string("task"),
+                        string("difficulty")?.toIntOrNull(), string("support_level"),
+                        string("frequency"), string("duration"), string("stop_conditions"),
+                        it.createdAt, it.updatedAt)
+                },
+                reviews = reviews.map {
+                    ExportedReview(it.reviewId, it.runId, it.targetType, it.targetId, it.status,
+                        it.reviewerId, it.reviewerComment, it.createdAt, it.resolvedAt)
+                },
+                consents = consents.map {
+                    ExportedConsent(it.purpose, it.status, it.grantedAt, it.revokedAt)
                 }
             )
         )

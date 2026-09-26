@@ -2,6 +2,7 @@ package com.xingmou.core.agent
 
 import com.xingmou.data.db.AgentRunEntity
 import com.xingmou.data.db.ToolCallEntity
+import com.xingmou.data.db.DecisionTraceEntity
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -27,5 +28,18 @@ class AgentMetricsTest {
         assertEquals(0.5, metrics.taskCompletionRate!!, 0.0)
         assertEquals(1.0, metrics.toolSuccessRate!!, 0.0)
         assertEquals(150.0, metrics.averageResponseMs!!, 0.0)
+    }
+
+    @Test fun unsupportedRateUsesOnlyExplicitSupportedOrUnsupportedLabels() {
+        val runs = listOf(AgentRunEntity("run-a", "parent", "PARENT", "child-a", "COMPLETED", "COMPLETED", 100, 200, null))
+        val traces = listOf(
+            DecisionTraceEntity("trace-a", "run-a", 0, "v1", "local", "[]", "[]", "[]", "unsupported", 1),
+            DecisionTraceEntity("trace-b", "run-a", 1, "v1", "local", "[]", "[]", "[]", "supported", 2),
+            DecisionTraceEntity("trace-c", "run-a", 2, "v1", "local", "[]", "[]", "[]", "uncertain", 3),
+            DecisionTraceEntity("trace-other", "other", 0, "v1", "local", "[]", "[]", "[]", "unsupported", 4)
+        )
+        val metrics = AgentMetricsCalculator.calculate(runs, emptyList(), emptyList(), emptyList(), emptyList(), traces)
+        assertEquals(0.5, metrics.unsupportedJudgmentRate!!, 0.0)
+        assertEquals(2, metrics.evidenceAnnotationSampleCount)
     }
 }

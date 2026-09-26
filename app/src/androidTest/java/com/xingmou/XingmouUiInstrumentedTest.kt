@@ -109,6 +109,14 @@ class XingmouUiInstrumentedTest {
     }
 
     @Test
+    fun agentAuditReplayEntryIsReachable() {
+        composeRule.onNodeWithText("专业端").performClick()
+        composeRule.onNodeWithText("审计回放").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("刷新当前儿童运行记录").performClick()
+        composeRule.onNodeWithText("审计回放").assertIsDisplayed()
+    }
+
+    @Test
     fun allPortsAreReachable() {
         composeRule.onNodeWithText("家长端").performClick()
         composeRule.onNodeWithText("家庭观察与支持").assertIsDisplayed()

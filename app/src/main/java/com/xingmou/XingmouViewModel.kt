@@ -10,6 +10,8 @@ import com.xingmou.core.agent.AgentEventProcessor
 import com.xingmou.core.agent.AgentOrchestrationRequest
 import com.xingmou.core.agent.AgentOrchestrationResult
 import com.xingmou.core.agent.AgentOrchestrator
+import com.xingmou.core.agent.DecisionTraceFactory
+import com.xingmou.core.agent.DecisionEvidence
 import com.xingmou.core.agent.PolicyBackedModelGateway
 import com.xingmou.core.agent.ConsecutiveFailuresEvent
 import com.xingmou.core.agent.ModelGateway
@@ -143,7 +145,9 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
         viewModelScope.launch {
             val child = database.childDao().findById(childId) ?: return@launch
             activeChildId = child.childId
-            _uiState.update { it.copy(activeChildId = child.childId, activeChildAlias = child.alias) }
+            _uiState.update { it.copy(activeChildId = child.childId, activeChildAlias = child.alias,
+                professional = it.professional.copy(auditRuns = emptyList(), auditReplay = emptyList(),
+                    auditSelectedRunId = null, auditMessage = "点击刷新查看当前儿童的 Agent 运行记录。")) }
             loadConsentState(child.childId)
             refreshProfessionalAnalysis()
             loadBaseline(child)
@@ -235,7 +239,11 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                     homeFeedback = database.homeFeedbackDao().allForChild(currentId),
                     assessments = database.assessmentRecordDao().allForChild(currentId),
                     careRecords = database.careRecordDao().allForChild(currentId),
-                    exportedAt = now
+                    exportedAt = now,
+                    abilityProfiles = database.abilityProfileDao().allForChild(currentId),
+                    plans = database.planDao().allForChild(currentId),
+                    reviews = database.agentDao().reviewsForChild(currentId),
+                    consents = database.consentDao().forChild(currentId)
                 )
                 // 再次读取授权，防止系统文件选择器打开期间撤回授权。
                 check(database.consentDao().find(currentId, "export")?.status == "granted") {
@@ -1337,6 +1345,83 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
+    fun refreshAgentAudit() {
+        val scopedChildId = childId
+        viewModelScope.launch {
+            if (database.childBindingDao().findActive(localUserId, scopedChildId) == null) {
+                _uiState.update { it.copy(professional = it.professional.copy(auditRuns = emptyList(),
+                    auditReplay = emptyList(), auditSelectedRunId = null, auditMessage = "当前用户未绑定该儿童。")) }
+                return@launch
+            }
+            val runs = database.agentDao().runsForChild(scopedChildId).take(20)
+            val metrics = com.xingmou.core.agent.AgentMetricsRepository(database).forChild(scopedChildId)
+            val metricsSummary = metrics.unsupportedJudgmentRate?.let { rate ->
+                "无依据判断率 %.0f%% · 已标注 %d 条".format(rate * 100, metrics.evidenceAnnotationSampleCount)
+            } ?: "依据标注：未采样"
+            if (activeChildId != scopedChildId) return@launch
+            _uiState.update { state -> state.copy(professional = state.professional.copy(
+                auditRuns = runs.map { AgentRunAuditUi(it.runId, it.taskType, it.port, it.status, it.startedAt) },
+                auditReplay = emptyList(), auditSelectedRunId = null,
+                auditMessage = if (runs.isEmpty()) "当前儿童暂无 Agent 运行记录。" else "选择一次运行查看脱敏回放。",
+                auditMetricsSummary = metricsSummary
+            )) }
+        }
+    }
+
+    fun openAgentAudit(runId: String) {
+        val scopedChildId = childId
+        viewModelScope.launch {
+            val dao = database.agentDao()
+            val run = dao.findRun(runId)
+            if (run?.childId != scopedChildId || activeChildId != scopedChildId ||
+                database.childBindingDao().findActive(localUserId, scopedChildId) == null) {
+                _uiState.update { it.copy(professional = it.professional.copy(auditMessage = "无权查看该运行记录。")) }
+                return@launch
+            }
+            val lines = buildList {
+                dao.steps(runId).forEach { step ->
+                    add(AgentReplayLineUi(step.createdAt, "步骤 ${step.stepIndex}",
+                        "状态 ${step.state} · 动作 ${step.actionType ?: "—"} · 重试 ${step.retryCount}"))
+                }
+                dao.events(runId).filter { it.childId == scopedChildId }.forEach { event ->
+                    add(AgentReplayLineUi(event.createdAt, "事件", "${event.eventType} · ${event.status}"))
+                }
+                dao.toolCalls(runId).forEach { call ->
+                    add(AgentReplayLineUi(call.createdAt, "工具", "${call.toolName} · 授权 ${call.authorizationStatus} · 执行 ${call.executionStatus}"))
+                }
+                dao.traces(runId).forEach { trace ->
+                    fun count(json: String): Int = runCatching { com.google.gson.JsonParser.parseString(json).asJsonArray.size() }.getOrDefault(0)
+                    add(AgentReplayLineUi(trace.createdAt, "决策轨迹", "步骤 ${trace.stepIndex} · 提示 ${trace.promptVersion ?: "—"} · 模型 ${trace.modelVersion ?: "本地"} · 规则 ${count(trace.ruleRefsJson)} · 来源 ${count(trace.knowledgeRefsJson)} · 工具 ${count(trace.toolRefsJson)} · 人工决定 ${trace.humanDecisionLabel()}", trace.traceId, trace.humanDecision))
+                }
+                dao.reviews(runId).filter { it.childId == scopedChildId }.forEach { review ->
+                    add(AgentReplayLineUi(review.createdAt, "人工审核", "${review.targetType} · ${review.status}"))
+                }
+            }.sortedBy { it.timestamp }
+            if (activeChildId != scopedChildId) return@launch
+            _uiState.update { it.copy(professional = it.professional.copy(
+                auditSelectedRunId = runId, auditReplay = lines,
+                auditMessage = if (lines.isEmpty()) "此运行没有可回放的脱敏节点。" else "仅展示状态与事件类型；原始提示词、儿童观察和工具参数不展示。"
+            )) }
+        }
+    }
+
+    fun annotateAgentTrace(runId: String, traceId: String, decision: String) {
+        if (decision !in setOf("supported", "unsupported", "uncertain")) return
+        val scopedChildId = childId
+        viewModelScope.launch {
+            val run = database.agentDao().findRun(runId)
+            if (run?.childId != scopedChildId || database.childBindingDao().findActive(localUserId, scopedChildId) == null) return@launch
+            if (database.agentDao().annotateTrace(runId, traceId, decision) == 1) openAgentAudit(runId)
+        }
+    }
+
+    private fun com.xingmou.data.db.DecisionTraceEntity.humanDecisionLabel(): String = when (humanDecision) {
+        "supported" -> "依据充分"
+        "unsupported" -> "无依据"
+        "uncertain" -> "不确定"
+        else -> "未标注"
+    }
+
     private suspend fun publishActivePlanToHomeTask(plan: PlanVersionEntity) {
         database.homeTaskDao().upsert(createHomeTaskFromPlan(plan))
         loadHomeSupport(childId)
@@ -1499,6 +1584,25 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
             dao.insertToolCall(call.copy(argumentsSummary = "[omitted]", resultSummary = null,
                 createdAt = completedAt, finishedAt = completedAt))
         }
+        val remoteEvent = dao.events(result.runId).firstOrNull { it.eventType.startsWith("REMOTE_AI_CALL_") }
+        val sourceIds = if (result.route == com.xingmou.core.agent.OrchestrationRoute.COMPLETED) {
+            result.output?.getAsJsonArray("sources")?.mapNotNull { source ->
+                runCatching { source.asJsonObject.get("source_id")?.asString }.getOrNull()
+            }.orEmpty()
+        } else emptyList()
+        dao.insertTrace(DecisionTraceFactory.create(
+            traceId = newId("trace"), runId = result.runId, stepIndex = snapshot.steps.lastOrNull()?.stepIndex ?: 0,
+            promptVersion = "v1.0", modelVersion = when (remoteEvent?.eventType) {
+                "REMOTE_AI_CALL_SUCCEEDED" -> "deepseek-chat"
+                "REMOTE_AI_CALL_FAILED" -> "deepseek-chat-failed"
+                else -> "local-safe"
+            },
+            evidence = DecisionEvidence(
+                ruleRefs = listOf("RiskEngine", "JsonValidator", "PortGuard") + if (remoteEvent != null) listOf("GatewayPolicy") else emptyList(),
+                knowledgeRefs = sourceIds,
+                toolRefs = snapshot.toolCalls.map { it.toolName }.distinct()
+            ), createdAt = completedAt
+        ))
         if (result.route == com.xingmou.core.agent.OrchestrationRoute.FALLBACK) {
             dao.upsertEvent(AgentEventEntity(newId("audit-agent"), result.runId, scopedChildId,
                 "FALLBACK_TRIGGERED", "route=FALLBACK", "processed", completedAt, completedAt))

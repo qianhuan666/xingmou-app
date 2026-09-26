@@ -38,6 +38,9 @@ interface AbilityProfileDao {
 
     @Query("SELECT * FROM ability_profiles WHERE childId = :childId ORDER BY createdAt DESC LIMIT 1")
     suspend fun latestForChild(childId: String): AbilityProfileEntity?
+
+    @Query("SELECT * FROM ability_profiles WHERE childId = :childId ORDER BY createdAt DESC")
+    suspend fun allForChild(childId: String): List<AbilityProfileEntity>
 }
 
 @Dao
@@ -158,6 +161,9 @@ interface PlanDao {
 
     @Query("SELECT * FROM plan_versions WHERE childId = :childId ORDER BY version DESC LIMIT 1")
     suspend fun latest(childId: String): PlanVersionEntity?
+
+    @Query("SELECT * FROM plan_versions WHERE childId = :childId ORDER BY version DESC")
+    suspend fun allForChild(childId: String): List<PlanVersionEntity>
 
     @Query("SELECT * FROM plan_versions WHERE childId = :childId ORDER BY version DESC")
     fun observeVersions(childId: String): Flow<List<PlanVersionEntity>>
@@ -350,6 +356,21 @@ interface AgentDao {
 
     @Query("SELECT * FROM agent_events WHERE runId = :runId ORDER BY createdAt ASC")
     suspend fun events(runId: String): List<AgentEventEntity>
+
+    @Query("SELECT * FROM tool_calls WHERE runId = :runId ORDER BY createdAt ASC")
+    suspend fun toolCalls(runId: String): List<ToolCallEntity>
+
+    @Query("SELECT * FROM decision_traces WHERE runId = :runId ORDER BY stepIndex ASC")
+    suspend fun traces(runId: String): List<DecisionTraceEntity>
+
+    @Query("SELECT * FROM decision_traces WHERE runId IN (SELECT runId FROM agent_runs WHERE childId = :childId)")
+    suspend fun tracesForChild(childId: String): List<DecisionTraceEntity>
+
+    @Query("UPDATE decision_traces SET humanDecision = :decision WHERE traceId = :traceId AND runId = :runId")
+    suspend fun annotateTrace(runId: String, traceId: String, decision: String): Int
+
+    @Query("SELECT * FROM review_requests WHERE runId = :runId ORDER BY createdAt ASC")
+    suspend fun reviews(runId: String): List<ReviewRequestEntity>
 
     @Query("SELECT * FROM review_requests WHERE childId = :childId AND status = 'pending' ORDER BY createdAt DESC LIMIT 1")
     suspend fun pendingReviewForChild(childId: String): ReviewRequestEntity?

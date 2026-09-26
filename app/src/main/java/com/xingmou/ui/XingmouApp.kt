@@ -332,6 +332,9 @@ private fun PortContent(viewModel: XingmouViewModel, port: Port, modifier: Modif
             onActivate = viewModel::activatePlan,
             onReject = viewModel::rejectPlan,
             onRefresh = viewModel::refreshProfessionalAnalysis,
+            onRefreshAgentAudit = viewModel::refreshAgentAudit,
+            onOpenAgentAudit = viewModel::openAgentAudit,
+            onAnnotateAgentTrace = viewModel::annotateAgentTrace,
             modifier = modifier
         )
     }

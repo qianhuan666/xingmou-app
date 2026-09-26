@@ -36,6 +36,9 @@ import com.xingmou.ui.components.SectionSurface
 import com.xingmou.ui.components.StatusLine
 import com.xingmou.ui.theme.Success
 import com.xingmou.ui.theme.Warning
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @Composable
 fun ProfessionalScreen(
@@ -65,6 +68,9 @@ fun ProfessionalScreen(
     onActivate: () -> Unit,
     onReject: () -> Unit,
     onRefresh: () -> Unit,
+    onRefreshAgentAudit: () -> Unit,
+    onOpenAgentAudit: (String) -> Unit,
+    onAnnotateAgentTrace: (String, String, String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -87,7 +93,7 @@ fun ProfessionalScreen(
                         MethodLibraryPanel()
                         CareWorkflowPanel(state, onAdvanceCareStage, onCareNoteChange, onCareClosureReasonChange, onCareFollowUpPlanChange, onCareFollowUpDateChange)
                         HomeFeedbackPanel(state)
-                        AgentPanel(state)
+                        AgentPanel(state, onRefreshAgentAudit, onOpenAgentAudit, onAnnotateAgentTrace)
                     }
                     PlanPanel(state, onReviewCommentChange, onPlanTaskChange, onPlanGoalChange, onPlanDifficultyChange, onPlanSupportLevelChange, onPlanFrequencyChange, onPlanDurationChange, onPlanStopConditionsChange, onCreateRevision, onCreateDraft, onConfirm, onActivate, onReject, Modifier.weight(1.12f))
                 }
@@ -102,7 +108,7 @@ fun ProfessionalScreen(
                     CareWorkflowPanel(state, onAdvanceCareStage, onCareNoteChange, onCareClosureReasonChange, onCareFollowUpPlanChange, onCareFollowUpDateChange)
                     HomeFeedbackPanel(state)
                     PlanPanel(state, onReviewCommentChange, onPlanTaskChange, onPlanGoalChange, onPlanDifficultyChange, onPlanSupportLevelChange, onPlanFrequencyChange, onPlanDurationChange, onPlanStopConditionsChange, onCreateRevision, onCreateDraft, onConfirm, onActivate, onReject, Modifier.fillMaxWidth())
-                    AgentPanel(state)
+                    AgentPanel(state, onRefreshAgentAudit, onOpenAgentAudit, onAnnotateAgentTrace)
                 }
             }
         }
@@ -425,7 +431,8 @@ private fun PlanPanel(
 }
 
 @Composable
-private fun AgentPanel(state: ProfessionalUiState) {
+private fun AgentPanel(state: ProfessionalUiState, onRefreshAudit: () -> Unit, onOpenAudit: (String) -> Unit, onAnnotateTrace: (String, String, String) -> Unit) {
+    val timeFormat = remember { SimpleDateFormat("MM-dd HH:mm:ss", Locale.getDefault()) }
     SectionSurface(title = "Agent 运行", supporting = "本地可审计信息，不展示原始敏感数据。", containerColor = MaterialTheme.colorScheme.primaryContainer) {
         StatusLine("运行状态", state.agentStatus)
         Spacer(Modifier.height(8.dp))
@@ -437,5 +444,30 @@ private fun AgentPanel(state: ProfessionalUiState) {
         HorizontalDivider(Modifier.padding(vertical = 14.dp))
         Text("规则与工具", style = MaterialTheme.typography.titleMedium)
         Text(state.evidence.joinToString(" · "), modifier = Modifier.padding(top = 6.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
+        HorizontalDivider(Modifier.padding(vertical = 14.dp))
+        Text("审计回放", style = MaterialTheme.typography.titleMedium)
+        Text(state.auditMessage, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(state.auditMetricsSummary, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp))
+        OutlinedButton(onClick = onRefreshAudit, modifier = Modifier.padding(top = 8.dp)) { Text("刷新当前儿童运行记录") }
+        state.auditRuns.forEach { run ->
+            OutlinedButton(onClick = { onOpenAudit(run.runId) }, modifier = Modifier.fillMaxWidth().padding(top = 6.dp)) {
+                Text("${timeFormat.format(Date(run.startedAt))} · ${run.taskType} · ${run.port} · ${run.status} · ${run.runId.takeLast(8)}")
+            }
+        }
+        if (state.auditSelectedRunId != null) {
+            Text("运行 ${state.auditSelectedRunId.takeLast(8)}", style = MaterialTheme.typography.titleSmall,
+                modifier = Modifier.padding(top = 12.dp))
+            state.auditReplay.forEach { line ->
+                Text("${timeFormat.format(Date(line.timestamp))} · ${line.category} · ${line.description}", modifier = Modifier.padding(top = 5.dp))
+                if (line.traceId != null) {
+                    val traceId = line.traceId
+                    Row(modifier = Modifier.fillMaxWidth().padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        OutlinedButton(onClick = { onAnnotateTrace(state.auditSelectedRunId!!, traceId, "supported") }) { Text("依据充分") }
+                        OutlinedButton(onClick = { onAnnotateTrace(state.auditSelectedRunId!!, traceId, "unsupported") }) { Text("无依据") }
+                        OutlinedButton(onClick = { onAnnotateTrace(state.auditSelectedRunId!!, traceId, "uncertain") }) { Text("不确定") }
+                    }
+                }
+            }
+        }
     }
 }

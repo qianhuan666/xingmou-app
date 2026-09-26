@@ -163,6 +163,11 @@ data class ProfessionalUiState(
     val agentStatus: String = "本地待命",
     val recentEvent: String = "尚无事件",
     val evidence: List<String> = listOf("RiskEngine", "AnalysisEngine", "PlanStateMachine"),
+    val auditRuns: List<AgentRunAuditUi> = emptyList(),
+    val auditReplay: List<AgentReplayLineUi> = emptyList(),
+    val auditSelectedRunId: String? = null,
+    val auditMessage: String = "点击刷新查看当前儿童的 Agent 运行记录。",
+    val auditMetricsSummary: String = "依据标注：未采样",
     val reportMetrics: List<ReportMetricUi> = listOf(
         ReportMetricUi("正确率", "—", "至少 3 条记录后计算"),
         ReportMetricUi("独立完成率", "—", "L0 或无需提示"),
@@ -196,6 +201,19 @@ data class ProfessionalUiState(
     val careSignature: String = "local-professional",
     val careTimeline: List<CareRecordUi> = emptyList(),
     val recentHomeFeedback: List<HomeFeedbackUi> = emptyList()
+)
+
+data class AgentRunAuditUi(
+    val runId: String, val taskType: String, val port: String,
+    val status: String, val startedAt: Long
+)
+
+data class AgentReplayLineUi(
+    val timestamp: Long,
+    val category: String,
+    val description: String,
+    val traceId: String? = null,
+    val humanDecision: String? = null
 )
 
 data class ReportMetricUi(val label: String, val value: String, val detail: String)

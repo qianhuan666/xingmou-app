@@ -2,6 +2,10 @@ package com.xingmou.core.consent
 
 import com.xingmou.data.db.CareRecordEntity
 import com.xingmou.data.db.ChildEntity
+import com.xingmou.data.db.AbilityProfileEntity
+import com.xingmou.data.db.PlanVersionEntity
+import com.xingmou.data.db.ReviewRequestEntity
+import com.xingmou.data.db.ConsentEntity
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -113,5 +117,36 @@ class DataRightsManagerTest {
             emptyList(), emptyList(), emptyList(), emptyList(), emptyList(), 2L
         )
         assertTrue(manager.toCsv(json).contains("\"'=HYPERLINK("))
+    }
+
+    @Test
+    fun exportIncludesAdditionalScopedRecordsWithoutRawEvidenceOrDraft() {
+        val child = ChildEntity("child-a", "小星", "学龄期", "SHORT_SENTENCE", "L1", createdAt = 1L, updatedAt = 1L)
+        val profile = AbilityProfileEntity("profile-a", "child-a", "active", "{\"A\":2}", 0.8,
+            "原始作答不可导出", "[\"assessment-a\"]", 1L)
+        val plan = PlanVersionEntity("plan-a", "child-a", 1, "draft", true,
+            "{\"observable_goal\":\"完成图片配对\",\"private\":\"内部方案秘密\"}", 1L, 1L)
+        val review = ReviewRequestEntity("review-a", "child-a", "run-a", "plan", "plan-a",
+            "原始草案不可导出", null, "pending", null, null, 1L, null)
+        val consent = ConsentEntity("consent-a", "child-a", "remote_ai", "revoked", 1L, 2L)
+        val json = manager.buildAuthorizedExport(ConsentStatus.GRANTED, child,
+            emptyList(), emptyList(), emptyList(), emptyList(), emptyList(), 3L,
+            listOf(profile), listOf(plan), listOf(review), listOf(consent))
+        assertTrue(json.contains("\"schemaVersion\":2"))
+        assertTrue(json.contains("完成图片配对"))
+        assertTrue(json.contains("assessment-a"))
+        assertTrue(json.contains("remote_ai"))
+        assertFalse(json.contains("原始作答不可导出"))
+        assertFalse(json.contains("内部方案秘密"))
+        assertFalse(json.contains("原始草案不可导出"))
+        assertTrue(manager.toCsv(json).contains("abilityProfiles"))
+    }
+
+    @Test(expected = IllegalStateException::class)
+    fun exportRejectsAnotherChildPlan() {
+        val child = ChildEntity("child-a", "小星", "学龄期", "SHORT_SENTENCE", "L1", createdAt = 1L, updatedAt = 1L)
+        manager.buildAuthorizedExport(ConsentStatus.GRANTED, child,
+            emptyList(), emptyList(), emptyList(), emptyList(), emptyList(), 3L,
+            plans = listOf(PlanVersionEntity("plan-b", "child-b", 1, "draft", true, "{}", 1L, 1L)))
     }
 }
