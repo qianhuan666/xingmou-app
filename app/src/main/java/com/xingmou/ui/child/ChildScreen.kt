@@ -20,11 +20,13 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.foundation.Image
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
@@ -39,6 +41,7 @@ import com.xingmou.ui.components.SectionSurface
 import com.xingmou.ui.components.StatusLine
 import com.xingmou.ui.components.XiaoXingMark
 import com.xingmou.ui.theme.Error
+import com.xingmou.R
 
 @Composable
 fun ChildScreen(
@@ -118,6 +121,11 @@ fun ChildScreen(
                 }
             } else {
                 Text("${state.courseTitle} · 第 ${state.currentCourseLevel} 关 · ${state.courseProgress.coerceAtMost(state.courseTotal)} / ${state.courseTotal} 个活动", style = MaterialTheme.typography.labelLarge)
+                Image(
+                    painter = painterResource(assetResource(state.assetKey)),
+                    contentDescription = "训练素材：${state.courseTitle}",
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 96.dp, max = 144.dp).padding(vertical = 8.dp)
+                )
                 if (state.courseProgress >= state.courseTotal) {
                     Text("第一关完成了，可以休息一下。", style = MaterialTheme.typography.titleMedium)
                 } else BoxWithConstraints(Modifier.fillMaxWidth()) {
@@ -229,6 +237,18 @@ fun ChildScreen(
             SettingRow("慢动效", "放慢页面变化，给更多反应时间", accessibility.slowMotion) { onSlowMotionChange(it) }
         }
     }
+}
+
+private fun assetResource(key: String): Int = when (key) {
+    "training_ball" -> R.drawable.training_ball
+    "training_tree" -> R.drawable.training_tree
+    "training_car" -> R.drawable.training_car
+    "training_cup" -> R.drawable.training_cup
+    "training_square" -> R.drawable.training_square
+    "training_circle" -> R.drawable.training_circle
+    "training_animal" -> R.drawable.training_animal
+    "training_bird" -> R.drawable.training_bird
+    else -> R.drawable.training_star
 }
 
 @Composable

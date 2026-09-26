@@ -61,6 +61,7 @@ data class ChildUiState(
     val currentCourseLevel: Int = 1,
     val courseTitle: String = "图片配对",
     val courseQuestionId: String? = null,
+    val assetKey: String = "training_star",
     val courseUnlocked: Boolean = false,
     val courseOpen: Boolean = true,
     val courseSummary: String = "尚无第一关记录",

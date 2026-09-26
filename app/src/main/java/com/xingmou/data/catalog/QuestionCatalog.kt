@@ -12,7 +12,8 @@ data class QuestionDefinition(
     val prompt: String,
     val options: List<String>,
     val correctOption: Int? = null,
-    val sourceRef: String = "local-v0.7b"
+    val sourceRef: String = "local-v0.7b",
+    val assetKey: String = "training_star"
 )
 
 object QuestionCatalog {
@@ -65,7 +66,20 @@ object QuestionCatalog {
                 prompt = "${task.name}：${task.goal}",
                 options = options,
                 correctOption = if (task.engine == "observed") null else 0,
-                sourceRef = "LOCAL_COURSE_V0.8_${task.id}"
+                sourceRef = "LOCAL_COURSE_V0.8_${task.id}",
+                assetKey = when (task.engine) {
+                    "memory_match" -> "training_ball"
+                    "sequence" -> "training_cup"
+                    "sorting" -> "training_square"
+                    "observed" -> "training_star"
+                    "audio" -> "training_bird"
+                    else -> when (levelIndex % 4) {
+                        0 -> "training_circle"
+                        1 -> "training_car"
+                        2 -> "training_tree"
+                        else -> "training_animal"
+                    }
+                }
             )
         }
     }

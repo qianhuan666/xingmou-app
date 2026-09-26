@@ -318,6 +318,7 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                 currentCourseLevel = currentLevel,
                 courseTitle = question?.let { q -> V08_COURSE_LEVELS.getOrNull(currentLevel - 1)?.title ?: q.moduleId } ?: "课程完成",
                 courseQuestionId = question?.id,
+                assetKey = question?.assetKey ?: it.child.assetKey,
                 courseUnlocked = baselineSession.status == BaselineStatus.COMPLETED,
                 courseOpen = true,
                 courseSummary = progress.summary,
