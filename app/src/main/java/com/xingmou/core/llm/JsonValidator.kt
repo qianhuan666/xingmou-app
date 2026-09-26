@@ -16,6 +16,20 @@ import com.xingmou.core.rule.PortGuard
  */
 object JsonValidator {
 
+    /** 模型引用必须来自本次放行的知识或训练记录 ID，不能自造一套内部一致的来源。 */
+    fun validateSourceScope(obj: JsonObject, approvedSourceIds: Collection<String>): Result<Unit> = runCatching {
+        val approved = approvedSourceIds.toSet()
+        val sources = obj.getAsJsonArray("sources")?.map { source ->
+            source.asJsonObject.get("source_id")?.asString ?: error("source_id_missing")
+        }.orEmpty()
+        require(sources.all { it in approved }) { "unapproved_source" }
+        obj.getAsJsonArray("claims")?.forEach { claim ->
+            val ids = claim.asJsonObject.getAsJsonArray("source_ids")?.map { it.asString }.orEmpty()
+            require(ids.isNotEmpty()) { "claim_source_required" }
+            require(ids.all { it in approved }) { "unapproved_source" }
+        }
+    }
+
     /** 各端口允许的 state/mode 枚举 */
     private val allowedState = mapOf(
         Port.CHILD to setOf("continue", "hint", "choice", "pause", "safety_stop"),

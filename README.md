@@ -6,7 +6,7 @@
 
 - **单机平板 + 纯前端本地 App + 直连云端大模型**（无后端）
 - **技术栈**：Kotlin + Jetpack Compose + Room + OkHttp + Gson + Coroutines
-- **大模型**：DeepSeek（`https://api.deepseek.com/chat/completions`，OpenAI 兼容格式，支持 `response_format: json_object`）
+- **大模型**：机构使用者在专业端自行设置 API Key 后直连 DeepSeek（`https://api.deepseek.com/chat/completions`）；无 Key 或无当前儿童远程 AI 同意时保持本地安全模式
 - **核心原则**：规则引擎（确定性代码）管安全，大模型只负责理解/改写/草拟，JSON 严格校验 + 确定性降级兜底
 
 ## 二、目录结构
@@ -21,7 +21,8 @@ app/src/main/java/com/xingmou/
 │   │   ├── TaskWhitelist.kt        #   白名单任务
 │   │   └── DifficultyController.kt #   难度单次 ±1 级
 │   ├── llm/
-│   │   ├── DeepSeekClient.kt       #   直连 DeepSeek，强制 JSON 输出
+│   │   ├── DirectDeepSeekGateway.kt # 运行时 BYOK 直连，强制 JSON 输出
+│   │   ├── LocalApiKeyStore.kt     #   当前设备的 Key 设置/清除
 │   │   ├── PromptBuilder.kt        #   脱敏 + 组装三角色系统提示词
 │   │   └── JsonValidator.kt        #   JSON 校验 + 悬空引用检查 + 降级
 │   ├── model/
@@ -45,14 +46,14 @@ app/src/main/java/com/xingmou/
 | 端口权限隔离 | `PortGuard` |
 | 白名单任务 | `TaskWhitelist` |
 | 单次 ±1 级 | `DifficultyController` |
-| 每条判断可溯源 | `Claim.sourceIds` → `JsonValidator` 悬空引用校验 |
-| 来源不得凭模型生成 | `PromptBuilder` 只注入 `approved_knowledge` 元数据 |
+| 每条判断可溯源 | `JsonValidator` 检查悬空引用，`AgentOrchestrator` 校验本次放行的知识/训练记录 ID |
+| 来源不得凭模型生成 | `ContextAssembler` 仅注入本次匹配的已审核知识与训练记录摘要 |
 | 输出前自检 | `JsonValidator` 校验失败 → `SafeResponses` 降级 |
 | 隐私最小化 | `PromptBuilder` 只传化名/汇总，真实信息本地硬过滤 |
 
 ## 四、当前工程状态
 
-阶段 6 首轮自动化验收已完成：项目现在包含可编译的 Gradle Android 工程、Room 数据层、领域与安全规则、Agent Runtime、事件协调器、三端口 Compose 页面、儿童端本地 TTS 朗读和辅助设置，以及 10 条红队边界测试、Room 仪器测试和 Compose UI 仪器测试。
+项目包含 Room 数据层、领域与安全规则、Agent Runtime、事件协调器、三端口 Compose 页面、本地 TTS 与辅助设置。V1.0 采用纯前端 BYOK：专业端设置 Key，经当前儿童授权后才允许家长/专业端请求远程模型；儿童训练始终保有本地安全降级。
 
 ```powershell
 cd xingmou-app
@@ -61,15 +62,9 @@ cd xingmou-app
 
 Debug APK 输出位置：`app/build/outputs/apk/debug/app-debug.apk`。
 
-本机联调 DeepSeek 时，可在不会提交 Git 的 `local.properties` 中增加：
+Key 不从 `local.properties` 或构建环境注入。使用步骤、风险与联调边界见 [机构APIKey设置与纯前端直连说明.md](docs/机构APIKey设置与纯前端直连说明.md)。运行时 Key 保存在当前设备，可被提取的风险由 Key 持有人接受；不要提交 Key 到 Git。
 
-```properties
-DEEPSEEK_API_KEY=你的本机开发密钥
-```
-
-未配置时 `DeepSeekClientFactory.createOrNull()` 返回 `null`，应用应使用 Mock 或确定性降级，不会自动发起网络模型请求。生产发布仍建议通过服务端代理或更强的密钥保护方案，避免将长期密钥直接打包进 APK。
-
-阶段 5 已完成：儿童端通过 Android `TextToSpeech` 朗读规则层确认后的短句，支持朗读开关、语速、朗读音量、大字体和高对比设置，所有选择通过本机偏好持久化。阶段 6 已通过 `testDebugUnitTest`、`connectedDebugAndroidTest` 和 `assembleDebug`；`Pixel_Tablet` 上 4 项 Android 仪器测试全部通过。DeepSeek Key 已仅写入本机 `local.properties`，默认仍使用本地安全 ModelGateway，不会因配置 Key 自动发送训练数据。开发过程记录见：[开发日志.md](docs/开发日志.md)。
+开发过程与实际测试结果见 [开发日志.md](docs/开发日志.md)；发布待办见 [V1.0发布验收与阻断项.md](docs/V1.0发布验收与阻断项.md)。
 
 ## 五、依赖清单（build.gradle.kts）
 
@@ -90,6 +85,6 @@ dependencies {
 1. 使用 Android Studio 打开本目录，并等待 Gradle Sync 完成。
 2. 创建或启动 Android Emulator 平板 AVD。
 3. 运行 `app`，依次验收儿童端、家长端和专业端主要流程。
-4. 联调 DeepSeek 时通过本机 `local.properties` 注入开发密钥，**不要硬编码或提交密钥**；当前默认离线安全网关不会自动联网。
+4. 如需联调 DeepSeek，进入专业端顶部“机构 API Key”填写测试 Key，再对专用测试儿童开启“远程 AI”授权；不要硬编码或提交 Key。
 
-> 说明：当前 `XingmouViewModel` 默认使用本地安全 ModelGateway 验证 Agent 闭环；即使本机配置了 DeepSeek Key，也不会在未明确切换网关前自动发送训练数据到外部服务。
+> 无 Key、无当前儿童授权或模型失败时，使用本地安全模式；真实 DeepSeek 联调不由自动测试发起。

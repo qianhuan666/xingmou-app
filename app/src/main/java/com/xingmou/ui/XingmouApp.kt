@@ -32,6 +32,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -72,10 +73,12 @@ fun XingmouApp(viewModel: XingmouViewModel) {
                         onExportAuthorizedCsv = {
                             csvExportLauncher.launch("xingmou-${state.activeChildId}-${System.currentTimeMillis()}.csv")
                         },
-                        onDeleteChild = viewModel::deleteActiveChild
+                        onDeleteChild = viewModel::deleteActiveChild,
+                        onSaveApiKey = viewModel::saveInstitutionApiKey,
+                        onClearApiKey = viewModel::clearInstitutionApiKey
                     )
                 },
-                bottomBar = { AppStatusBand(aiConfigured = state.aiConfigured) }
+                bottomBar = { AppStatusBand(aiConfigured = state.aiConfigured, remoteAiConsent = state.remoteAiConsent) }
             ) { padding ->
                 BoxWithConstraints(Modifier.fillMaxSize().padding(padding)) {
                     if (maxWidth >= 840.dp) {
@@ -106,7 +109,9 @@ private fun ChildContextBar(
     onExportConsentChange: (Boolean) -> Unit,
     onExportAuthorizedData: () -> Unit,
     onExportAuthorizedCsv: () -> Unit,
-    onDeleteChild: () -> Unit
+    onDeleteChild: () -> Unit,
+    onSaveApiKey: (String) -> Unit,
+    onClearApiKey: () -> Unit
 ) {
     val expandedState = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
     val dialogMode = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<String?>(null) }
@@ -114,6 +119,8 @@ private fun ChildContextBar(
     val ageBandState = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf("学龄期") }
     val consentOpen = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
     val deleteConfirm = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+    val apiKeyOpen = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+    val apiKeyInput = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf("") }
     Surface(color = MaterialTheme.colorScheme.surface, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
@@ -125,6 +132,9 @@ private fun ChildContextBar(
             TextButton(onClick = { dialogMode.value = "edit" }) { Text("编辑") }
             TextButton(onClick = onArchiveChild, enabled = state.availableChildren.size > 1) { Text("归档") }
             TextButton(onClick = { consentOpen.value = true }) { Text("授权") }
+            if (state.selectedPort == Port.PROFESSIONAL) {
+                TextButton(onClick = { apiKeyInput.value = ""; apiKeyOpen.value = true }) { Text("机构 API Key") }
+            }
             DropdownMenu(expanded = expandedState.value, onDismissRequest = { expandedState.value = false }) {
                 state.availableChildren.forEach { child ->
                     DropdownMenuItem(
@@ -134,6 +144,38 @@ private fun ChildContextBar(
                 }
             }
         }
+    }
+    if (apiKeyOpen.value) {
+        AlertDialog(
+            onDismissRequest = { apiKeyInput.value = ""; apiKeyOpen.value = false },
+            title = { Text("API Key 设置") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("由机构使用者自行填写 DeepSeek Key，保存在当前设备。设备持有 Key 可能被提取并产生费用；远程调用仍需当前儿童的明确授权。", style = MaterialTheme.typography.bodySmall)
+                    OutlinedTextField(
+                        value = apiKeyInput.value,
+                        onValueChange = { apiKeyInput.value = it.take(256) },
+                        label = { Text("DeepSeek API Key") },
+                        visualTransformation = PasswordVisualTransformation(),
+                        singleLine = true
+                    )
+                    Text(state.apiKeyMessage, style = MaterialTheme.typography.bodySmall)
+                    OutlinedButton(onClick = {
+                        onClearApiKey()
+                        apiKeyInput.value = ""
+                    }, enabled = state.aiConfigured) { Text("清除已保存 Key") }
+                }
+            },
+            confirmButton = {
+                Button(onClick = {
+                    onSaveApiKey(apiKeyInput.value)
+                    apiKeyInput.value = ""
+                }, enabled = apiKeyInput.value.isNotBlank()) { Text("保存") }
+            },
+            dismissButton = {
+                TextButton(onClick = { apiKeyInput.value = ""; apiKeyOpen.value = false }) { Text("关闭") }
+            }
+        )
     }
     dialogMode.value?.let { mode ->
         AlertDialog(
@@ -342,14 +384,18 @@ private fun CompactPortSelector(selected: Port, onSelect: (Port) -> Unit) {
 }
 
 @Composable
-private fun AppStatusBand(aiConfigured: Boolean) {
+private fun AppStatusBand(aiConfigured: Boolean, remoteAiConsent: Boolean) {
     Surface(color = MaterialTheme.colorScheme.surface, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 9.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                "本地数据已连接 · AI：${if (aiConfigured) "已配置" else "本地安全模式"} · 不构成医学诊断",
+                "本地数据已连接 · AI：${when {
+                    !aiConfigured -> "本地安全模式"
+                    !remoteAiConsent -> "Key 已设置，待当前儿童授权"
+                    else -> "设备直连已就绪"
+                }} · 不构成医学诊断",
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 style = MaterialTheme.typography.bodyMedium,

@@ -18,8 +18,8 @@ fun interface ModelGateway {
 class GatewayRetryableException(message: String) : Exception(message)
 
 /**
- * 把 Android 端的同意、脱敏、费用和超时策略接到任意模型实现前。
- * 生产环境应将 delegate 指向服务端 Gateway 适配器，而不是把长期主 Key 放进 APK。
+ * Android 端 BYOK 直连的同意、脱敏、费用和超时前置策略。
+ * Key 由设备使用者在运行时填写，不进入 APK 构建常量。
  */
 class PolicyBackedModelGateway(
     private val delegate: ModelGateway,
@@ -103,6 +103,13 @@ class AgentOrchestrator(
                 runtime.transition(request.runId, AgentRunState.FAILED, reason = error.message)
                 return@withContext AgentOrchestrationResult(request.runId, OrchestrationRoute.FALLBACK, AgentRunState.FAILED,
                     fallbackText = fallbackText(request.input.port), toolResult = lastToolResult, error = error.message)
+            }
+            if (request.input.port != Port.CHILD) {
+                JsonValidator.validateSourceScope(validated, context.approvedSourceIds).getOrElse { error ->
+                    runtime.transition(request.runId, AgentRunState.FAILED, reason = error.message)
+                    return@withContext AgentOrchestrationResult(request.runId, OrchestrationRoute.FALLBACK, AgentRunState.FAILED,
+                        fallbackText = fallbackText(request.input.port), toolResult = lastToolResult, error = error.message)
+                }
             }
             val action = parseAction(validated)
             if (action == null) {

@@ -10,6 +10,7 @@ import com.xingmou.core.agent.AgentEventProcessor
 import com.xingmou.core.agent.AgentOrchestrationRequest
 import com.xingmou.core.agent.AgentOrchestrationResult
 import com.xingmou.core.agent.AgentOrchestrator
+import com.xingmou.core.agent.PolicyBackedModelGateway
 import com.xingmou.core.agent.ConsecutiveFailuresEvent
 import com.xingmou.core.agent.ModelGateway
 import com.xingmou.core.agent.ParentObservationAddedEvent
@@ -21,6 +22,10 @@ import com.xingmou.core.agent.SessionResumedEvent
 import com.xingmou.core.agent.TrainingCompletedEvent
 import com.xingmou.core.consent.ConsentStatus
 import com.xingmou.core.consent.DataRightsManager
+import com.xingmou.core.llm.DirectDeepSeekGateway
+import com.xingmou.core.llm.GatewayCallRequest
+import com.xingmou.core.llm.GatewayPolicy
+import com.xingmou.core.llm.LocalApiKeyStore
 import com.xingmou.core.domain.AnalysisEngine
 import com.xingmou.core.domain.BaselineEngine
 import com.xingmou.core.domain.BaselineSession
@@ -78,6 +83,7 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
     private val courseProgressEngine = CourseProgressEngine(QuestionCatalog.fullCourseQuestions)
     private val planStateMachine = PlanStateMachine()
     private val dataRightsManager = DataRightsManager()
+    private val apiKeyStore = LocalApiKeyStore(application)
     private var activeChildId: String? = null
     private val localUserId = SeedData.DEMO_USER_ID
     private val childId: String
@@ -91,7 +97,6 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
         }
         Result.success(json)
     }
-    private val orchestrator = AgentOrchestrator(localSafeModel)
 
     private val _uiState = MutableStateFlow(
         XingmouUiState(
@@ -102,7 +107,9 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                 largeText = accessibilityPreferences.getBoolean("large_text", false),
                 highContrast = accessibilityPreferences.getBoolean("high_contrast", false),
                 slowMotion = accessibilityPreferences.getBoolean("slow_motion", false)
-            )
+            ),
+            aiConfigured = apiKeyStore.isConfigured(),
+            apiKeyMessage = if (apiKeyStore.isConfigured()) "已设置设备本地 API Key。" else "未设置 API Key；当前使用本地安全模式。"
         )
     )
     val uiState: StateFlow<XingmouUiState> = _uiState.asStateFlow()
@@ -137,6 +144,7 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
             val child = database.childDao().findById(childId) ?: return@launch
             activeChildId = child.childId
             _uiState.update { it.copy(activeChildId = child.childId, activeChildAlias = child.alias) }
+            loadConsentState(child.childId)
             refreshProfessionalAnalysis()
             loadBaseline(child)
             loadCourseProgress(child.childId)
@@ -186,6 +194,26 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun setRemoteAiConsent(granted: Boolean) = setConsent("remote_ai", granted)
+
+    fun saveInstitutionApiKey(value: String) {
+        val saved = runCatching { apiKeyStore.save(value) }.getOrDefault(false)
+        _uiState.update {
+            it.copy(
+                aiConfigured = apiKeyStore.isConfigured(),
+                apiKeyMessage = if (saved) "API Key 已保存到当前设备。" else "保存失败：请检查 Key 格式（以 sk- 开头）。"
+            )
+        }
+    }
+
+    fun clearInstitutionApiKey() {
+        val cleared = apiKeyStore.clear()
+        _uiState.update {
+            it.copy(
+                aiConfigured = apiKeyStore.isConfigured(),
+                apiKeyMessage = if (cleared) "已清除设备 API Key，恢复本地安全模式。" else "清除失败，请重试。"
+            )
+        }
+    }
 
     fun setExportConsent(granted: Boolean) = setConsent("export", granted)
 
@@ -691,33 +719,42 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
             runCatching {
                 val now = System.currentTimeMillis()
                 val runId = newId("parent-run")
+                val scopedChildId = childId
                 val knowledge = database.knowledgeDao().verifiedItems().ifEmpty { SeedData.knowledgeItems }
-                val records = database.trainingRecordDao().recentForChild(childId)
+                val records = database.trainingRecordDao().recentForChild(scopedChildId)
                 val riskDecision = eventCoordinator.handle(
-                    RiskDetectedEvent(newId("risk-event"), runId, childId, now, query)
+                    RiskDetectedEvent(newId("risk-event"), runId, scopedChildId, now, query)
                 )
                 eventCoordinator.handle(
-                    ParentObservationAddedEvent(newId("parent-event"), runId, childId, now, query)
+                    ParentObservationAddedEvent(newId("parent-event"), runId, scopedChildId, now, query)
                 )
                 val retrieval = knowledgeRetriever.retrieve(query, Port.PARENT, items = knowledge)
-                val orchestration = orchestrator.run(
+                val orchestrationAgent = newOrchestrator(runId, scopedChildId, Port.PARENT)
+                val orchestration = orchestrationAgent.run(
                     AgentOrchestrationRequest(
                         runId = runId,
                         taskType = "parent_support",
-                        childId = childId,
-                        input = AgentContextInput(Port.PARENT, session(), query, knowledgeItems = knowledge, recentRecords = records)
+                        childId = scopedChildId,
+                        input = AgentContextInput(Port.PARENT, sessionForChild(scopedChildId), query, knowledgeItems = knowledge, recentRecords = records)
                     )
                 )
-                recordAgentOutcome(orchestration, now, childId)
-                val message = when (retrieval.route) {
+                recordAgentOutcome(orchestrationAgent, orchestration, now, scopedChildId)
+                val localMessage = when (retrieval.route) {
                     KnowledgeRoute.NORMAL -> retrieval.reason
                     KnowledgeRoute.CLARIFY -> retrieval.reason
                     KnowledgeRoute.NOT_FOUND -> "本地已审核知识中暂未找到直接匹配项。请补充发生场景、持续时间和孩子当时的状态。"
                     KnowledgeRoute.REFER -> retrieval.reason
                     KnowledgeRoute.SAFETY_STOP -> riskDecision.message
                 }
+                val aiAcknowledgement = orchestration.output?.get("acknowledgement")
+                    ?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isString }?.asString
+                    ?.replace(Regex("[\r\n]+"), " ")?.trim()?.take(120)
+                    ?.takeIf { orchestration.route == com.xingmou.core.agent.OrchestrationRoute.COMPLETED && it.isNotBlank() }
+                val message = if (aiAcknowledgement != null && retrieval.route != KnowledgeRoute.SAFETY_STOP) {
+                    "$aiAcknowledgement\n$localMessage"
+                } else localMessage
                 _uiState.update {
-                    it.copy(
+                    if (it.activeChildId != scopedChildId) it.copy(parent = it.parent.copy(isWorking = false)) else it.copy(
                         parent = it.parent.copy(
                             route = retrieval.route,
                             message = message,
@@ -984,31 +1021,40 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                 check(planStateMachine.createDraft(PlanActor.MODEL).accepted)
                 val now = System.currentTimeMillis()
                 val runId = newId("professional-run")
-                val records = database.trainingRecordDao().recentForChild(childId)
+                val scopedChildId = childId
+                val childUiSnapshot = _uiState.value.child
+                val records = database.trainingRecordDao().recentForChild(scopedChildId)
                 val knowledge = database.knowledgeDao().verifiedItems().ifEmpty { SeedData.knowledgeItems }
-                val orchestration = orchestrator.run(
+                val orchestrationAgent = newOrchestrator(runId, scopedChildId, Port.PROFESSIONAL)
+                val orchestration = orchestrationAgent.run(
                     AgentOrchestrationRequest(
                         runId = runId,
                         taskType = "plan_draft",
-                        childId = childId,
-                        input = AgentContextInput(Port.PROFESSIONAL, session(), "基于现有训练记录生成待审核草案", knowledgeItems = knowledge, recentRecords = records)
+                        childId = scopedChildId,
+                        input = AgentContextInput(Port.PROFESSIONAL, sessionForChild(scopedChildId), "基于现有训练记录生成待审核草案", knowledgeItems = knowledge, recentRecords = records)
                     )
                 )
-                recordAgentOutcome(orchestration, now, childId)
-                val version = (database.planDao().latest(childId)?.version ?: 0) + 1
+                recordAgentOutcome(orchestrationAgent, orchestration, now, scopedChildId)
+                val modelGoal = orchestration.output?.get("plan")
+                    ?.takeIf { it.isJsonObject }?.asJsonObject?.get("observable_goal")
+                    ?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isString }?.asString
+                    ?.replace(Regex("[\r\n]+"), " ")?.trim()?.take(160)
+                    ?.takeIf { orchestration.route == com.xingmou.core.agent.OrchestrationRoute.COMPLETED && it.isNotBlank() }
+                val draftGoal = modelGoal ?: professional.planGoal
+                val version = (database.planDao().latest(scopedChildId)?.version ?: 0) + 1
                 val plan = PlanVersionEntity(
                     planId = newId("plan"),
-                    childId = childId,
+                    childId = scopedChildId,
                     version = version,
                     status = "draft",
                     reviewRequired = true,
-                    payloadJson = """{"priority_domain":"A","observable_goal":"${jsonEscape(_uiState.value.professional.planGoal)}","task":"图片配对","difficulty":${_uiState.value.child.difficulty},"support_level":"${_uiState.value.child.supportLevel.name}","frequency":"每日 1–2 次","duration":"5 分钟","stop_conditions":"出现疲劳、拒绝或风险时暂停"}""",
+                    payloadJson = """{"priority_domain":"A","observable_goal":"${jsonEscape(draftGoal)}","task":"图片配对","difficulty":${childUiSnapshot.difficulty},"support_level":"${childUiSnapshot.supportLevel.name}","frequency":"每日 1–2 次","duration":"5 分钟","stop_conditions":"出现疲劳、拒绝或风险时暂停"}""",
                     createdAt = now,
                     updatedAt = now
                 )
                 val review = ReviewRequestEntity(
                     reviewId = newId("review"),
-                    childId = childId,
+                    childId = scopedChildId,
                     runId = runId,
                     targetType = "plan",
                     targetId = plan.planId,
@@ -1022,20 +1068,22 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                 )
                 database.planDao().upsert(plan)
                 database.agentDao().upsertReview(review)
-                activePlan = plan
-                activeReview = review
+                if (activeChildId == scopedChildId) {
+                    activePlan = plan
+                    activeReview = review
+                }
                 _uiState.update {
-                    it.copy(professional = it.professional.copy(
+                    if (it.activeChildId != scopedChildId) it.copy(professional = it.professional.copy(isWorking = false)) else it.copy(professional = it.professional.copy(
                         planStatus = PlanStatus.DRAFT,
-                        planSummary = "优先领域 A · 图片配对 · 难度 ${_uiState.value.child.difficulty} · 支持 ${_uiState.value.child.supportLevel.name} · 每次 5–10 分钟",
+                        planSummary = "优先领域 A · 图片配对 · 难度 ${childUiSnapshot.difficulty} · 支持 ${childUiSnapshot.supportLevel.name} · 每次 5–10 分钟",
                         planTask = "图片配对",
-                        planGoal = _uiState.value.professional.planGoal,
-                        planDifficulty = _uiState.value.child.difficulty.toString(),
-                        planSupportLevel = _uiState.value.child.supportLevel.name,
+                        planGoal = draftGoal,
+                        planDifficulty = childUiSnapshot.difficulty.toString(),
+                        planSupportLevel = childUiSnapshot.supportLevel.name,
                         planFrequency = "每日 1–2 次",
                         planDuration = "5 分钟",
                         planStopConditions = "出现疲劳、拒绝或风险时暂停",
-                        reviewMessage = "草案已生成，需先确认，再签署生效。",
+                        reviewMessage = if (modelGoal != null) "AI 待审核目标已写入草案；请核对后确认、签署。" else "本地草案已生成，需先确认，再签署生效。",
                         isWorking = false,
                         agentRunId = runId,
                         agentStatus = orchestration.route.name,
@@ -1327,7 +1375,7 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
     private fun diffJson(diffs: List<PlanDiffUi>): String =
         diffs.joinToString(prefix = "[", postfix = "]") { "{\"field\":\"${jsonEscape(it.field)}\",\"previous\":\"${jsonEscape(it.previous)}\",\"current\":\"${jsonEscape(it.current)}\"}" }
 
-    private fun jsonEscape(value: String): String = value.replace("\\", "\\\\").replace("\"", "\\\"")
+    private fun jsonEscape(value: String): String = com.google.gson.Gson().toJson(value).removeSurrounding("\"")
 
     private fun appendJsonId(json: String, id: String): String {
         val existing = Regex("\\\"([^\\\"]+)\\\"").findAll(json).map { it.groupValues[1] }.toMutableList()
@@ -1384,16 +1432,56 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
         com.xingmou.core.domain.Trend.INSUFFICIENT_DATA -> "数据不足"
     }
 
-    private fun session() = SessionContext(
-        childAlias = "小星",
-        ageBand = "学龄期",
-        communicationLevel = CommunicationLevel.SHORT_SENTENCE,
-        supportLevel = _uiState.value.child.supportLevel,
-        currentDomain = "A",
-        currentTask = "图片配对"
-    )
+    private suspend fun sessionForChild(scopedChildId: String): SessionContext {
+        val child = database.childDao().findById(scopedChildId) ?: error("child_not_found")
+        return SessionContext(
+            childAlias = child.alias,
+            ageBand = child.ageBand,
+            communicationLevel = runCatching { CommunicationLevel.valueOf(child.communicationLevel) }
+                .getOrDefault(CommunicationLevel.SHORT_SENTENCE),
+            supportLevel = runCatching { com.xingmou.core.model.SupportLevel.valueOf(child.supportLevel) }
+                .getOrDefault(com.xingmou.core.model.SupportLevel.L1),
+            currentDomain = "A",
+            currentTask = "图片配对"
+        )
+    }
 
-    private suspend fun recordAgentOutcome(result: AgentOrchestrationResult, startedAt: Long, scopedChildId: String) {
+    private fun newOrchestrator(runId: String, scopedChildId: String, port: Port): AgentOrchestrator {
+        val model = ModelGateway { systemPrompt, userMessage ->
+            val consent = database.consentDao().find(scopedChildId, "remote_ai")?.status.toConsentStatus()
+            val binding = database.childBindingDao().findActive(localUserId, scopedChildId)
+            if (port == Port.CHILD || !apiKeyStore.isConfigured() || consent != ConsentStatus.GRANTED || binding == null) {
+                localSafeModel.complete(systemPrompt, userMessage)
+            } else {
+                val remote = PolicyBackedModelGateway(
+                    delegate = DirectDeepSeekGateway(apiKeyStore::get),
+                    policy = GatewayPolicy(),
+                    requestProvider = {
+                        GatewayCallRequest(
+                            runId = runId,
+                            childId = if (database.childBindingDao().findActive(localUserId, scopedChildId) != null) scopedChildId else null,
+                            port = port.name.lowercase(),
+                            systemPrompt = "",
+                            userText = "",
+                            consentStatus = database.consentDao().find(scopedChildId, "remote_ai")?.status.toConsentStatus()
+                        )
+                    }
+                )
+                val started = System.currentTimeMillis()
+                val result = remote.complete(systemPrompt, userMessage)
+                val finished = System.currentTimeMillis()
+                database.agentDao().upsertEvent(
+                    AgentEventEntity(newId("audit-remote"), runId, scopedChildId,
+                        if (result.isSuccess) "REMOTE_AI_CALL_SUCCEEDED" else "REMOTE_AI_CALL_FAILED",
+                        "model=deepseek-chat;durationMs=${finished - started}", "processed", finished, finished)
+                )
+                result
+            }
+        }
+        return AgentOrchestrator(model)
+    }
+
+    private suspend fun recordAgentOutcome(orchestrator: AgentOrchestrator, result: AgentOrchestrationResult, startedAt: Long, scopedChildId: String) {
         val completedAt = System.currentTimeMillis()
         val snapshot = orchestrator.snapshot(result.runId)
         val dao = database.agentDao()

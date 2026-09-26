@@ -26,7 +26,7 @@ data class AssembledContext(
     val systemPrompt: String,
     val userMessage: String,
     val recordSummary: String,
-    val approvedKnowledgeIds: List<String>,
+    val approvedSourceIds: List<String>,
     val dataSufficient: Boolean
 )
 
@@ -37,22 +37,26 @@ class ContextAssembler(
     fun assemble(input: AgentContextInput): AssembledContext {
         val risk = RiskEngine.assessDetailed(input.userText, input.riskFlags, input.consecutiveFailures)
         val knowledge = knowledgeRetriever.retrieve(input.userText, input.port, input.riskFlags, input.knowledgeItems)
-        val recordSummary = input.recentRecords.takeLast(30).joinToString("；") { record ->
-            "${record.domain}/${record.taskId}:correct=${record.correct},first=${record.firstCorrect},reaction=${record.reactionMs ?: "na"},prompt=${record.promptLevel}"
+        val scopedRecords = input.recentRecords.takeLast(30)
+        val recordSummary = scopedRecords.joinToString("；") { record ->
+            "ID=record:${record.recordId};${record.domain}/${record.taskId}:correct=${record.correct},first=${record.firstCorrect},reaction=${record.reactionMs ?: "na"},prompt=${record.promptLevel}"
         }.ifBlank { "暂无训练记录" }
         val session = input.session.copy(
             recentSummary = "记录数=${input.recentRecords.size}；$recordSummary",
             riskFlags = risk.matchedTypes
         )
+        val knowledgeContext = knowledge.matchedItems.joinToString("\n") { item ->
+            "ID=${item.itemId}；标题=${PromptBuilder.sanitize(item.title).take(120)}；内容=${PromptBuilder.sanitize(item.content).take(500)}；来源=${PromptBuilder.sanitize(item.sourceRef.orEmpty()).take(120)}"
+        }.ifBlank { "无已审核匹配条目；不得凭模型记忆补写来源。" }
         val userMessage = PromptBuilder.buildUserMessage(input.port, session, input.userText) +
-            "\n已审核知识ID：" + knowledge.matchedItems.joinToString { it.itemId }
+            "\n本次已审核知识（可引用条目 ID；训练记录 ID 见近期摘要）：\n" + knowledgeContext
         return AssembledContext(
             risk = risk,
             knowledge = knowledge,
             systemPrompt = PromptBuilder.buildSystemPrompt(input.port),
             userMessage = userMessage,
             recordSummary = recordSummary,
-            approvedKnowledgeIds = knowledge.matchedItems.map { it.itemId },
+            approvedSourceIds = knowledge.matchedItems.map { it.itemId } + scopedRecords.map { "record:${it.recordId}" },
             dataSufficient = input.recentRecords.size >= 3
         )
     }

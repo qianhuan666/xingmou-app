@@ -43,7 +43,7 @@ data class GatewayPolicyDecision(
     val prepared: PreparedGatewayRequest? = null
 )
 
-/** Android 端到 AI Gateway 的前置策略。 */
+/** 纯前端直连模型前的本地安全策略。 */
 class GatewayPolicy(
     private val config: GatewayPolicyConfig = GatewayPolicyConfig()
 ) {

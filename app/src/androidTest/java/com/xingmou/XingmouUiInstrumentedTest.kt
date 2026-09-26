@@ -100,6 +100,15 @@ class XingmouUiInstrumentedTest {
     }
 
     @Test
+    fun institutionApiKeySettingsAreReachableFromProfessionalPort() {
+        composeRule.onNodeWithText("专业端").performClick()
+        composeRule.onNodeWithText("机构 API Key").performClick()
+        composeRule.onNodeWithText("API Key 设置").assertIsDisplayed()
+        composeRule.onNodeWithText("DeepSeek API Key").assertIsDisplayed()
+        composeRule.onNodeWithText("关闭").performClick()
+    }
+
+    @Test
     fun allPortsAreReachable() {
         composeRule.onNodeWithText("家长端").performClick()
         composeRule.onNodeWithText("家庭观察与支持").assertIsDisplayed()

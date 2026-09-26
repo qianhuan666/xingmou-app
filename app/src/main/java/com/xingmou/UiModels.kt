@@ -26,7 +26,8 @@ data class XingmouUiState(
     val parent: ParentUiState = ParentUiState(),
     val professional: ProfessionalUiState = ProfessionalUiState(),
     val accessibility: AccessibilityUiState = AccessibilityUiState(),
-    val aiConfigured: Boolean = false
+    val aiConfigured: Boolean = false,
+    val apiKeyMessage: String = "未设置 API Key；当前使用本地安全模式。"
 )
 
 data class ChildSummaryUi(val childId: String, val alias: String, val ageBand: String, val status: String)

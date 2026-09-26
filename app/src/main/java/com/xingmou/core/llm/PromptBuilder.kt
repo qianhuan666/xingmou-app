@@ -67,8 +67,8 @@ object PromptBuilder {
     /** 按端口生成完整系统提示词 */
     fun buildSystemPrompt(port: Port): String = when (port) {
         Port.CHILD -> "$CORE_SYSTEM\n\n$CHILD_RULES\n\n请严格按儿童端 JSON 模板输出，speech 数组元素为短句。"
-        Port.PARENT -> "$CORE_SYSTEM\n\n$PARENT_RULES\n\n请严格按家长端 JSON 模板输出，claims 必须绑定 sources。"
-        Port.PROFESSIONAL -> "$CORE_SYSTEM\n\n$PROFESSIONAL_RULES\n\n请严格按专业端 JSON 模板输出，review_required 必须为 true。"
+        Port.PARENT -> "$CORE_SYSTEM\n\n$PARENT_RULES\n\n只输出 JSON 对象，至少包含 mode、acknowledgement、claims、sources、home_support、disclaimer。mode=answer；没有可核验来源时 claims 和 sources 必须为空，不得编造。"
+        Port.PROFESSIONAL -> "$CORE_SYSTEM\n\n$PROFESSIONAL_RULES\n\n只输出 JSON 对象，至少包含 status=draft、claims、sources、facts、inferences、review_required=true、review_items、plan。plan 可包含 observable_goal（可观察训练目标）；没有依据时不得编造事实或来源。所有内容只作待人工审核草案。"
     }
 
     /** 组装用户消息：只携带脱敏字段 */

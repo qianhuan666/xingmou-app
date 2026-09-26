@@ -68,6 +68,9 @@ class AgentOrchestratorTest {
         val context = ContextAssembler().assemble(input)
         assertFalse(context.userMessage.contains("13800138000"))
         assertTrue(context.userMessage.contains("[手机号已脱敏]"))
+        val grounded = ContextAssembler().assemble(request("grounded-run", Port.PARENT, "怎么使用提示辅助").input)
+        assertTrue(grounded.approvedSourceIds.isNotEmpty())
+        assertTrue(grounded.userMessage.contains("ID=${grounded.approvedSourceIds.first()}"))
 
         val memory = MemoryManager()
         assertFalse(memory.save(MemoryDraft("m1", "c1", "session", "电话13800138000", null, "reported", null)))
@@ -96,6 +99,14 @@ class AgentOrchestratorTest {
         assertEquals(OrchestrationRoute.FALLBACK, result.route)
         assertEquals(AgentRunState.FAILED, result.state)
         assertTrue(result.error!!.contains("最大 Agent 步数"))
+    }
+
+    @Test fun modelCannotInventApprovedSource() = runBlocking {
+        val fabricated = """{"mode":"answer","acknowledgement":"已收到", "claims":[{"source_ids":["invented-source"]}],"sources":[{"source_id":"invented-source"}],"home_support":[],"disclaimer":"训练支持，不构成医学诊断"}"""
+        val result = AgentOrchestrator(ModelGateway { _, _ -> Result.success(fabricated) })
+            .run(request("invented-source-run", Port.PARENT, "如何做图片配对"))
+        assertEquals(OrchestrationRoute.FALLBACK, result.route)
+        assertTrue(result.error!!.contains("unapproved_source"))
     }
 
     @Test fun policyBackedGatewayBlocksWithoutConsentAndRetriesTransientFailure() = runBlocking {
