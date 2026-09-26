@@ -251,6 +251,21 @@ data class ConsentEntity(
 )
 
 @Entity(
+    tableName = "data_requests",
+    indices = [Index("childId"), Index(value = ["childId", "requestedAt"])]
+)
+data class DataRequestEntity(
+    @androidx.room.PrimaryKey val requestId: String,
+    val childId: String,
+    val requestType: String,
+    val status: String,
+    val requestedAt: Long,
+    val completedAt: Long? = null,
+    val resultJson: String? = null,
+    val requesterUserId: String? = null
+)
+
+@Entity(
     tableName = "agent_runs",
     indices = [Index("childId"), Index("status"), Index("startedAt")]
 )

@@ -24,6 +24,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         PlanVersionEntity::class,
         ConversationMessageEntity::class,
         ConsentEntity::class,
+        DataRequestEntity::class,
         AgentRunEntity::class,
         AgentStepEntity::class,
         AgentEventEntity::class,
@@ -32,7 +33,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         ReviewRequestEntity::class,
         DecisionTraceEntity::class
     ],
-    version = 11,
+    version = 12,
     exportSchema = false
 )
 abstract class QizhiDatabase : RoomDatabase() {
@@ -49,6 +50,7 @@ abstract class QizhiDatabase : RoomDatabase() {
     abstract fun planDao(): PlanDao
     abstract fun conversationDao(): ConversationDao
     abstract fun consentDao(): ConsentDao
+    abstract fun dataRightsDao(): DataRightsDao
     abstract fun agentDao(): AgentDao
 
     companion object {
@@ -61,7 +63,7 @@ abstract class QizhiDatabase : RoomDatabase() {
                     context.applicationContext,
                     QizhiDatabase::class.java,
                     "qizhi_training.db"
-                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11).build().also {
+                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12).build().also {
                     INSTANCE = it
                     DatabaseSeeder.seedAsync(it)
                 }
@@ -237,6 +239,26 @@ abstract class QizhiDatabase : RoomDatabase() {
                 db.execSQL("ALTER TABLE care_records ADD COLUMN closureReason TEXT")
                 db.execSQL("ALTER TABLE care_records ADD COLUMN followUpPlan TEXT")
                 db.execSQL("ALTER TABLE care_records ADD COLUMN followUpDate TEXT")
+            }
+        }
+
+        val MIGRATION_11_12 = object : Migration(11, 12) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """CREATE TABLE IF NOT EXISTS `data_requests` (
+                        `requestId` TEXT NOT NULL,
+                        `childId` TEXT NOT NULL,
+                        `requestType` TEXT NOT NULL,
+                        `status` TEXT NOT NULL,
+                        `requestedAt` INTEGER NOT NULL,
+                        `completedAt` INTEGER,
+                        `resultJson` TEXT,
+                        `requesterUserId` TEXT,
+                        PRIMARY KEY(`requestId`)
+                    )""".trimIndent()
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_data_requests_childId` ON `data_requests` (`childId`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_data_requests_childId_requestedAt` ON `data_requests` (`childId`, `requestedAt`)")
             }
         }
     }

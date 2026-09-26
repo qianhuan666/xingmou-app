@@ -4,6 +4,7 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Transaction
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -169,6 +170,114 @@ interface ConsentDao {
 
     @Query("SELECT * FROM consents WHERE childId = :childId ORDER BY purpose")
     suspend fun forChild(childId: String): List<ConsentEntity>
+}
+
+@Dao
+interface DataRightsDao {
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertRequest(request: DataRequestEntity)
+
+    @Query("SELECT * FROM data_requests WHERE childId = :childId ORDER BY requestedAt DESC")
+    suspend fun requestsForChild(childId: String): List<DataRequestEntity>
+
+    @Query("SELECT * FROM data_requests WHERE requestId = :requestId LIMIT 1")
+    suspend fun findRequest(requestId: String): DataRequestEntity?
+
+    @Query("UPDATE data_requests SET status = :status, completedAt = :completedAt, resultJson = :resultJson WHERE requestId = :requestId")
+    suspend fun completeRequest(requestId: String, status: String, completedAt: Long, resultJson: String?)
+
+    @Query("SELECT runId FROM agent_runs WHERE childId = :childId")
+    suspend fun runIdsForChild(childId: String): List<String>
+
+    @Query("DELETE FROM child_bindings WHERE childId = :childId")
+    suspend fun deleteChildBindings(childId: String): Int
+
+    @Query("DELETE FROM home_tasks WHERE childId = :childId")
+    suspend fun deleteHomeTasks(childId: String): Int
+
+    @Query("DELETE FROM home_feedback WHERE childId = :childId")
+    suspend fun deleteHomeFeedback(childId: String): Int
+
+    @Query("DELETE FROM training_records WHERE childId = :childId")
+    suspend fun deleteTrainingRecords(childId: String): Int
+
+    @Query("DELETE FROM ability_profiles WHERE childId = :childId")
+    suspend fun deleteAbilityProfiles(childId: String): Int
+
+    @Query("DELETE FROM assessment_records WHERE childId = :childId")
+    suspend fun deleteAssessmentRecords(childId: String): Int
+
+    @Query("DELETE FROM care_records WHERE childId = :childId")
+    suspend fun deleteCareRecords(childId: String): Int
+
+    @Query("DELETE FROM safety_flags WHERE childId = :childId")
+    suspend fun deleteSafetyFlags(childId: String): Int
+
+    @Query("DELETE FROM plan_versions WHERE childId = :childId")
+    suspend fun deletePlans(childId: String): Int
+
+    @Query("DELETE FROM conversation_messages WHERE childId = :childId")
+    suspend fun deleteConversationMessages(childId: String): Int
+
+    @Query("DELETE FROM consents WHERE childId = :childId")
+    suspend fun deleteConsents(childId: String): Int
+
+    @Query("DELETE FROM review_requests WHERE childId = :childId")
+    suspend fun deleteReviewRequests(childId: String): Int
+
+    @Query("DELETE FROM memory_items WHERE childId = :childId")
+    suspend fun deleteMemoryItems(childId: String): Int
+
+    @Query("DELETE FROM agent_steps WHERE runId IN (:runIds)")
+    suspend fun deleteAgentSteps(runIds: List<String>): Int
+
+    @Query("DELETE FROM tool_calls WHERE runId IN (:runIds)")
+    suspend fun deleteToolCalls(runIds: List<String>): Int
+
+    @Query("DELETE FROM decision_traces WHERE runId IN (:runIds)")
+    suspend fun deleteDecisionTraces(runIds: List<String>): Int
+
+    @Query("DELETE FROM agent_events WHERE childId = :childId")
+    suspend fun deleteChildAgentEvents(childId: String): Int
+
+    @Query("DELETE FROM agent_events WHERE runId IN (:runIds)")
+    suspend fun deleteRunAgentEvents(runIds: List<String>): Int
+
+    @Query("DELETE FROM agent_runs WHERE childId = :childId")
+    suspend fun deleteAgentRuns(childId: String): Int
+
+    @Query("DELETE FROM children WHERE childId = :childId")
+    suspend fun deleteChild(childId: String): Int
+
+    /** 删除儿童授权范围内的数据，但保留 data_requests 作为删除结果报告索引。 */
+    @Transaction
+    suspend fun purgeChildData(childId: String): Int {
+        val runIds = runIdsForChild(childId)
+        var deleted = 0
+        deleted += deleteChildBindings(childId)
+        deleted += deleteHomeTasks(childId)
+        deleted += deleteHomeFeedback(childId)
+        deleted += deleteTrainingRecords(childId)
+        deleted += deleteAbilityProfiles(childId)
+        deleted += deleteAssessmentRecords(childId)
+        deleted += deleteCareRecords(childId)
+        deleted += deleteSafetyFlags(childId)
+        deleted += deletePlans(childId)
+        deleted += deleteConversationMessages(childId)
+        deleted += deleteConsents(childId)
+        deleted += deleteReviewRequests(childId)
+        deleted += deleteMemoryItems(childId)
+        if (runIds.isNotEmpty()) {
+            deleted += deleteAgentSteps(runIds)
+            deleted += deleteToolCalls(runIds)
+            deleted += deleteDecisionTraces(runIds)
+            deleted += deleteRunAgentEvents(runIds)
+        }
+        deleted += deleteChildAgentEvents(childId)
+        deleted += deleteAgentRuns(childId)
+        deleted += deleteChild(childId)
+        return deleted
+    }
 }
 
 @Dao

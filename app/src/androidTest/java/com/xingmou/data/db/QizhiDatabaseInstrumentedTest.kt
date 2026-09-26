@@ -192,4 +192,34 @@ class QizhiDatabaseInstrumentedTest {
         assertEquals("目标已达到预设的过程指标", record?.closureReason)
         assertEquals("CARE_STAGE_SIGNED", events.single().eventType)
     }
+
+    @Test
+    fun dataRightsPurgeIsChildScopedAndKeepsRequestReport() = runBlocking {
+        val now = 20L
+        database.childDao().upsert(
+            ChildEntity("child-a", "小甲", "学龄期", "SHORT_SENTENCE", "L1", createdAt = now, updatedAt = now)
+        )
+        database.childDao().upsert(
+            ChildEntity("child-b", "小乙", "学龄期", "SHORT_SENTENCE", "L1", createdAt = now, updatedAt = now)
+        )
+        database.trainingRecordDao().insert(
+            TrainingRecordEntity("record-a", "child-a", "A", "图片配对", 1, "L1", 1000L, null, true, true, 1, now)
+        )
+        database.trainingRecordDao().insert(
+            TrainingRecordEntity("record-b", "child-b", "A", "图片配对", 1, "L1", 1000L, null, true, true, 1, now)
+        )
+        database.dataRightsDao().upsertRequest(
+            DataRequestEntity("delete-a", "child-a", "DELETE", "requested", now, requesterUserId = "local-professional")
+        )
+
+        val deleted = database.dataRightsDao().purgeChildData("child-a")
+        database.dataRightsDao().completeRequest("delete-a", "completed", now + 1, "{\"deleted\":$deleted}")
+
+        assertTrue(deleted >= 2)
+        assertEquals(null, database.childDao().findById("child-a"))
+        assertEquals(0, database.trainingRecordDao().countForChild("child-a"))
+        assertEquals("child-b", database.childDao().findById("child-b")?.childId)
+        assertEquals(1, database.trainingRecordDao().countForChild("child-b"))
+        assertEquals("completed", database.dataRightsDao().findRequest("delete-a")?.status)
+    }
 }
