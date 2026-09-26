@@ -52,6 +52,9 @@ fun XingmouApp(viewModel: XingmouViewModel) {
     val csvExportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) {
         destination -> destination?.let { viewModel.exportAuthorizedData(it, "csv") }
     }
+    val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) {
+        source -> source?.let(viewModel::previewAuthorizedImport)
+    }
     val density = LocalDensity.current
     val fontScale = if (state.accessibility.largeText) 1.15f else 1.0f
     CompositionLocalProvider(LocalDensity provides androidx.compose.ui.unit.Density(density.density, fontScale)) {
@@ -73,6 +76,9 @@ fun XingmouApp(viewModel: XingmouViewModel) {
                         onExportAuthorizedCsv = {
                             csvExportLauncher.launch("xingmou-${state.activeChildId}-${System.currentTimeMillis()}.csv")
                         },
+                        onImportAuthorizedData = { importLauncher.launch(arrayOf("application/json", "text/*")) },
+                        onConfirmImport = viewModel::confirmAuthorizedImport,
+                        onCancelImport = viewModel::cancelAuthorizedImport,
                         onDeleteChild = viewModel::deleteActiveChild,
                         onSaveApiKey = viewModel::saveInstitutionApiKey,
                         onClearApiKey = viewModel::clearInstitutionApiKey
@@ -109,6 +115,9 @@ private fun ChildContextBar(
     onExportConsentChange: (Boolean) -> Unit,
     onExportAuthorizedData: () -> Unit,
     onExportAuthorizedCsv: () -> Unit,
+    onImportAuthorizedData: () -> Unit,
+    onConfirmImport: () -> Unit,
+    onCancelImport: () -> Unit,
     onDeleteChild: () -> Unit,
     onSaveApiKey: (String) -> Unit,
     onClearApiKey: () -> Unit
@@ -234,6 +243,17 @@ private fun ChildContextBar(
                         enabled = state.exportConsent && !state.dataRightsWorking,
                         modifier = Modifier.fillMaxWidth()
                     ) { Text("导出当前儿童 CSV") }
+                    OutlinedButton(
+                        onClick = onImportAuthorizedData,
+                        enabled = !state.dataRightsWorking,
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text("读取授权 JSON 恢复预览") }
+                    if (state.importReady) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(onClick = onConfirmImport, enabled = !state.dataRightsWorking, modifier = Modifier.weight(1f)) { Text("确认恢复副本") }
+                            OutlinedButton(onClick = onCancelImport, enabled = !state.dataRightsWorking, modifier = Modifier.weight(1f)) { Text("取消") }
+                        }
+                    }
                     OutlinedButton(
                         onClick = { deleteConfirm.value = true },
                         enabled = state.availableChildren.size > 1 && !state.dataRightsWorking,

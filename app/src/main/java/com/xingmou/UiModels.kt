@@ -21,6 +21,7 @@ data class XingmouUiState(
     val exportConsent: Boolean = false,
     val dataRightsWorking: Boolean = false,
     val dataRightsMessage: String = "尚未执行数据权利操作。",
+    val importReady: Boolean = false,
     val child: ChildUiState = ChildUiState(),
     val baseline: BaselineUiState = BaselineUiState(),
     val parent: ParentUiState = ParentUiState(),

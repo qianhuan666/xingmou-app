@@ -24,6 +24,7 @@ import com.xingmou.core.agent.SessionResumedEvent
 import com.xingmou.core.agent.TrainingCompletedEvent
 import com.xingmou.core.consent.ConsentStatus
 import com.xingmou.core.consent.DataRightsManager
+import com.xingmou.core.consent.AuthorizedImportManager
 import com.xingmou.core.llm.DirectDeepSeekGateway
 import com.xingmou.core.llm.GatewayCallRequest
 import com.xingmou.core.llm.GatewayPolicy
@@ -85,8 +86,10 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
     private val courseProgressEngine = CourseProgressEngine(QuestionCatalog.fullCourseQuestions)
     private val planStateMachine = PlanStateMachine()
     private val dataRightsManager = DataRightsManager()
+    private val importManager = AuthorizedImportManager()
     private val apiKeyStore = LocalApiKeyStore(application)
     private var activeChildId: String? = null
+    private var pendingImport: com.xingmou.core.consent.AuthorizedChildExport? = null
     private val localUserId = SeedData.DEMO_USER_ID
     private val childId: String
         get() = activeChildId ?: SeedData.defaultChild.childId
@@ -296,6 +299,44 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                 }
             }
         }
+    }
+
+    fun previewAuthorizedImport(source: Uri) {
+        viewModelScope.launch {
+            runCatching {
+                val text = getApplication<Application>().contentResolver.openInputStream(source)?.use {
+                    it.readBytes().toString(Charsets.UTF_8)
+                } ?: error("import_source_unavailable")
+                val data = importManager.parse(text)
+                val preview = importManager.preview(data)
+                check(database.childDao().findById(preview.childId) == null) { "import_child_conflict" }
+                _uiState.update { it.copy(importReady = true, dataRightsMessage = "已读取恢复预览：${preview.alias}，共 ${preview.recordCount} 条授权记录；确认后将新建本地副本。") }
+                pendingImport = data
+            }.onFailure { error ->
+                pendingImport = null
+                _uiState.update { it.copy(importReady = false, dataRightsMessage = "恢复文件不可用：${error.message ?: error.javaClass.simpleName}") }
+            }
+        }
+    }
+
+    fun confirmAuthorizedImport() {
+        val data = pendingImport ?: return
+        viewModelScope.launch {
+            _uiState.update { it.copy(dataRightsWorking = true, importReady = false, dataRightsMessage = "正在恢复授权数据副本。") }
+            runCatching {
+                val count = importManager.restore(data, database, localUserId)
+                pendingImport = null
+                _uiState.update { it.copy(dataRightsWorking = false, dataRightsMessage = "恢复完成：新增 $count 条授权记录；远程 AI/导出授权需在本设备重新确认。") }
+            }.onFailure { error ->
+                pendingImport = null
+                _uiState.update { it.copy(dataRightsWorking = false, importReady = false, dataRightsMessage = "恢复未完成：${error.message ?: error.javaClass.simpleName}") }
+            }
+        }
+    }
+
+    fun cancelAuthorizedImport() {
+        pendingImport = null
+        _uiState.update { it.copy(importReady = false, dataRightsMessage = "已取消数据恢复。") }
     }
 
     fun deleteActiveChild() {
