@@ -22,6 +22,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Switch
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -56,7 +57,9 @@ fun XingmouApp(viewModel: XingmouViewModel) {
                         onUpdateChild = viewModel::updateActiveChild,
                         onArchiveChild = viewModel::archiveActiveChild,
                         onRemoteAiConsentChange = viewModel::setRemoteAiConsent,
-                        onExportConsentChange = viewModel::setExportConsent
+                        onExportConsentChange = viewModel::setExportConsent,
+                        onExportAuthorizedData = viewModel::exportAuthorizedData,
+                        onDeleteChild = viewModel::deleteActiveChild
                     )
                 },
                 bottomBar = { AppStatusBand(aiConfigured = state.aiConfigured) }
@@ -87,13 +90,16 @@ private fun ChildContextBar(
     onUpdateChild: (String, String) -> Unit,
     onArchiveChild: () -> Unit,
     onRemoteAiConsentChange: (Boolean) -> Unit,
-    onExportConsentChange: (Boolean) -> Unit
+    onExportConsentChange: (Boolean) -> Unit,
+    onExportAuthorizedData: () -> Unit,
+    onDeleteChild: () -> Unit
 ) {
     val expandedState = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
     val dialogMode = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<String?>(null) }
     val aliasState = androidx.compose.runtime.remember(state.activeChildAlias) { androidx.compose.runtime.mutableStateOf(state.activeChildAlias) }
     val ageBandState = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf("学龄期") }
     val consentOpen = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+    val deleteConfirm = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
     Surface(color = MaterialTheme.colorScheme.surface, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
@@ -155,9 +161,43 @@ private fun ChildContextBar(
                         }
                         Switch(checked = state.exportConsent, onCheckedChange = onExportConsentChange)
                     }
+                    Text(
+                        state.dataRightsMessage,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Button(
+                        onClick = onExportAuthorizedData,
+                        enabled = state.exportConsent && !state.dataRightsWorking,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(if (state.dataRightsWorking) "处理中…" else "导出当前儿童授权数据")
+                    }
+                    OutlinedButton(
+                        onClick = { deleteConfirm.value = true },
+                        enabled = state.availableChildren.size > 1 && !state.dataRightsWorking,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("删除当前儿童档案")
+                    }
                 }
             },
             confirmButton = { TextButton(onClick = { consentOpen.value = false }) { Text("完成") } }
+        )
+    }
+    if (deleteConfirm.value) {
+        AlertDialog(
+            onDismissRequest = { deleteConfirm.value = false },
+            title = { Text("确认删除儿童档案？") },
+            text = { Text("将删除当前儿童的训练、家庭、评估、方案和本地 Agent 数据。删除结果记录会保留，操作不可撤销。") },
+            confirmButton = {
+                Button(onClick = {
+                    deleteConfirm.value = false
+                    consentOpen.value = false
+                    onDeleteChild()
+                }) { Text("确认删除") }
+            },
+            dismissButton = { TextButton(onClick = { deleteConfirm.value = false }) { Text("取消") } }
         )
     }
 }

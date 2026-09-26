@@ -17,6 +17,8 @@ import com.xingmou.core.agent.RiskDetectedEvent
 import com.xingmou.core.agent.RoomAgentEventStore
 import com.xingmou.core.agent.SessionResumedEvent
 import com.xingmou.core.agent.TrainingCompletedEvent
+import com.xingmou.core.consent.ConsentStatus
+import com.xingmou.core.consent.DataRightsManager
 import com.xingmou.core.domain.AnalysisEngine
 import com.xingmou.core.domain.BaselineEngine
 import com.xingmou.core.domain.BaselineSession
@@ -39,6 +41,7 @@ import com.xingmou.data.db.QizhiDatabase
 import com.xingmou.data.db.ReviewRequestEntity
 import com.xingmou.data.db.SeedData
 import com.xingmou.data.db.ConsentEntity
+import com.xingmou.data.db.DataRequestEntity
 import com.xingmou.data.db.AbilityProfileEntity
 import com.xingmou.data.db.HomeFeedbackEntity
 import com.xingmou.data.db.HomeTaskEntity
@@ -54,6 +57,7 @@ import java.util.UUID
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.io.File
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -73,6 +77,7 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
     private val baselineEngine = BaselineEngine()
     private val courseProgressEngine = CourseProgressEngine(QuestionCatalog.fullCourseQuestions)
     private val planStateMachine = PlanStateMachine()
+    private val dataRightsManager = DataRightsManager()
     private var activeChildId: String? = null
     private val localUserId = SeedData.DEMO_USER_ID
     private val childId: String
@@ -185,6 +190,118 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
 
     fun setExportConsent(granted: Boolean) = setConsent("export", granted)
 
+    fun exportAuthorizedData() {
+        val currentId = activeChildId ?: return
+        viewModelScope.launch {
+            _uiState.update { it.copy(dataRightsWorking = true, dataRightsMessage = "正在生成授权数据导出文件。") }
+            runCatching {
+                val child = database.childDao().findById(currentId) ?: error("child_not_found")
+                val consentStatus = database.consentDao().find(currentId, "export")?.status.toConsentStatus()
+                val now = System.currentTimeMillis()
+                val requestId = newId("export-request")
+                val json = dataRightsManager.buildAuthorizedExport(
+                    consentStatus = consentStatus,
+                    child = child,
+                    trainingRecords = database.trainingRecordDao().recentForChild(currentId, 500),
+                    homeTasks = database.homeTaskDao().allForChild(currentId),
+                    homeFeedback = database.homeFeedbackDao().recentForChild(currentId, 500),
+                    assessments = database.assessmentRecordDao().recentForChild(currentId, 500),
+                    careRecords = database.careRecordDao().recentForChild(currentId, 500),
+                    exportedAt = now
+                )
+                val exportDir = File(getApplication<Application>().cacheDir, "exports").apply { mkdirs() }
+                val file = File(exportDir, "xingmou-${child.childId}-$now.json")
+                file.writeText(json, Charsets.UTF_8)
+                database.dataRightsDao().upsertRequest(
+                    DataRequestEntity(
+                        requestId = requestId,
+                        childId = currentId,
+                        requestType = "EXPORT",
+                        status = "completed",
+                        requestedAt = now,
+                        completedAt = now,
+                        resultJson = """{"fileName":"${file.name}","bytes":${file.length()}}""",
+                        requesterUserId = localUserId
+                    )
+                )
+                database.agentDao().upsertEvent(
+                    AgentEventEntity(
+                        eventId = newId("audit-export"),
+                        runId = null,
+                        childId = currentId,
+                        eventType = "DATA_EXPORT_COMPLETED",
+                        payloadSummary = "requestId=$requestId;scope=current-child;bytes=${file.length()}",
+                        status = "processed",
+                        createdAt = now,
+                        processedAt = now
+                    )
+                )
+                _uiState.update {
+                    it.copy(
+                        dataRightsWorking = false,
+                        dataRightsMessage = "已导出当前儿童授权数据：${file.name}"
+                    )
+                }
+            }.onFailure { error ->
+                _uiState.update {
+                    it.copy(
+                        dataRightsWorking = false,
+                        dataRightsMessage = when (error.message) {
+                            "export_requires_explicit_consent" -> "导出前请先打开“数据导出”授权。"
+                            else -> "导出未完成：${error.message ?: error.javaClass.simpleName}"
+                        }
+                    )
+                }
+            }
+        }
+    }
+
+    fun deleteActiveChild() {
+        val currentId = activeChildId ?: return
+        viewModelScope.launch {
+            val activeChildren = database.childDao().observeActive().first()
+            if (activeChildren.size <= 1) {
+                _uiState.update { it.copy(dataRightsMessage = "当前至少保留一个儿童档案，暂不能删除唯一档案。") }
+                return@launch
+            }
+            _uiState.update { it.copy(dataRightsWorking = true, dataRightsMessage = "正在删除当前儿童及其授权范围数据。") }
+            runCatching {
+                val now = System.currentTimeMillis()
+                val requestId = newId("delete-request")
+                database.dataRightsDao().upsertRequest(
+                    DataRequestEntity(
+                        requestId = requestId,
+                        childId = currentId,
+                        requestType = "DELETE",
+                        status = "requested",
+                        requestedAt = now,
+                        requesterUserId = localUserId
+                    )
+                )
+                val deleted = database.dataRightsDao().purgeChildData(currentId)
+                database.dataRightsDao().completeRequest(
+                    requestId = requestId,
+                    status = "completed",
+                    completedAt = System.currentTimeMillis(),
+                    resultJson = """{"deletedRows":$deleted,"scope":"child"}"""
+                )
+                _uiState.update {
+                    it.copy(
+                        dataRightsWorking = false,
+                        dataRightsMessage = "已删除当前儿童档案及关联数据，删除结果已留存。"
+                    )
+                }
+            }.onFailure { error ->
+                _uiState.update {
+                    it.copy(
+                        dataRightsWorking = false,
+                        dataRightsMessage = "删除未完成：${error.message ?: error.javaClass.simpleName}"
+                    )
+                }
+            }
+        }
+    }
+
     fun startBaseline() {
         if (_uiState.value.baseline.status != BaselineStatus.IN_PROGRESS) {
             baselineSession = baselineEngine.newSession(System.currentTimeMillis())
@@ -284,6 +401,12 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                 exportConsent = consents["export"]?.status == "granted"
             )
         }
+    }
+
+    private fun String?.toConsentStatus(): ConsentStatus = when (this) {
+        "granted" -> ConsentStatus.GRANTED
+        "revoked" -> ConsentStatus.REVOKED
+        else -> ConsentStatus.NOT_GRANTED
     }
 
     private suspend fun loadBaseline(child: ChildEntity) {

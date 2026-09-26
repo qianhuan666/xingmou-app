@@ -89,6 +89,16 @@ class XingmouUiInstrumentedTest {
     }
 
     @Test
+    fun dataRightsActionsAreReachableFromAuthorizationDialog() {
+        composeRule.onNodeWithText("授权").performClick()
+        composeRule.onNodeWithText("远程 AI").assertIsDisplayed()
+        composeRule.onNodeWithText("数据导出").assertIsDisplayed()
+        composeRule.onNodeWithText("导出当前儿童授权数据").assertIsDisplayed()
+        composeRule.onNodeWithText("删除当前儿童档案").assertIsDisplayed()
+        composeRule.onNodeWithText("完成").performClick()
+    }
+
+    @Test
     fun allPortsAreReachable() {
         composeRule.onNodeWithText("家长端").performClick()
         composeRule.onNodeWithText("家庭观察与支持").assertIsDisplayed()
