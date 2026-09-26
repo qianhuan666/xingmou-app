@@ -48,6 +48,9 @@ interface AssessmentRecordDao {
     @Query("SELECT * FROM assessment_records WHERE childId = :childId ORDER BY createdAt DESC LIMIT :limit")
     suspend fun recentForChild(childId: String, limit: Int = 10): List<AssessmentRecordEntity>
 
+    @Query("SELECT * FROM assessment_records WHERE childId = :childId ORDER BY createdAt DESC")
+    suspend fun allForChild(childId: String): List<AssessmentRecordEntity>
+
     @Query("SELECT COALESCE(MAX(version), 0) FROM assessment_records WHERE childId = :childId AND assessmentId = :assessmentId")
     suspend fun latestVersion(childId: String, assessmentId: String): Int
 }
@@ -62,6 +65,9 @@ interface CareRecordDao {
 
     @Query("SELECT * FROM care_records WHERE childId = :childId ORDER BY createdAt DESC LIMIT :limit")
     suspend fun recentForChild(childId: String, limit: Int = 20): List<CareRecordEntity>
+
+    @Query("SELECT * FROM care_records WHERE childId = :childId ORDER BY createdAt DESC")
+    suspend fun allForChild(childId: String): List<CareRecordEntity>
 }
 
 @Dao
@@ -101,6 +107,9 @@ interface HomeFeedbackDao {
 
     @Query("SELECT * FROM home_feedback WHERE childId = :childId ORDER BY createdAt DESC LIMIT :limit")
     suspend fun recentForChild(childId: String, limit: Int = 10): List<HomeFeedbackEntity>
+
+    @Query("SELECT * FROM home_feedback WHERE childId = :childId ORDER BY createdAt DESC")
+    suspend fun allForChild(childId: String): List<HomeFeedbackEntity>
 }
 
 @Dao
@@ -113,6 +122,9 @@ interface TrainingRecordDao {
 
     @Query("SELECT * FROM training_records WHERE childId = :childId ORDER BY createdAt DESC LIMIT :limit")
     suspend fun recentForChild(childId: String, limit: Int = 30): List<TrainingRecordEntity>
+
+    @Query("SELECT * FROM training_records WHERE childId = :childId ORDER BY createdAt DESC")
+    suspend fun allForChild(childId: String): List<TrainingRecordEntity>
 
     @Query("SELECT COUNT(*) FROM training_records WHERE childId = :childId")
     suspend fun countForChild(childId: String): Int
@@ -182,6 +194,21 @@ interface DataRightsDao {
 
     @Query("SELECT * FROM data_requests WHERE requestId = :requestId LIMIT 1")
     suspend fun findRequest(requestId: String): DataRequestEntity?
+
+    @Query("SELECT COUNT(*) FROM children WHERE childId = :childId")
+    suspend fun childCount(childId: String): Int
+
+    @Transaction
+    suspend fun executeChildDeletion(request: DataRequestEntity, completedAt: Long): Int {
+        require(request.requestType == "DELETE" && request.status == "requested")
+        check(childCount(request.childId) == 1) { "child_not_found" }
+        upsertRequest(request)
+        val deleted = purgeChildData(request.childId)
+        check(deleted > 0) { "child_not_found" }
+        completeRequest(request.requestId, "completed", completedAt,
+            """{"deletedRows":$deleted,"scope":"child"}""")
+        return deleted
+    }
 
     @Query("UPDATE data_requests SET status = :status, completedAt = :completedAt, resultJson = :resultJson WHERE requestId = :requestId")
     suspend fun completeRequest(requestId: String, status: String, completedAt: Long, resultJson: String?)
@@ -302,6 +329,21 @@ interface AgentDao {
 
     @Query("SELECT * FROM agent_runs WHERE runId = :runId LIMIT 1")
     suspend fun findRun(runId: String): AgentRunEntity?
+
+    @Query("SELECT * FROM agent_runs WHERE childId = :childId ORDER BY startedAt DESC")
+    suspend fun runsForChild(childId: String): List<AgentRunEntity>
+
+    @Query("SELECT * FROM tool_calls WHERE runId IN (SELECT runId FROM agent_runs WHERE childId = :childId)")
+    suspend fun toolCallsForChild(childId: String): List<ToolCallEntity>
+
+    @Query("SELECT * FROM agent_events WHERE childId = :childId")
+    suspend fun eventsForChild(childId: String): List<AgentEventEntity>
+
+    @Query("SELECT * FROM agent_steps WHERE runId IN (SELECT runId FROM agent_runs WHERE childId = :childId)")
+    suspend fun stepsForChild(childId: String): List<AgentStepEntity>
+
+    @Query("SELECT * FROM review_requests WHERE childId = :childId")
+    suspend fun reviewsForChild(childId: String): List<ReviewRequestEntity>
 
     @Query("SELECT * FROM agent_steps WHERE runId = :runId ORDER BY stepIndex ASC")
     suspend fun steps(runId: String): List<AgentStepEntity>

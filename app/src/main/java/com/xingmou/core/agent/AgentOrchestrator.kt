@@ -1,21 +1,53 @@
 package com.xingmou.core.agent
 
 import com.google.gson.JsonObject
-import com.xingmou.core.llm.DeepSeekClient
+import com.xingmou.core.llm.GatewayCallRequest
+import com.xingmou.core.llm.GatewayPolicy
 import com.xingmou.core.llm.JsonValidator
 import com.xingmou.core.model.Port
 import com.xingmou.core.model.RiskLevel
 import com.xingmou.core.safety.SafeResponses
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 
 fun interface ModelGateway {
     suspend fun complete(systemPrompt: String, userMessage: String): Result<String>
 }
 
-class DeepSeekModelGateway(private val client: DeepSeekClient) : ModelGateway {
-    override suspend fun complete(systemPrompt: String, userMessage: String): Result<String> =
-        client.complete(systemPrompt, userMessage)
+class GatewayRetryableException(message: String) : Exception(message)
+
+/**
+ * 把 Android 端的同意、脱敏、费用和超时策略接到任意模型实现前。
+ * 生产环境应将 delegate 指向服务端 Gateway 适配器，而不是把长期主 Key 放进 APK。
+ */
+class PolicyBackedModelGateway(
+    private val delegate: ModelGateway,
+    private val policy: GatewayPolicy,
+    private val requestProvider: suspend () -> GatewayCallRequest,
+    private val maxRetries: Int = 1
+) : ModelGateway {
+    override suspend fun complete(systemPrompt: String, userMessage: String): Result<String> {
+        var lastFailure: Throwable = IllegalStateException("gateway_failed")
+        repeat(maxRetries.coerceAtLeast(0) + 1) {
+            // 每次重试都重新读取授权，撤回后不能继续发送。
+            val decision = policy.evaluate(requestProvider().copy(systemPrompt = systemPrompt, userText = userMessage))
+            val prepared = decision.prepared
+                ?: return Result.failure(IllegalStateException("gateway_blocked:" + decision.reason.name))
+            val result = withTimeoutOrNull(prepared.timeoutMs) {
+                delegate.complete(prepared.systemPrompt, prepared.userText)
+            }
+            if (result == null) {
+                lastFailure = IllegalStateException("gateway_timeout")
+            } else if (result.isSuccess) {
+                return result
+            } else {
+                lastFailure = result.exceptionOrNull() ?: IllegalStateException("gateway_failed")
+                if (lastFailure !is GatewayRetryableException) return Result.failure(lastFailure)
+            }
+        }
+        return Result.failure(lastFailure)
+    }
 }
 
 data class AgentOrchestrationRequest(
@@ -45,6 +77,8 @@ class AgentOrchestrator(
     private val runtime: AgentRuntime = AgentRuntime(registry),
     private val contextAssembler: ContextAssembler = ContextAssembler()
 ) {
+    fun snapshot(runId: String): AgentRunSnapshot = runtime.get(runId)
+
     suspend fun run(request: AgentOrchestrationRequest): AgentOrchestrationResult = withContext(Dispatchers.Default) {
         require(request.maxSteps in 1..12) { "maxSteps 必须在 1 到 12 之间。" }
         runtime.create(request.runId, request.taskType, request.input.port, request.childId)

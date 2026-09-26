@@ -1,12 +1,14 @@
 package com.xingmou
 
 import android.app.Application
+import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.xingmou.core.agent.AgentContextInput
 import com.xingmou.core.agent.AgentEventCoordinator
 import com.xingmou.core.agent.AgentEventProcessor
 import com.xingmou.core.agent.AgentOrchestrationRequest
+import com.xingmou.core.agent.AgentOrchestrationResult
 import com.xingmou.core.agent.AgentOrchestrator
 import com.xingmou.core.agent.ConsecutiveFailuresEvent
 import com.xingmou.core.agent.ModelGateway
@@ -30,7 +32,6 @@ import com.xingmou.core.domain.PlanActor
 import com.xingmou.core.domain.PlanStateMachine
 import com.xingmou.core.domain.PlanStatus
 import com.xingmou.core.domain.TrainingResult
-import com.xingmou.core.llm.DeepSeekClientFactory
 import com.xingmou.core.model.CommunicationLevel
 import com.xingmou.core.model.Port
 import com.xingmou.core.model.SessionContext
@@ -57,7 +58,6 @@ import java.util.UUID
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import java.io.File
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -102,8 +102,7 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                 largeText = accessibilityPreferences.getBoolean("large_text", false),
                 highContrast = accessibilityPreferences.getBoolean("high_contrast", false),
                 slowMotion = accessibilityPreferences.getBoolean("slow_motion", false)
-            ),
-            aiConfigured = DeepSeekClientFactory.isConfigured()
+            )
         )
     )
     val uiState: StateFlow<XingmouUiState> = _uiState.asStateFlow()
@@ -190,28 +189,35 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
 
     fun setExportConsent(granted: Boolean) = setConsent("export", granted)
 
-    fun exportAuthorizedData() {
+    fun exportAuthorizedData(destination: Uri, format: String = "json") {
         val currentId = activeChildId ?: return
         viewModelScope.launch {
             _uiState.update { it.copy(dataRightsWorking = true, dataRightsMessage = "正在生成授权数据导出文件。") }
             runCatching {
                 val child = database.childDao().findById(currentId) ?: error("child_not_found")
+                check(database.childBindingDao().findActive(localUserId, currentId) != null) { "child_access_denied" }
                 val consentStatus = database.consentDao().find(currentId, "export")?.status.toConsentStatus()
                 val now = System.currentTimeMillis()
                 val requestId = newId("export-request")
                 val json = dataRightsManager.buildAuthorizedExport(
                     consentStatus = consentStatus,
                     child = child,
-                    trainingRecords = database.trainingRecordDao().recentForChild(currentId, 500),
+                    trainingRecords = database.trainingRecordDao().allForChild(currentId),
                     homeTasks = database.homeTaskDao().allForChild(currentId),
-                    homeFeedback = database.homeFeedbackDao().recentForChild(currentId, 500),
-                    assessments = database.assessmentRecordDao().recentForChild(currentId, 500),
-                    careRecords = database.careRecordDao().recentForChild(currentId, 500),
+                    homeFeedback = database.homeFeedbackDao().allForChild(currentId),
+                    assessments = database.assessmentRecordDao().allForChild(currentId),
+                    careRecords = database.careRecordDao().allForChild(currentId),
                     exportedAt = now
                 )
-                val exportDir = File(getApplication<Application>().cacheDir, "exports").apply { mkdirs() }
-                val file = File(exportDir, "xingmou-${child.childId}-$now.json")
-                file.writeText(json, Charsets.UTF_8)
+                // 再次读取授权，防止系统文件选择器打开期间撤回授权。
+                check(database.consentDao().find(currentId, "export")?.status == "granted") {
+                    "export_requires_explicit_consent"
+                }
+                val content = if (format == "csv") dataRightsManager.toCsv(json) else json
+                val bytes = content.toByteArray(Charsets.UTF_8)
+                getApplication<Application>().contentResolver.openOutputStream(destination, "w")?.use {
+                    it.write(bytes)
+                } ?: error("export_destination_unavailable")
                 database.dataRightsDao().upsertRequest(
                     DataRequestEntity(
                         requestId = requestId,
@@ -220,7 +226,7 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                         status = "completed",
                         requestedAt = now,
                         completedAt = now,
-                        resultJson = """{"fileName":"${file.name}","bytes":${file.length()}}""",
+                        resultJson = """{"destination":"user_selected","format":"$format","bytes":${bytes.size}}""",
                         requesterUserId = localUserId
                     )
                 )
@@ -230,7 +236,7 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                         runId = null,
                         childId = currentId,
                         eventType = "DATA_EXPORT_COMPLETED",
-                        payloadSummary = "requestId=$requestId;scope=current-child;bytes=${file.length()}",
+                        payloadSummary = "requestId=$requestId;scope=current-child;bytes=${bytes.size}",
                         status = "processed",
                         createdAt = now,
                         processedAt = now
@@ -239,7 +245,7 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                 _uiState.update {
                     it.copy(
                         dataRightsWorking = false,
-                        dataRightsMessage = "已导出当前儿童授权数据：${file.name}"
+                        dataRightsMessage = "已保存当前儿童授权数据到所选文件。"
                     )
                 }
             }.onFailure { error ->
@@ -267,23 +273,14 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
             _uiState.update { it.copy(dataRightsWorking = true, dataRightsMessage = "正在删除当前儿童及其授权范围数据。") }
             runCatching {
                 val now = System.currentTimeMillis()
+                check(database.childBindingDao().findActive(localUserId, currentId) != null) { "child_access_denied" }
                 val requestId = newId("delete-request")
-                database.dataRightsDao().upsertRequest(
+                database.dataRightsDao().executeChildDeletion(
                     DataRequestEntity(
-                        requestId = requestId,
-                        childId = currentId,
-                        requestType = "DELETE",
-                        status = "requested",
-                        requestedAt = now,
-                        requesterUserId = localUserId
-                    )
-                )
-                val deleted = database.dataRightsDao().purgeChildData(currentId)
-                database.dataRightsDao().completeRequest(
-                    requestId = requestId,
-                    status = "completed",
-                    completedAt = System.currentTimeMillis(),
-                    resultJson = """{"deletedRows":$deleted,"scope":"child"}"""
+                        requestId = requestId, childId = currentId, requestType = "DELETE",
+                        status = "requested", requestedAt = now, requesterUserId = localUserId
+                    ),
+                    completedAt = System.currentTimeMillis()
                 )
                 _uiState.update {
                     it.copy(
@@ -711,6 +708,7 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                         input = AgentContextInput(Port.PARENT, session(), query, knowledgeItems = knowledge, recentRecords = records)
                     )
                 )
+                recordAgentOutcome(orchestration, now, childId)
                 val message = when (retrieval.route) {
                     KnowledgeRoute.NORMAL -> retrieval.reason
                     KnowledgeRoute.CLARIFY -> retrieval.reason
@@ -996,6 +994,7 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                         input = AgentContextInput(Port.PROFESSIONAL, session(), "基于现有训练记录生成待审核草案", knowledgeItems = knowledge, recentRecords = records)
                     )
                 )
+                recordAgentOutcome(orchestration, now, childId)
                 val version = (database.planDao().latest(childId)?.version ?: 0) + 1
                 val plan = PlanVersionEntity(
                     planId = newId("plan"),
@@ -1393,6 +1392,34 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
         currentDomain = "A",
         currentTask = "图片配对"
     )
+
+    private suspend fun recordAgentOutcome(result: AgentOrchestrationResult, startedAt: Long, scopedChildId: String) {
+        val completedAt = System.currentTimeMillis()
+        val snapshot = orchestrator.snapshot(result.runId)
+        val dao = database.agentDao()
+        dao.upsertRun(
+            com.xingmou.data.db.AgentRunEntity(
+                result.runId, snapshot.taskType, snapshot.port.name, scopedChildId,
+                snapshot.state.name, snapshot.status.name, startedAt, completedAt, null
+            )
+        )
+        snapshot.steps.forEach { step ->
+            dao.insertStep(step.copy(inputSummary = null, toolResultSummary = null,
+                errorMessage = null, createdAt = completedAt))
+        }
+        snapshot.toolCalls.forEach { call ->
+            dao.insertToolCall(call.copy(argumentsSummary = "[omitted]", resultSummary = null,
+                createdAt = completedAt, finishedAt = completedAt))
+        }
+        if (result.route == com.xingmou.core.agent.OrchestrationRoute.FALLBACK) {
+            dao.upsertEvent(AgentEventEntity(newId("audit-agent"), result.runId, scopedChildId,
+                "FALLBACK_TRIGGERED", "route=FALLBACK", "processed", completedAt, completedAt))
+            if (result.error?.contains("JSON", ignoreCase = true) == true) {
+                dao.upsertEvent(AgentEventEntity(newId("audit-agent"), result.runId, scopedChildId,
+                    "JSON_VALIDATION_FAILED", "validation_failed", "processed", completedAt, completedAt))
+            }
+        }
+    }
 
     private fun newId(prefix: String): String = "$prefix-${UUID.randomUUID()}"
 

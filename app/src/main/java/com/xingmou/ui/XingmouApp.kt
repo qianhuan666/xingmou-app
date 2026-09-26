@@ -33,6 +33,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import com.xingmou.XingmouViewModel
 import com.xingmou.core.model.Port
 import com.xingmou.ui.child.ChildScreen
@@ -43,6 +45,12 @@ import com.xingmou.ui.theme.XingmouTheme
 @Composable
 fun XingmouApp(viewModel: XingmouViewModel) {
     val state by viewModel.uiState.collectAsState()
+    val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) {
+        destination -> destination?.let { viewModel.exportAuthorizedData(it, "json") }
+    }
+    val csvExportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) {
+        destination -> destination?.let { viewModel.exportAuthorizedData(it, "csv") }
+    }
     val density = LocalDensity.current
     val fontScale = if (state.accessibility.largeText) 1.15f else 1.0f
     CompositionLocalProvider(LocalDensity provides androidx.compose.ui.unit.Density(density.density, fontScale)) {
@@ -58,7 +66,12 @@ fun XingmouApp(viewModel: XingmouViewModel) {
                         onArchiveChild = viewModel::archiveActiveChild,
                         onRemoteAiConsentChange = viewModel::setRemoteAiConsent,
                         onExportConsentChange = viewModel::setExportConsent,
-                        onExportAuthorizedData = viewModel::exportAuthorizedData,
+                        onExportAuthorizedData = {
+                            exportLauncher.launch("xingmou-${state.activeChildId}-${System.currentTimeMillis()}.json")
+                        },
+                        onExportAuthorizedCsv = {
+                            csvExportLauncher.launch("xingmou-${state.activeChildId}-${System.currentTimeMillis()}.csv")
+                        },
                         onDeleteChild = viewModel::deleteActiveChild
                     )
                 },
@@ -92,6 +105,7 @@ private fun ChildContextBar(
     onRemoteAiConsentChange: (Boolean) -> Unit,
     onExportConsentChange: (Boolean) -> Unit,
     onExportAuthorizedData: () -> Unit,
+    onExportAuthorizedCsv: () -> Unit,
     onDeleteChild: () -> Unit
 ) {
     val expandedState = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
@@ -157,7 +171,7 @@ private fun ChildContextBar(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
                             Text("数据导出", style = MaterialTheme.typography.titleMedium)
-                            Text("仅导出当前儿童授权范围内的数据。", style = MaterialTheme.typography.bodySmall)
+                            Text("仅导出当前儿童授权范围内的数据；保存后的文件需自行保管，删档不会删除该副本。", style = MaterialTheme.typography.bodySmall)
                         }
                         Switch(checked = state.exportConsent, onCheckedChange = onExportConsentChange)
                     }
@@ -171,8 +185,13 @@ private fun ChildContextBar(
                         enabled = state.exportConsent && !state.dataRightsWorking,
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text(if (state.dataRightsWorking) "处理中…" else "导出当前儿童授权数据")
+                        Text(if (state.dataRightsWorking) "处理中…" else "导出当前儿童 JSON")
                     }
+                    OutlinedButton(
+                        onClick = onExportAuthorizedCsv,
+                        enabled = state.exportConsent && !state.dataRightsWorking,
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text("导出当前儿童 CSV") }
                     OutlinedButton(
                         onClick = { deleteConfirm.value = true },
                         enabled = state.availableChildren.size > 1 && !state.dataRightsWorking,

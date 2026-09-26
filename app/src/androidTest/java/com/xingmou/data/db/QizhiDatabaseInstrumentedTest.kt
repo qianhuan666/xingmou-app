@@ -208,12 +208,10 @@ class QizhiDatabaseInstrumentedTest {
         database.trainingRecordDao().insert(
             TrainingRecordEntity("record-b", "child-b", "A", "图片配对", 1, "L1", 1000L, null, true, true, 1, now)
         )
-        database.dataRightsDao().upsertRequest(
-            DataRequestEntity("delete-a", "child-a", "DELETE", "requested", now, requesterUserId = "local-professional")
+        val deleted = database.dataRightsDao().executeChildDeletion(
+            DataRequestEntity("delete-a", "child-a", "DELETE", "requested", now, requesterUserId = "local-professional"),
+            now + 1
         )
-
-        val deleted = database.dataRightsDao().purgeChildData("child-a")
-        database.dataRightsDao().completeRequest("delete-a", "completed", now + 1, "{\"deleted\":$deleted}")
 
         assertTrue(deleted >= 2)
         assertEquals(null, database.childDao().findById("child-a"))
@@ -221,5 +219,15 @@ class QizhiDatabaseInstrumentedTest {
         assertEquals("child-b", database.childDao().findById("child-b")?.childId)
         assertEquals(1, database.trainingRecordDao().countForChild("child-b"))
         assertEquals("completed", database.dataRightsDao().findRequest("delete-a")?.status)
+    }
+
+    @Test
+    fun missingChildDoesNotLeaveFalseDeletionReport() = runBlocking {
+        runCatching {
+            database.dataRightsDao().executeChildDeletion(
+                DataRequestEntity("missing-delete", "missing-child", "DELETE", "requested", 1L), 2L
+            )
+        }.onSuccess { error("missing child must fail") }
+        assertEquals(null, database.dataRightsDao().findRequest("missing-delete"))
     }
 }

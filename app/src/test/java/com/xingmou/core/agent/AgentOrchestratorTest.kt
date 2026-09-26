@@ -4,6 +4,11 @@ import com.xingmou.core.model.CommunicationLevel
 import com.xingmou.core.model.Port
 import com.xingmou.core.model.SessionContext
 import com.xingmou.core.model.SupportLevel
+import com.xingmou.core.consent.ConsentStatus
+import com.xingmou.core.llm.GatewayCallRequest
+import com.xingmou.core.llm.GatewayPolicy
+import com.xingmou.core.llm.GatewayPolicyConfig
+import kotlinx.coroutines.delay
 import com.xingmou.data.db.SeedData
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -91,6 +96,95 @@ class AgentOrchestratorTest {
         assertEquals(OrchestrationRoute.FALLBACK, result.route)
         assertEquals(AgentRunState.FAILED, result.state)
         assertTrue(result.error!!.contains("最大 Agent 步数"))
+    }
+
+    @Test fun policyBackedGatewayBlocksWithoutConsentAndRetriesTransientFailure() = runBlocking {
+        var calls = 0
+        val delegate = ModelGateway { _, _ ->
+            calls += 1
+            if (calls == 1) Result.failure(GatewayRetryableException("temporary_http_error"))
+            else Result.success("ok")
+        }
+        val gateway = PolicyBackedModelGateway(
+            delegate = delegate,
+            policy = GatewayPolicy(),
+            requestProvider = { GatewayCallRequest(
+                runId = "gateway-run",
+                childId = "child-1",
+                port = "parent",
+                systemPrompt = "",
+                userText = "",
+                consentStatus = ConsentStatus.GRANTED
+            ) }
+        )
+
+        assertEquals("ok", gateway.complete("system", "手机号13800138000").getOrThrow())
+        assertEquals(2, calls)
+
+        val blocked = PolicyBackedModelGateway(
+            delegate = delegate,
+            policy = GatewayPolicy(),
+            requestProvider = { GatewayCallRequest(
+                runId = "gateway-run-2",
+                childId = "child-1",
+                port = "parent",
+                systemPrompt = "",
+                userText = "",
+                consentStatus = ConsentStatus.REVOKED
+            ) }
+        ).complete("system", "继续")
+        assertTrue(blocked.exceptionOrNull()?.message?.contains("CONSENT_REQUIRED") == true)
+    }
+
+    @Test fun policyBackedGatewayConvertsTimeoutToFailure() = runBlocking {
+        val gateway = PolicyBackedModelGateway(
+            delegate = ModelGateway { _, _ ->
+                delay(50)
+                Result.success("late")
+            },
+            policy = GatewayPolicy(GatewayPolicyConfig(timeoutMs = 5)),
+            requestProvider = { GatewayCallRequest(
+                runId = "gateway-timeout",
+                childId = "child-1",
+                port = "parent",
+                systemPrompt = "",
+                userText = "",
+                consentStatus = ConsentStatus.GRANTED
+            ) },
+            maxRetries = 0
+        )
+
+        val result = gateway.complete("system", "继续")
+        assertTrue(result.exceptionOrNull()?.message?.contains("gateway_timeout") == true)
+    }
+
+    @Test fun policyBackedGatewayRechecksRevocationBeforeRetry() = runBlocking {
+        var calls = 0
+        val gateway = PolicyBackedModelGateway(
+            delegate = ModelGateway { _, _ ->
+                calls++
+                Result.failure(GatewayRetryableException("temporary_failure"))
+            },
+            policy = GatewayPolicy(),
+            requestProvider = { GatewayCallRequest("run-1", "child-1", "parent", "", "",
+                if (calls == 0) ConsentStatus.GRANTED else ConsentStatus.REVOKED) }
+        )
+        assertTrue(gateway.complete("system", "text").exceptionOrNull()?.message?.contains("CONSENT_REQUIRED") == true)
+        assertEquals(1, calls)
+    }
+
+    @Test fun policyBackedGatewayDoesNotRetryPermanentFailure() = runBlocking {
+        var calls = 0
+        val gateway = PolicyBackedModelGateway(
+            delegate = ModelGateway { _, _ ->
+                calls++
+                Result.failure(IllegalStateException("invalid_response"))
+            },
+            policy = GatewayPolicy(),
+            requestProvider = { GatewayCallRequest("run-2", "child-1", "parent", "", "", ConsentStatus.GRANTED) }
+        )
+        assertEquals("invalid_response", gateway.complete("system", "text").exceptionOrNull()?.message)
+        assertEquals(1, calls)
     }
 
     private fun request(runId: String, port: Port, text: String) = AgentOrchestrationRequest(

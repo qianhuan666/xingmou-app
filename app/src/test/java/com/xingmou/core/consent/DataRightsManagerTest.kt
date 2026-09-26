@@ -61,7 +61,7 @@ class DataRightsManagerTest {
         )
 
         assertTrue(json.contains("\"childId\":\"child-a\""))
-        assertTrue(json.contains("\"summary\":\"已建立档案\""))
+        assertFalse(json.contains("已建立档案"))
         assertFalse(json.contains("诊断原文"))
         assertFalse(json.contains("内部备注"))
         assertFalse(json.contains("baseline"))
@@ -87,5 +87,31 @@ class DataRightsManagerTest {
             careRecords = emptyList(),
             exportedAt = 2L
         )
+    }
+
+    @Test
+    fun csvUsesOnlyAuthorizedSnapshotFieldsAndEscapesCells() {
+        val child = ChildEntity(
+            childId = "child-a", alias = "小\"星,一", ageBand = "学龄期",
+            communicationLevel = "SHORT_SENTENCE", supportLevel = "L1",
+            diagnosisTranscription = "绝不导出原文", createdAt = 1L, updatedAt = 1L
+        )
+        val json = manager.buildAuthorizedExport(ConsentStatus.GRANTED, child,
+            emptyList(), emptyList(), emptyList(), emptyList(), emptyList(), 2L)
+        val csv = manager.toCsv(json)
+        assertTrue(csv.startsWith("recordType,recordIndex,field,value"))
+        assertTrue(csv.contains("\"小\"\"星,一\""))
+        assertFalse(csv.contains("绝不导出原文"))
+    }
+
+    @Test
+    fun csvNeutralizesSpreadsheetFormulaPrefix() {
+        val json = manager.buildAuthorizedExport(
+            ConsentStatus.GRANTED,
+            ChildEntity("child-a", "=HYPERLINK(\"bad\")", "学龄期", "SHORT_SENTENCE", "L1",
+                createdAt = 1L, updatedAt = 1L),
+            emptyList(), emptyList(), emptyList(), emptyList(), emptyList(), 2L
+        )
+        assertTrue(manager.toCsv(json).contains("\"'=HYPERLINK("))
     }
 }
