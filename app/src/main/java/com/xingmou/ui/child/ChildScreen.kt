@@ -11,7 +11,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.LinearProgressIndicator
@@ -54,7 +57,7 @@ import com.xingmou.ui.components.domainBarColor
 import com.xingmou.ui.theme.Error
 import com.xingmou.R
 
-private enum class ChildSection { TRAINING, PROFILE, SETTINGS }
+private enum class ChildSection { TRAINING, CHAT, PROFILE, SETTINGS }
 
 @Composable
 fun ChildScreen(
@@ -79,6 +82,9 @@ fun ChildScreen(
     onHighContrastChange: (Boolean) -> Unit,
     onSlowMotionChange: (Boolean) -> Unit,
     onInterestChange: (String) -> Unit,
+    onSendChatMessage: (String) -> Unit,
+    onSelectChatProvider: (com.xingmou.core.llm.ChatLlmProvider) -> Unit,
+    onOpenApiKey: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -124,6 +130,14 @@ fun ChildScreen(
                 modifier = Modifier.semantics { contentDescription = "儿童训练界面" }
             )
             NavigationRailItem(
+                selected = selectedSection.value == ChildSection.CHAT,
+                onClick = { selectedSection.value = ChildSection.CHAT },
+                icon = { Text("聊", style = MaterialTheme.typography.titleLarge) },
+                label = { Text("交互") },
+                alwaysShowLabel = true,
+                modifier = Modifier.semantics { contentDescription = "与小星对话交互模式" }
+            )
+            NavigationRailItem(
                 selected = selectedSection.value == ChildSection.PROFILE,
                 onClick = { selectedSection.value = ChildSection.PROFILE },
                 icon = { Text("画", style = MaterialTheme.typography.titleLarge) },
@@ -151,6 +165,7 @@ fun ChildScreen(
                     Text(
                         when (selectedSection.value) {
                             ChildSection.TRAINING -> "和小星一起练习"
+                            ChildSection.CHAT -> "和小星说说话"
                             ChildSection.PROFILE -> "我的彩虹画像"
                             ChildSection.SETTINGS -> "儿童端设置"
                         },
@@ -159,6 +174,7 @@ fun ChildScreen(
                     Text(
                         when (selectedSection.value) {
                             ChildSection.TRAINING -> "一次只做一步，随时可以休息。"
+                            ChildSection.CHAT -> "有问题、想聊天，都可以告诉小星。"
                             ChildSection.PROFILE -> "这是小星的游戏足迹，不是考试分数。"
                             ChildSection.SETTINGS -> "调整小星的呈现方式和练习偏好。"
                         },
@@ -201,6 +217,13 @@ fun ChildScreen(
                         }
                     )
                 }
+            } else if (selectedSection.value == ChildSection.CHAT) {
+                ChatCard(
+                    state = state,
+                    onSend = onSendChatMessage,
+                    onSelectProvider = onSelectChatProvider,
+                    onOpenApiKey = onOpenApiKey
+                )
             } else if (selectedSection.value == ChildSection.PROFILE) {
                 RainbowProfileCard(state.rainbowProfile)
             } else {
@@ -645,5 +668,184 @@ private fun ChoiceButton(label: String, optionIndex: Int, onChoice: (Int) -> Uni
         enabled = enabled
     ) {
         Text(label, style = enlargedVisualStyle(MaterialTheme.typography.titleLarge, label))
+    }
+}
+
+// ===================== 交互模式聊天 =====================
+
+@Composable
+private fun ChatCard(
+    state: ChildUiState,
+    onSend: (String) -> Unit,
+    onSelectProvider: (com.xingmou.core.llm.ChatLlmProvider) -> Unit,
+    onOpenApiKey: () -> Unit
+) {
+    val input = remember { mutableStateOf("") }
+    val scrollState = rememberScrollState()
+    val messages = state.chatMessages
+
+    // 新消息自动滚到底
+    LaunchedEffect(messages.size) {
+        if (messages.isNotEmpty()) scrollState.animateScrollTo(scrollState.maxValue)
+    }
+
+    androidx.compose.foundation.layout.Box(modifier = Modifier.fillMaxWidth().heightIn(min = 320.dp)) {
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            // 供应商选择
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("模型：", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                com.xingmou.core.llm.ChatLlmProvider.entries.forEach { provider ->
+                    androidx.compose.material3.FilterChip(
+                        selected = state.chatProvider == provider,
+                        onClick = { onSelectProvider(provider) },
+                        label = { Text(provider.label) }
+                    )
+                }
+            }
+
+            // 未配置提示：醒目引导用户去设置 API Key
+            if (!state.chatProviderConfigured) {
+                androidx.compose.material3.Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.errorContainer,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onOpenApiKey() }
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text("⚠", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onErrorContainer)
+                        Text(
+                            "还未配置 ${state.chatProvider.label} 的 API Key，点这里去设置。",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                    }
+                }
+            }
+
+            // 消息列表
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 200.dp, max = 420.dp)
+                    .verticalScroll(scrollState)
+                    .padding(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                if (messages.isEmpty()) {
+                    Text(state.chatHint, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                messages.forEach { msg ->
+                    ChatBubble(msg)
+                }
+                if (state.chatLoading) {
+                    Text("小星正在思考…", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                }
+            }
+
+            // 快捷话题：点击即发送，免去儿童打字门槛
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                state.chatQuickTopics.forEach { topic ->
+                    androidx.compose.material3.Surface(
+                        shape = RoundedCornerShape(20.dp),
+                        color = MaterialTheme.colorScheme.secondaryContainer,
+                        modifier = Modifier.clickable(enabled = !state.chatLoading) { onSend(topic) }
+                    ) {
+                        Text(
+                            topic,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                }
+            }
+
+            // 输入区
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                androidx.compose.material3.OutlinedTextField(
+                    value = input.value,
+                    onValueChange = { input.value = it },
+                    modifier = Modifier.weight(1f),
+                    label = { Text("对小星说…") },
+                    enabled = !state.chatLoading
+                )
+                Button(
+                    onClick = {
+                        val t = input.value
+                        input.value = ""
+                        onSend(t)
+                    },
+                    enabled = !state.chatLoading && input.value.isNotBlank()
+                ) { Text("发送") }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ChatBubble(msg: com.xingmou.ChatMessageUi) {
+    val isUser = msg.role == "user"
+    val avatar = if (isUser) "我" else "星"
+    val avatarColor = if (isUser) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.tertiary
+    val avatarText = if (isUser) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onTertiary
+    val bubbleColor = if (isUser) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant
+    val bubbleText = if (msg.isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start,
+        verticalAlignment = Alignment.Top
+    ) {
+        if (!isUser) {
+            androidx.compose.material3.Surface(
+                shape = androidx.compose.foundation.shape.CircleShape,
+                color = avatarColor,
+                modifier = Modifier.size(28.dp)
+            ) {
+                Text(avatar, modifier = Modifier.padding(2.dp), style = MaterialTheme.typography.titleSmall, color = avatarText, textAlign = TextAlign.Center)
+            }
+            Spacer(modifier = Modifier.size(6.dp))
+        }
+        androidx.compose.material3.Surface(
+            shape = RoundedCornerShape(16.dp),
+            color = bubbleColor,
+            modifier = Modifier.weight(1f, fill = false)
+        ) {
+            Text(
+                text = msg.content,
+                modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                color = bubbleText
+            )
+        }
+        if (isUser) {
+            Spacer(modifier = Modifier.size(6.dp))
+            androidx.compose.material3.Surface(
+                shape = androidx.compose.foundation.shape.CircleShape,
+                color = avatarColor,
+                modifier = Modifier.size(28.dp)
+            ) {
+                Text(avatar, modifier = Modifier.padding(2.dp), style = MaterialTheme.typography.titleSmall, color = avatarText, textAlign = TextAlign.Center)
+            }
+        }
     }
 }

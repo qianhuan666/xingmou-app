@@ -1,0 +1,7 @@
+{
+  "name": "xingmou-llm-proxy",
+  "version": "1.0.0",
+  "description": "veFaaS 反代函数：转发星眸 App 聊天请求到火山方舟豆包，Key 存环境变量不进 APK",
+  "main": "index.js",
+  "private": true
+}

@@ -51,6 +51,7 @@ import com.xingmou.ui.theme.XingmouTheme
 @Composable
 fun XingmouApp(viewModel: XingmouViewModel) {
     val state by viewModel.uiState.collectAsState()
+    val apiKeyOpen = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
     val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) {
         destination -> destination?.let { viewModel.exportAuthorizedData(it, "json") }
     }
@@ -95,8 +96,10 @@ fun XingmouApp(viewModel: XingmouViewModel) {
                         onConfirmImport = viewModel::confirmAuthorizedImport,
                         onCancelImport = viewModel::cancelAuthorizedImport,
                         onDeleteChild = viewModel::deleteActiveChild,
-                        onSaveApiKey = viewModel::saveInstitutionApiKey,
-                        onClearApiKey = viewModel::clearInstitutionApiKey
+                        onSaveApiKey = viewModel::saveChatApiKey,
+                        onClearApiKey = viewModel::clearChatApiKey,
+                        onSaveModelEndpoint = viewModel::saveModelEndpoint,
+                        apiKeyOpen = apiKeyOpen
                         ,onSaveLocalOrganization = viewModel::saveLocalOrganization,
                         onCreateLocalRoleUser = viewModel::createLocalRoleUser,
                         onUpdateLocalRoleUser = viewModel::updateLocalRoleUser
@@ -105,7 +108,12 @@ fun XingmouApp(viewModel: XingmouViewModel) {
                 },
                 bottomBar = { AppStatusBand(aiConfigured = state.aiConfigured, remoteAiConsent = state.remoteAiConsent) }
             ) { padding ->
-                PortContent(viewModel, state.selectedPort, Modifier.fillMaxSize().padding(padding))
+                PortContent(
+                    viewModel = viewModel,
+                    port = state.selectedPort,
+                    onOpenApiKey = { apiKeyOpen.value = true },
+                    modifier = Modifier.fillMaxSize().padding(padding)
+                )
             }
         }
     }
@@ -211,8 +219,10 @@ private fun ChildContextBar(
     onConfirmImport: () -> Unit,
     onCancelImport: () -> Unit,
     onDeleteChild: () -> Unit,
-    onSaveApiKey: (String) -> Unit,
-    onClearApiKey: () -> Unit
+    onSaveApiKey: (com.xingmou.core.llm.ChatLlmProvider, String) -> Unit,
+    onClearApiKey: (com.xingmou.core.llm.ChatLlmProvider) -> Unit,
+    onSaveModelEndpoint: (com.xingmou.core.llm.ChatLlmProvider, String) -> Unit,
+    apiKeyOpen: androidx.compose.runtime.MutableState<Boolean>
     ,onSaveLocalOrganization: (String, String, String) -> Unit,
     onCreateLocalRoleUser: (String, String, String) -> Unit,
     onUpdateLocalRoleUser: (String, String, String, Boolean) -> Unit
@@ -224,7 +234,6 @@ private fun ChildContextBar(
     val ageBandState = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf("学龄期") }
     val consentOpen = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
     val deleteConfirm = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
-    val apiKeyOpen = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
     val institutionOpen = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
     val institutionName = androidx.compose.runtime.remember(state.organizationName) { androidx.compose.runtime.mutableStateOf(state.organizationName) }
     val userName = androidx.compose.runtime.remember(state.localUserName) { androidx.compose.runtime.mutableStateOf(state.localUserName) }
@@ -264,34 +273,56 @@ private fun ChildContextBar(
         }
     }
     if (apiKeyOpen.value) {
+        val apiKeyProvider = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(com.xingmou.core.llm.ChatLlmProvider.DEEPSEEK) }
+        val endpointInput = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf("") }
         AlertDialog(
-            onDismissRequest = { apiKeyInput.value = ""; apiKeyOpen.value = false },
-            title = { Text("API Key 设置") },
+            onDismissRequest = { apiKeyInput.value = ""; endpointInput.value = ""; apiKeyOpen.value = false },
+            title = { Text("大模型 API Key 设置") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("由机构使用者自行填写 DeepSeek Key，保存在当前设备。设备持有 Key 可能被提取并产生费用；远程调用仍需当前儿童的明确授权。", style = MaterialTheme.typography.bodySmall)
+                    Text("由机构使用者自行填写所选模型的 Key，保存在当前设备。设备持有 Key 可能被提取并产生费用；远程调用仍需当前儿童的明确授权。", style = MaterialTheme.typography.bodySmall)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        com.xingmou.core.llm.ChatLlmProvider.entries.forEach { p ->
+                            androidx.compose.material3.FilterChip(
+                                selected = apiKeyProvider.value == p,
+                                onClick = { apiKeyProvider.value = p; apiKeyInput.value = ""; endpointInput.value = "" },
+                                label = { Text(p.label) }
+                            )
+                        }
+                    }
                     OutlinedTextField(
                         value = apiKeyInput.value,
                         onValueChange = { apiKeyInput.value = it.take(256) },
-                        label = { Text("DeepSeek API Key") },
+                        label = { Text("${apiKeyProvider.value.label} API Key") },
                         visualTransformation = PasswordVisualTransformation(),
                         singleLine = true
                     )
+                    if (apiKeyProvider.value == com.xingmou.core.llm.ChatLlmProvider.DOUBAO) {
+                        OutlinedTextField(
+                            value = endpointInput.value,
+                            onValueChange = { endpointInput.value = it.take(64) },
+                            label = { Text("推理接入点 ID（ep- 开头，可选）") },
+                            singleLine = true
+                        )
+                    }
                     Text(state.apiKeyMessage, style = MaterialTheme.typography.bodySmall)
                     OutlinedButton(onClick = {
-                        onClearApiKey()
+                        onClearApiKey(apiKeyProvider.value)
                         apiKeyInput.value = ""
-                    }, enabled = state.aiConfigured) { Text("清除已保存 Key") }
+                    }) { Text("清除已保存的${apiKeyProvider.value.label} Key") }
                 }
             },
             confirmButton = {
                 Button(onClick = {
-                    onSaveApiKey(apiKeyInput.value)
-                    apiKeyInput.value = ""
+                    onSaveApiKey(apiKeyProvider.value, apiKeyInput.value)
+                    if (apiKeyProvider.value == com.xingmou.core.llm.ChatLlmProvider.DOUBAO && endpointInput.value.isNotBlank()) {
+                        onSaveModelEndpoint(apiKeyProvider.value, endpointInput.value)
+                    }
+                    apiKeyInput.value = ""; endpointInput.value = ""
                 }, enabled = apiKeyInput.value.isNotBlank()) { Text("保存") }
             },
             dismissButton = {
-                TextButton(onClick = { apiKeyInput.value = ""; apiKeyOpen.value = false }) { Text("关闭") }
+                TextButton(onClick = { apiKeyInput.value = ""; endpointInput.value = ""; apiKeyOpen.value = false }) { Text("关闭") }
             }
         )
     }
@@ -420,7 +451,12 @@ private fun ChildContextBar(
 }
 
 @Composable
-private fun PortContent(viewModel: XingmouViewModel, port: Port, modifier: Modifier) {
+private fun PortContent(
+    viewModel: XingmouViewModel,
+    port: Port,
+    onOpenApiKey: () -> Unit,
+    modifier: Modifier
+) {
     val state by viewModel.uiState.collectAsState()
     when (port) {
         Port.CHILD -> ChildScreen(
@@ -445,6 +481,9 @@ private fun PortContent(viewModel: XingmouViewModel, port: Port, modifier: Modif
             onHighContrastChange = viewModel::setHighContrast,
             onSlowMotionChange = viewModel::setSlowMotion,
             onInterestChange = viewModel::selectInterest,
+            onSendChatMessage = viewModel::sendChatMessage,
+            onSelectChatProvider = viewModel::selectChatProvider,
+            onOpenApiKey = onOpenApiKey,
             modifier = modifier
         )
         Port.PARENT -> ParentScreen(

@@ -8,6 +8,7 @@ import com.xingmou.core.domain.PlanStateMachine
 import com.xingmou.core.domain.PlanStatus
 import com.xingmou.core.domain.TrainingResult
 import com.xingmou.core.domain.BaselineStatus
+import com.xingmou.core.llm.ChatLlmProvider
 import com.xingmou.data.catalog.QuestionDefinition
 import com.xingmou.data.catalog.QuestionType
 import com.xingmou.core.model.Port
@@ -70,6 +71,14 @@ fun normalizeSpeechRate(rate: Float): Float = rate.coerceIn(0.75f, 1.25f)
 
 fun normalizeSpeechVolume(volume: Float): Float = volume.coerceIn(0.5f, 1.0f)
 
+/** 交互模式聊天消息。 */
+data class ChatMessageUi(
+    val id: String,
+    val role: String, // "user" | "assistant"
+    val content: String,
+    val isError: Boolean = false
+)
+
 data class ChildUiState(
     val instruction: String = "找到目标图形",
     val options: List<String> = listOf("●", "▲"),
@@ -103,7 +112,23 @@ data class ChildUiState(
     val lastEvent: String = "等待开始",
     val curriculumMap: CurriculumMapUi = CurriculumMapUi(),
     val curriculumPlayer: CurriculumPlayerUi = CurriculumPlayerUi(),
-    val rainbowProfile: RainbowProfileUi = RainbowProfileUi()
+    val rainbowProfile: RainbowProfileUi = RainbowProfileUi(),
+    val chatMessages: List<ChatMessageUi> = emptyList(),
+    val chatLoading: Boolean = false,
+    val chatError: String? = null,
+    val chatProvider: ChatLlmProvider = ChatLlmProvider.DEEPSEEK,
+    val chatHint: String = "和小星说说话吧，任何问题都可以问。",
+    /** 儿童端快捷话题：点击即发送，免去打字门槛。 */
+    val chatQuickTopics: List<String> = listOf(
+        "我今天好开心",
+        "陪我玩个游戏",
+        "讲个小故事",
+        "我想听儿歌",
+        "我有点难过",
+        "教我念一首小诗"
+    ),
+    /** 当前所选供应商是否已配置 API Key。 */
+    val chatProviderConfigured: Boolean = false
 )
 
 data class CourseLevelUi(

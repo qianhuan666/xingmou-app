@@ -20,6 +20,12 @@ android {
         vectorDrawables {
             useSupportLibrary = true
         }
+
+        // 豆包内置凭证：火山方舟 API Key + ep- 推理接入点 ID。
+        // 拿到真实值后把下面两个占位替换，重新 assembleDebug 即可让 App 开箱即聊。
+        // 注意：release APK 可被反编译提取 Key，仅适合试点/内部使用，正式上线应改回后端代理。
+        buildConfigField("String", "ARK_API_KEY", "\"\"")
+        buildConfigField("String", "ARK_ENDPOINT", "\"\"")
     }
 
     buildTypes {

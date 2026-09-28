@@ -27,6 +27,9 @@ import com.xingmou.core.consent.DataRightsManager
 import com.xingmou.core.consent.AuthorizedImportManager
 import com.xingmou.core.organization.LocalCapability
 import com.xingmou.core.organization.LocalRolePolicy
+import com.xingmou.core.llm.ChatLlmGateway
+import com.xingmou.core.llm.ChatLlmProvider
+import com.xingmou.core.llm.ChatMessage
 import com.xingmou.core.llm.DirectDeepSeekGateway
 import com.xingmou.core.llm.GatewayCallRequest
 import com.xingmou.core.llm.GatewayPolicy
@@ -99,6 +102,15 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
     private val dataRightsManager = DataRightsManager()
     private val importManager = AuthorizedImportManager()
     private val apiKeyStore = LocalApiKeyStore(application)
+
+    /**
+     * 当前供应商是否已对 App 端就绪。
+     * 豆包：内置 ARK_API_KEY 非空（开箱即用）或用户在专业端自填 Key；
+     * DeepSeek/千问：必须用户在专业端自填 Key。
+     */
+    private fun isProviderReady(provider: ChatLlmProvider): Boolean =
+        if (provider == ChatLlmProvider.DOUBAO) BuildConfig.ARK_API_KEY.isNotBlank() || apiKeyStore.isConfigured(provider)
+        else apiKeyStore.isConfigured(provider)
     private var activeChildId: String? = null
     private var pendingImport: com.xingmou.core.consent.AuthorizedChildExport? = null
     private var generatedCurriculum: List<GeneratedCurriculumLevel> = emptyList()
@@ -128,7 +140,11 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                 slowMotion = accessibilityPreferences.getBoolean("slow_motion", false)
             ),
             aiConfigured = apiKeyStore.isConfigured(),
-            apiKeyMessage = if (apiKeyStore.isConfigured()) "已设置设备本地 API Key。" else "未设置 API Key；当前使用本地安全模式。"
+            apiKeyMessage = if (apiKeyStore.isConfigured()) "已设置设备本地 API Key。" else "未设置 API Key；当前使用本地安全模式。",
+            child = ChildUiState(
+                chatProvider = apiKeyStore.selectedProvider(),
+                chatProviderConfigured = isProviderReady(apiKeyStore.selectedProvider())
+            )
         )
     )
     val uiState: StateFlow<XingmouUiState> = _uiState.asStateFlow()
@@ -290,6 +306,111 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
             it.copy(
                 aiConfigured = apiKeyStore.isConfigured(),
                 apiKeyMessage = if (cleared) "已清除设备 API Key，恢复本地安全模式。" else "清除失败，请重试。"
+            )
+        }
+    }
+
+    // ---- 交互模式（多供应商 LLM 聊天） ----
+
+    fun selectChatProvider(provider: ChatLlmProvider) {
+        apiKeyStore.setSelectedProvider(provider)
+        _uiState.update {
+            it.copy(child = it.child.copy(
+                chatProvider = provider,
+                chatProviderConfigured = isProviderReady(provider),
+                chatError = null
+            ))
+        }
+    }
+
+    fun saveChatApiKey(provider: ChatLlmProvider, value: String) {
+        val saved = runCatching { apiKeyStore.save(provider, value) }.getOrDefault(false)
+        _uiState.update {
+            it.copy(
+                apiKeyMessage = if (saved) "${provider.label} API Key 已保存。" else "保存失败：Key 格式不正确。",
+                child = if (provider == it.child.chatProvider) {
+                    it.child.copy(chatProviderConfigured = isProviderReady(provider))
+                } else it.child
+            )
+        }
+    }
+
+    fun clearChatApiKey(provider: ChatLlmProvider) {
+        apiKeyStore.clear(provider)
+        _uiState.update {
+            it.copy(
+                apiKeyMessage = "已清除 ${provider.label} API Key。",
+                child = if (provider == it.child.chatProvider) {
+                    it.child.copy(chatProviderConfigured = isProviderReady(provider))
+                } else it.child
+            )
+        }
+    }
+
+    fun saveModelEndpoint(provider: ChatLlmProvider, endpoint: String) {
+        apiKeyStore.setModelEndpoint(provider, endpoint)
+        _uiState.update { it.copy(apiKeyMessage = "${provider.label} 推理接入点已保存。") }
+    }
+
+    private fun chatGateway(): ChatLlmGateway {
+        val provider = _uiState.value.child.chatProvider
+        return ChatLlmGateway(
+            provider = provider,
+            keyProvider = { apiKeyStore.get(provider) },
+            modelOrEndpoint = apiKeyStore.modelEndpoint(provider)
+        )
+    }
+
+    private val chatSystemPrompt = """
+        你是"小星"，一个陪伴儿童进行言语与认知训练的温柔伙伴。
+        请用简短、温暖、鼓励的语气回答，每次回答不超过三句话。
+        不说危险、暴力或不适宜儿童的内容；遇到不会的问题就温和地说"这个小星还不太清楚，我们一起想想吧"。
+    """.trimIndent()
+
+    fun sendChatMessage(text: String) {
+        val content = text.trim()
+        if (content.isBlank()) return
+        val userMsg = ChatMessageUi(newId("chat"), "user", content)
+        _uiState.update {
+            it.copy(child = it.child.copy(
+                chatMessages = it.child.chatMessages + userMsg,
+                chatLoading = true,
+                chatError = null,
+                chatHint = ""
+            ))
+        }
+        viewModelScope.launch {
+            val provider = _uiState.value.child.chatProvider
+            val history = _uiState.value.child.chatMessages
+                .filterNot { it.isError }
+                .map { ChatMessage(it.role, it.content) }
+            val result = chatGateway().chat(chatSystemPrompt, history, content)
+            result.fold(
+                onSuccess = { answer ->
+                    _uiState.update {
+                        it.copy(child = it.child.copy(
+                            chatMessages = it.child.chatMessages + ChatMessageUi(newId("chat"), "assistant", answer),
+                            chatLoading = false
+                        ))
+                    }
+                },
+                onFailure = { err ->
+                    val reason = when (err.message) {
+                        "api_key_missing" -> "还没有配置 ${provider.label} 的 API Key，请先到设置里填写。"
+                        "network_error" -> "网络好像不太通畅，小星没连上，稍后再试试吧。"
+                        "http_429" -> "问得太快啦，小星需要喘口气，稍等一下。"
+                        "http_401", "http_403" -> "${provider.label} 的 Key 好像不对，请检查一下。"
+                        "model_endpoint_missing" -> "豆包需要填写推理接入点 ID（ep- 开头）。"
+                        else -> "小星走神了，没听清，能再说一遍吗？"
+                    }
+                    _uiState.update {
+                        it.copy(child = it.child.copy(
+                            chatMessages = it.child.chatMessages + ChatMessageUi(newId("chat"), "assistant", reason, isError = true),
+                            chatLoading = false,
+                            chatError = reason
+                        ))
+                    }
+                }
             )
         }
     }
