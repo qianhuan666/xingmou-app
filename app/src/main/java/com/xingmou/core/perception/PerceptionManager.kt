@@ -10,6 +10,7 @@ import androidx.camera.core.ImageProxy
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.ProcessLifecycleOwner
 import com.google.mediapipe.framework.image.BitmapImageBuilder
 import com.google.mediapipe.framework.image.MPImage
 import com.google.mediapipe.tasks.components.containers.NormalizedLandmark
@@ -28,7 +29,6 @@ import java.util.concurrent.Executors
  */
 class PerceptionManager(
     private val context: Context,
-    private val lifecycleOwner: LifecycleOwner,
     private val onFrame: (PerceptionFrame) -> Unit
 ) {
     private val executor = Executors.newSingleThreadExecutor()
@@ -98,7 +98,11 @@ class PerceptionManager(
         val selector = CameraSelector.DEFAULT_FRONT_CAMERA
         runCatching {
             provider.unbindAll()
-            provider.bindToLifecycle(lifecycleOwner, selector, analysis)
+            provider.bindToLifecycle(
+                ProcessLifecycleOwner.get() as LifecycleOwner,
+                selector,
+                analysis
+            )
         }.onFailure { Log.e(TAG, "bindCamera failed", it) }
     }
 

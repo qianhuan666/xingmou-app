@@ -128,7 +128,13 @@ data class ChildUiState(
         "教我念一首小诗"
     ),
     /** 当前所选供应商是否已配置 API Key。 */
-    val chatProviderConfigured: Boolean = false
+    val chatProviderConfigured: Boolean = false,
+    /** 感知系统状态：实时情感/专注度/反馈 */
+    val perceptionEnabled: Boolean = false,
+    val perceptionPreview: Boolean = false,
+    val perceptionEmotion: String = "",
+    val perceptionFocus: String = "",
+    val perceptionFeedback: String = ""
 )
 
 data class CourseLevelUi(

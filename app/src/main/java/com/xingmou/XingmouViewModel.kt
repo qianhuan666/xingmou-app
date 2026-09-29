@@ -50,6 +50,11 @@ import com.xingmou.core.model.CommunicationLevel
 import com.xingmou.core.model.Port
 import com.xingmou.core.model.SessionContext
 import com.xingmou.core.safety.SafeResponses
+import com.xingmou.core.perception.FeedbackController
+import com.xingmou.core.perception.PerceptionManager
+import com.xingmou.core.perception.PerceptionState
+import com.xingmou.core.perception.SessionRecorder
+import com.xingmou.core.perception.StateAnalyzer
 import com.xingmou.data.db.PlanVersionEntity
 import com.xingmou.data.db.ChildEntity
 import com.xingmou.data.db.QizhiDatabase
@@ -152,6 +157,10 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
     private var activePlan: PlanVersionEntity? = null
     private var activeReview: ReviewRequestEntity? = null
     private var baselineSession = BaselineSession()
+    private var perceptionManager: PerceptionManager? = null
+    private var feedbackController: FeedbackController? = null
+    private var sessionRecorder: SessionRecorder? = null
+    private var lastMeltdown = false
 
     init {
         viewModelScope.launch {
@@ -245,6 +254,64 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
             loadCourseProgress(child.childId)
             loadHomeSupport(child.childId)
         }
+    }
+
+    // ---------- 感知系统 ----------
+    fun togglePerception(enabled: Boolean) {
+        if (enabled) startPerception() else stopPerception()
+    }
+
+    fun togglePerceptionPreview(show: Boolean) {
+        _uiState.update { it.copy(child = it.child.copy(perceptionPreview = show)) }
+    }
+
+    private fun startPerception() {
+        if (perceptionManager != null) return
+        val app = getApplication<Application>()
+        feedbackController = FeedbackController { feedback ->
+            _uiState.update { it.copy(child = it.child.copy(perceptionFeedback = feedback.message)) }
+            if (feedback.level == FeedbackController.Feedback.Level.L3_PAUSE) {
+                _uiState.update { it.copy(child = it.child.copy(isPaused = true)) }
+            }
+        }
+        sessionRecorder = SessionRecorder(database.perceptionSessionDao(), childId)
+        perceptionManager = PerceptionManager(app) { frame ->
+            val state = StateAnalyzer.analyze(frame, lastMeltdown)
+            lastMeltdown = state.isMeltdown
+            sessionRecorder?.onState(state)
+            feedbackController?.onState(state)
+            _uiState.update {
+                it.copy(child = it.child.copy(
+                    perceptionEmotion = state.emotion.name,
+                    perceptionFocus = state.focusLevel.name
+                ))
+            }
+        }
+        perceptionManager?.start()
+        _uiState.update { it.copy(child = it.child.copy(perceptionEnabled = true)) }
+    }
+
+    private fun stopPerception() {
+        perceptionManager?.stop()
+        perceptionManager = null
+        sessionRecorder?.finish()
+        sessionRecorder = null
+        feedbackController?.reset()
+        feedbackController = null
+        lastMeltdown = false
+        _uiState.update {
+            it.copy(child = it.child.copy(
+                perceptionEnabled = false,
+                perceptionEmotion = "",
+                perceptionFocus = "",
+                perceptionFeedback = ""
+            ))
+        }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        stopPerception()
     }
 
     fun createLocalChild(alias: String, ageBand: String = "学龄期") {
