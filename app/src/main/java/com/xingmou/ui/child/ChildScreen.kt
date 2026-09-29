@@ -87,6 +87,7 @@ fun ChildScreen(
     onOpenApiKey: () -> Unit,
     onTogglePerception: (Boolean) -> Unit,
     onTogglePerceptionPreview: (Boolean) -> Unit,
+    onSetPerceptionPreviewView: (androidx.camera.view.PreviewView?) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -235,7 +236,8 @@ fun ChildScreen(
                 PerceptionOverlay(
                     state = state,
                     onTogglePerception = onTogglePerception,
-                    onTogglePreview = onTogglePerceptionPreview
+                    onTogglePreview = onTogglePerceptionPreview,
+                    onSetPreviewView = onSetPerceptionPreviewView
                 )
                 AccessibilityCard(
                     accessibility = accessibility,

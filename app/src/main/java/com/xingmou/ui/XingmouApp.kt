@@ -486,6 +486,7 @@ private fun PortContent(
             onOpenApiKey = onOpenApiKey,
             onTogglePerception = viewModel::togglePerception,
             onTogglePerceptionPreview = viewModel::togglePerceptionPreview,
+            onSetPerceptionPreviewView = viewModel::setPerceptionPreviewView,
             modifier = modifier
         )
         Port.PARENT -> ParentScreen(

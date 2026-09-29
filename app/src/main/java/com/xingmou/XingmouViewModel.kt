@@ -265,6 +265,10 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
         _uiState.update { it.copy(child = it.child.copy(perceptionPreview = show)) }
     }
 
+    fun setPerceptionPreviewView(previewView: androidx.camera.view.PreviewView?) {
+        perceptionManager?.previewView = previewView
+    }
+
     private fun startPerception() {
         if (perceptionManager != null) return
         val app = getApplication<Application>()

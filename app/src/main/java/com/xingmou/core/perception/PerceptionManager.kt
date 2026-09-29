@@ -7,7 +7,9 @@ import android.util.Log
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
+import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
+import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
@@ -36,6 +38,8 @@ class PerceptionManager(
     private var poseLandmarker: PoseLandmarker? = null
     private var handLandmarker: HandLandmarker? = null
     private var cameraProvider: ProcessCameraProvider? = null
+    var previewView: PreviewView? = null
+        set(value) { field = value; bindCamera() }
 
     // 降级控制
     private var degradedMode = false
@@ -98,10 +102,15 @@ class PerceptionManager(
         val selector = CameraSelector.DEFAULT_FRONT_CAMERA
         runCatching {
             provider.unbindAll()
+            val useCases = mutableListOf<androidx.camera.core.UseCase>(analysis)
+            previewView?.let { pv ->
+                val preview = Preview.Builder().build().also { it.setSurfaceProvider(pv.surfaceProvider) }
+                useCases.add(0, preview)
+            }
             provider.bindToLifecycle(
                 ProcessLifecycleOwner.get() as LifecycleOwner,
                 selector,
-                analysis
+                *useCases.toTypedArray()
             )
         }.onFailure { Log.e(TAG, "bindCamera failed", it) }
     }
