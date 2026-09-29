@@ -87,14 +87,13 @@ fun PerceptionOverlay(
                         factory = { ctx ->
                             PreviewView(ctx).apply {
                                 scaleType = PreviewView.ScaleType.FIT_CENTER
-                            }
+                            }.also { onSetPreviewView(it) }
                         },
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(200.dp)
                             .padding(top = 8.dp)
-                            .clip(RoundedCornerShape(12.dp)),
-                        update = { pv -> onSetPreviewView(pv) }
+                            .clip(RoundedCornerShape(12.dp))
                     )
                     DisposableEffect(Unit) {
                         onDispose { onSetPreviewView(null) }
