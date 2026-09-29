@@ -45,9 +45,14 @@ class PerceptionManager(
     private var degradedMode = false
     private var lastFpsCheckTime = 0L
     private var fpsInWindow = 0
+    // MediaPipe 原生库不可用时的精简模式
+    private var liteMode = false
 
     fun start() {
-        runCatching { initLandmarkers() }.onFailure { Log.e(TAG, "init failed", it) }
+        runCatching { initLandmarkers() }.onFailure {
+            Log.e(TAG, "MediaPipe init failed, entering lite mode", it)
+            liteMode = true
+        }
         val future = ProcessCameraProvider.getInstance(context)
         future.addListener({
             cameraProvider = future.get()
@@ -99,7 +104,6 @@ class PerceptionManager(
             .build()
             .also { it.setAnalyzer(executor, FrameAnalyzer()) }
 
-        val selector = CameraSelector.DEFAULT_FRONT_CAMERA
         runCatching {
             provider.unbindAll()
             val useCases = mutableListOf<androidx.camera.core.UseCase>(analysis)
@@ -107,6 +111,9 @@ class PerceptionManager(
                 val preview = Preview.Builder().build().also { it.setSurfaceProvider(pv.surfaceProvider) }
                 useCases.add(0, preview)
             }
+            // 优先前置摄像头，没有则退回后置
+            val selector = if (provider.hasCamera(CameraSelector.DEFAULT_FRONT_CAMERA))
+                CameraSelector.DEFAULT_FRONT_CAMERA else CameraSelector.DEFAULT_BACK_CAMERA
             provider.bindToLifecycle(
                 ProcessLifecycleOwner.get() as LifecycleOwner,
                 selector,
@@ -136,10 +143,45 @@ class PerceptionManager(
 
     private inner class FrameAnalyzer : ImageAnalysis.Analyzer {
         override fun analyze(imageProxy: ImageProxy) {
-            val frame = runCatching { analyzeFrame(imageProxy) }.getOrNull()
+            val frame = if (liteMode) {
+                runCatching { analyzeFrameLite(imageProxy) }.getOrNull()
+            } else {
+                runCatching { analyzeFrame(imageProxy) }.getOrNull()
+            }
             imageProxy.close()
             checkDegrade()
             frame?.let { onFrame(it) }
+        }
+
+        /** 精简模式：无 MediaPipe，仅用帧亮度/运动做基本感知 */
+        private fun analyzeFrameLite(imageProxy: ImageProxy): PerceptionFrame {
+            val ts = System.currentTimeMillis()
+            val buffer = imageProxy.planes[0].buffer
+            val bytes = ByteArray(buffer.remaining())
+            buffer.get(bytes)
+            // 采样亮度（每 4 字节取一次）
+            var sum = 0L
+            var count = 0
+            var i = 0
+            while (i < bytes.size) {
+                sum += bytes[i].toInt() and 0xFF
+                count++
+                i += 4
+            }
+            val brightness = if (count > 0) sum.toFloat() / count else 0f
+            val faceDetected = brightness > 40f // 画面够亮，假定有人在
+            return PerceptionFrame(
+                timestampMs = ts,
+                faceBlendshapes = emptyMap(),
+                headRotation = HeadRotation(),
+                poseLandmarks = emptyList(),
+                leftHandLandmarks = emptyList(),
+                rightHandLandmarks = emptyList(),
+                faceDetected = faceDetected,
+                poseDetected = false,
+                leftHandDetected = false,
+                rightHandDetected = false
+            )
         }
 
         private fun analyzeFrame(imageProxy: ImageProxy): PerceptionFrame {
