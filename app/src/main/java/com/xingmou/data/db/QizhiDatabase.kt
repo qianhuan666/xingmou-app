@@ -34,9 +34,10 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         ToolCallEntity::class,
         MemoryItemEntity::class,
         ReviewRequestEntity::class,
-        DecisionTraceEntity::class
+        DecisionTraceEntity::class,
+        PerceptionSessionEntity::class
     ],
-    version = 13,
+    version = 14,
     exportSchema = false
 )
 abstract class QizhiDatabase : RoomDatabase() {
@@ -58,6 +59,7 @@ abstract class QizhiDatabase : RoomDatabase() {
     abstract fun consentDao(): ConsentDao
     abstract fun dataRightsDao(): DataRightsDao
     abstract fun agentDao(): AgentDao
+    abstract fun perceptionSessionDao(): PerceptionSessionDao
 
     companion object {
         @Volatile
@@ -69,7 +71,7 @@ abstract class QizhiDatabase : RoomDatabase() {
                     context.applicationContext,
                     QizhiDatabase::class.java,
                     "qizhi_training.db"
-                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13).build().also {
+                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14).build().also {
                     INSTANCE = it
                     DatabaseSeeder.seedAsync(it)
                 }
@@ -277,6 +279,28 @@ abstract class QizhiDatabase : RoomDatabase() {
                 db.execSQL("CREATE TABLE IF NOT EXISTS `local_sessions` (`sessionId` TEXT NOT NULL, `userId` TEXT NOT NULL, `role` TEXT NOT NULL, `status` TEXT NOT NULL, `createdAt` INTEGER NOT NULL, `expiresAt` INTEGER, PRIMARY KEY(`sessionId`))")
                 db.execSQL("CREATE INDEX IF NOT EXISTS `index_local_sessions_userId` ON `local_sessions` (`userId`)")
                 db.execSQL("CREATE INDEX IF NOT EXISTS `index_local_sessions_status` ON `local_sessions` (`status`)")
+            }
+        }
+
+        val MIGRATION_13_14 = object : Migration(13, 14) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """CREATE TABLE IF NOT EXISTS `perception_sessions` (
+                        `sessionId` TEXT NOT NULL,
+                        `childId` TEXT NOT NULL,
+                        `startedAt` INTEGER NOT NULL,
+                        `finishedAt` INTEGER,
+                        `frameCount` INTEGER NOT NULL,
+                        `emotionSummaryJson` TEXT NOT NULL,
+                        `focusSummaryJson` TEXT NOT NULL,
+                        `feedbackCount` INTEGER NOT NULL,
+                        `meltdownCount` INTEGER NOT NULL,
+                        `finalReportJson` TEXT,
+                        PRIMARY KEY(`sessionId`)
+                    )""".trimIndent()
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_perception_sessions_childId` ON `perception_sessions` (`childId`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_perception_sessions_childId_startedAt` ON `perception_sessions` (`childId`, `startedAt`)")
             }
         }
     }
