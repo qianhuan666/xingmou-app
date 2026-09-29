@@ -484,6 +484,8 @@ private fun PortContent(
             onSendChatMessage = viewModel::sendChatMessage,
             onSelectChatProvider = viewModel::selectChatProvider,
             onOpenApiKey = onOpenApiKey,
+            onTogglePerception = viewModel::togglePerception,
+            onTogglePerceptionPreview = viewModel::togglePerceptionPreview,
             modifier = modifier
         )
         Port.PARENT -> ParentScreen(
