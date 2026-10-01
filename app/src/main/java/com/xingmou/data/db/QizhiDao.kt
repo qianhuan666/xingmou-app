@@ -414,3 +414,18 @@ interface AgentDao {
     @Query("SELECT * FROM review_requests WHERE targetId = :targetId ORDER BY createdAt DESC LIMIT 1")
     suspend fun latestReviewForTarget(targetId: String): ReviewRequestEntity?
 }
+
+@Dao
+interface PerceptionSessionDao {
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(session: PerceptionSessionEntity)
+
+    @Query("SELECT * FROM perception_sessions WHERE childId = :childId ORDER BY startedAt DESC")
+    suspend fun forChild(childId: String): List<PerceptionSessionEntity>
+
+    @Query("SELECT * FROM perception_sessions WHERE sessionId = :sessionId LIMIT 1")
+    suspend fun find(sessionId: String): PerceptionSessionEntity?
+
+    @Query("SELECT * FROM perception_sessions WHERE childId = :childId ORDER BY startedAt DESC LIMIT :limit")
+    fun observeRecent(childId: String, limit: Int = 10): Flow<List<PerceptionSessionEntity>>
+}

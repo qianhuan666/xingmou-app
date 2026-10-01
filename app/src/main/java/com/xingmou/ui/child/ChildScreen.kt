@@ -85,6 +85,9 @@ fun ChildScreen(
     onSendChatMessage: (String) -> Unit,
     onSelectChatProvider: (com.xingmou.core.llm.ChatLlmProvider) -> Unit,
     onOpenApiKey: () -> Unit,
+    onTogglePerception: (Boolean) -> Unit,
+    onTogglePerceptionPreview: (Boolean) -> Unit,
+    onSetPerceptionPreviewView: (androidx.camera.view.PreviewView?) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -230,6 +233,12 @@ fun ChildScreen(
                 SupportCard(state)
                 RewardCard(state)
                 InterestCard(state, onInterestChange)
+                PerceptionOverlay(
+                    state = state,
+                    onTogglePerception = onTogglePerception,
+                    onTogglePreview = onTogglePerceptionPreview,
+                    onSetPreviewView = onSetPerceptionPreviewView
+                )
                 AccessibilityCard(
                     accessibility = accessibility,
                     speechController = speechController,

@@ -412,3 +412,20 @@ data class DecisionTraceEntity(
     val humanDecision: String?,
     val createdAt: Long
 )
+
+@Entity(
+    tableName = "perception_sessions",
+    indices = [Index("childId"), Index(value = ["childId", "startedAt"])]
+)
+data class PerceptionSessionEntity(
+    @androidx.room.PrimaryKey val sessionId: String,
+    val childId: String,
+    val startedAt: Long,
+    val finishedAt: Long?,
+    val frameCount: Int,
+    val emotionSummaryJson: String,
+    val focusSummaryJson: String,
+    val feedbackCount: Int,
+    val meltdownCount: Int,
+    val finalReportJson: String?
+)
