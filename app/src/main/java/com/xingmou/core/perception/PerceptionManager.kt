@@ -128,7 +128,15 @@ class PerceptionManager(
             provider.unbindAll()
             val useCases = mutableListOf<androidx.camera.core.UseCase>(analysis)
             previewView?.let { pv ->
-                val preview = Preview.Builder().build().also { it.setSurfaceProvider(pv.surfaceProvider) }
+                val preview = Preview.Builder()
+                    .setResolutionSelector(
+                        androidx.camera.core.resolutionselector.ResolutionSelector.Builder()
+                            .setAspectRatioStrategy(
+                                androidx.camera.core.resolutionselector.AspectRatioStrategy.RATIO_4_3_FALLBACK_AUTO_STRATEGY
+                            )
+                            .build()
+                    )
+                    .build().also { it.setSurfaceProvider(pv.surfaceProvider) }
                 useCases.add(0, preview)
             }
             // 优先前置摄像头，没有则退回后置

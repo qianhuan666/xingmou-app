@@ -5,10 +5,13 @@ import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.view.PreviewView
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -25,6 +28,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -159,23 +163,30 @@ fun PerceptionHomePreview(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            val previewRef = remember { arrayOfNulls<PreviewView>(1) }
-            AndroidView(
-                factory = { ctx ->
-                    PreviewView(ctx).apply {
-                        scaleType = PreviewView.ScaleType.FILL_CENTER
-                    }.also {
-                        previewRef[0] = it
-                        onAttachPreviewView(it)
-                    }
-                },
+            // 圆形遮罩：透明背景 + 中间圆形裁剪
+            Box(
                 modifier = Modifier
                     .size(180.dp)
-                    .clip(CircleShape)
-                    .border(3.dp, MaterialTheme.colorScheme.primary, CircleShape)
-            )
-            DisposableEffect(Unit) {
-                onDispose { previewRef[0]?.let(onDetachPreviewView) }
+                    .background(Color.Black.copy(alpha = 0.4f)),
+                contentAlignment = Alignment.Center
+            ) {
+                val previewRef = remember { arrayOfNulls<PreviewView>(1) }
+                AndroidView(
+                    factory = { ctx ->
+                        PreviewView(ctx).apply {
+                            scaleType = PreviewView.ScaleType.FIT_CENTER
+                        }.also {
+                            previewRef[0] = it
+                            onAttachPreviewView(it)
+                        }
+                    },
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clip(CircleShape)
+                )
+                DisposableEffect(Unit) {
+                    onDispose { previewRef[0]?.let(onDetachPreviewView) }
+                }
             }
             Column(modifier = Modifier.weight(1f)) {
                 if (state.perceptionEmotion.isNotBlank()) {
