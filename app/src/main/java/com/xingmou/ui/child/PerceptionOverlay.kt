@@ -158,7 +158,7 @@ fun PerceptionHomePreview(
     AndroidView(
         factory = { ctx ->
             PreviewView(ctx).apply {
-                scaleType = PreviewView.ScaleType.FIT_CENTER
+                scaleType = PreviewView.ScaleType.FILL_CENTER
             }.also {
                 previewRef[0] = it
                 onAttachPreviewView(it)
