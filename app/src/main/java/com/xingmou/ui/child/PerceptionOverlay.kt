@@ -153,64 +153,23 @@ fun PerceptionHomePreview(
 ) {
     if (!state.perceptionEnabled || !state.perceptionPreview) return
 
-    Surface(
-        modifier = modifier.fillMaxWidth(),
-        color = MaterialTheme.colorScheme.surfaceVariant,
-        shape = MaterialTheme.shapes.medium
-    ) {
-        Row(
-            modifier = Modifier.padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            // 圆形遮罩：透明背景 + 中间圆形裁剪
-            Box(
-                modifier = Modifier
-                    .size(180.dp)
-                    .background(Color.Black.copy(alpha = 0.4f)),
-                contentAlignment = Alignment.Center
-            ) {
-                val previewRef = remember { arrayOfNulls<PreviewView>(1) }
-                AndroidView(
-                    factory = { ctx ->
-                        PreviewView(ctx).apply {
-                            scaleType = PreviewView.ScaleType.FIT_CENTER
-                        }.also {
-                            previewRef[0] = it
-                            onAttachPreviewView(it)
-                        }
-                    },
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .clip(CircleShape)
-                )
-                DisposableEffect(Unit) {
-                    onDispose { previewRef[0]?.let(onDetachPreviewView) }
-                }
+    // 纯圆形窗口，无卡片背景、无文字
+    val previewRef = remember { arrayOfNulls<PreviewView>(1) }
+    AndroidView(
+        factory = { ctx ->
+            PreviewView(ctx).apply {
+                scaleType = PreviewView.ScaleType.FIT_CENTER
+            }.also {
+                previewRef[0] = it
+                onAttachPreviewView(it)
             }
-            Column(modifier = Modifier.weight(1f)) {
-                if (state.perceptionEmotion.isNotBlank()) {
-                    Text(
-                        text = "情绪: ${emotionLabel(state.perceptionEmotion)}",
-                        style = MaterialTheme.typography.titleMedium
-                    )
-                }
-                if (state.perceptionFocus.isNotBlank()) {
-                    Text(
-                        text = "专注: ${focusLabel(state.perceptionFocus)}",
-                        style = MaterialTheme.typography.titleMedium
-                    )
-                }
-                if (state.perceptionFeedback.isNotBlank()) {
-                    Text(
-                        text = state.perceptionFeedback,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(top = 4.dp)
-                    )
-                }
-            }
-        }
+        },
+        modifier = modifier
+            .size(180.dp)
+            .clip(CircleShape)
+    )
+    DisposableEffect(Unit) {
+        onDispose { previewRef[0]?.let(onDetachPreviewView) }
     }
 }
 
