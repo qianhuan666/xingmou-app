@@ -129,6 +129,68 @@ fun PerceptionOverlay(
     }
 }
 
+/**
+ * 主页（训练页）顶部的实时监测小窗口。
+ * 仅在感知开启且预览开启时显示；与设置页共用同一 PreviewView 绑定（两处不会同时存在）。
+ */
+@Composable
+fun PerceptionHomePreview(
+    state: ChildUiState,
+    onSetPreviewView: (PreviewView?) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    if (!state.perceptionEnabled || !state.perceptionPreview) return
+
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        shape = MaterialTheme.shapes.medium
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            AndroidView(
+                factory = { ctx ->
+                    PreviewView(ctx).apply {
+                        scaleType = PreviewView.ScaleType.FIT_CENTER
+                    }.also { onSetPreviewView(it) }
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(160.dp)
+                    .clip(RoundedCornerShape(12.dp))
+            )
+            DisposableEffect(Unit) {
+                onDispose { onSetPreviewView(null) }
+            }
+            Row(
+                modifier = Modifier.padding(top = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (state.perceptionEmotion.isNotBlank()) {
+                    Text(
+                        text = "情绪: ${emotionLabel(state.perceptionEmotion)}",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+                if (state.perceptionFocus.isNotBlank()) {
+                    Text(
+                        text = "专注: ${focusLabel(state.perceptionFocus)}",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+            }
+            if (state.perceptionFeedback.isNotBlank()) {
+                Text(
+                    text = state.perceptionFeedback,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+            }
+        }
+    }
+}
+
 private fun emotionLabel(name: String): String = when (name) {
     "HAPPY" -> "开心"
     "SAD" -> "难过"

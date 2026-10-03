@@ -187,6 +187,10 @@ fun ChildScreen(
             }
 
             if (selectedSection.value == ChildSection.TRAINING) {
+                PerceptionHomePreview(
+                    state = state,
+                    onSetPreviewView = onSetPerceptionPreviewView
+                )
                 BaselineCard(baseline, onStartBaseline, onResumeBaseline, onLeaveBaseline, onRestartBaseline, onBaselineAnswer)
                 if (selectedCourseLevel.value == null) {
                     CurriculumMapCard(
