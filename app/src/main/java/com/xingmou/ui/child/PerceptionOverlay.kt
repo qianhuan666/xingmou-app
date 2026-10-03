@@ -170,9 +170,9 @@ fun PerceptionHomePreview(
                     }
                 },
                 modifier = Modifier
-                    .size(108.dp)
+                    .size(180.dp)
                     .clip(CircleShape)
-                    .border(2.dp, MaterialTheme.colorScheme.primary, CircleShape)
+                    .border(3.dp, MaterialTheme.colorScheme.primary, CircleShape)
             )
             DisposableEffect(Unit) {
                 onDispose { previewRef[0]?.let(onDetachPreviewView) }
@@ -181,13 +181,13 @@ fun PerceptionHomePreview(
                 if (state.perceptionEmotion.isNotBlank()) {
                     Text(
                         text = "情绪: ${emotionLabel(state.perceptionEmotion)}",
-                        style = MaterialTheme.typography.bodyMedium
+                        style = MaterialTheme.typography.titleMedium
                     )
                 }
                 if (state.perceptionFocus.isNotBlank()) {
                     Text(
                         text = "专注: ${focusLabel(state.perceptionFocus)}",
-                        style = MaterialTheme.typography.bodyMedium
+                        style = MaterialTheme.typography.titleMedium
                     )
                 }
                 if (state.perceptionFeedback.isNotBlank()) {
