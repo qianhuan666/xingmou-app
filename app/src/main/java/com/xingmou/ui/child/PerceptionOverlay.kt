@@ -37,7 +37,8 @@ fun PerceptionOverlay(
     state: ChildUiState,
     onTogglePerception: (Boolean) -> Unit,
     onTogglePreview: (Boolean) -> Unit,
-    onSetPreviewView: (PreviewView?) -> Unit,
+    onAttachPreviewView: (PreviewView) -> Unit,
+    onDetachPreviewView: (PreviewView) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -83,11 +84,15 @@ fun PerceptionOverlay(
                     )
                 }
                 if (state.perceptionPreview) {
+                    val previewRef = remember { arrayOfNulls<PreviewView>(1) }
                     AndroidView(
                         factory = { ctx ->
                             PreviewView(ctx).apply {
                                 scaleType = PreviewView.ScaleType.FIT_CENTER
-                            }.also { onSetPreviewView(it) }
+                            }.also {
+                                previewRef[0] = it
+                                onAttachPreviewView(it)
+                            }
                         },
                         modifier = Modifier
                             .fillMaxWidth()
@@ -96,7 +101,7 @@ fun PerceptionOverlay(
                             .clip(RoundedCornerShape(12.dp))
                     )
                     DisposableEffect(Unit) {
-                        onDispose { onSetPreviewView(null) }
+                        onDispose { previewRef[0]?.let(onDetachPreviewView) }
                     }
                 }
                 Row(
@@ -136,7 +141,8 @@ fun PerceptionOverlay(
 @Composable
 fun PerceptionHomePreview(
     state: ChildUiState,
-    onSetPreviewView: (PreviewView?) -> Unit,
+    onAttachPreviewView: (PreviewView) -> Unit,
+    onDetachPreviewView: (PreviewView) -> Unit,
     modifier: Modifier = Modifier
 ) {
     if (!state.perceptionEnabled || !state.perceptionPreview) return
@@ -147,11 +153,15 @@ fun PerceptionHomePreview(
         shape = MaterialTheme.shapes.medium
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
+            val previewRef = remember { arrayOfNulls<PreviewView>(1) }
             AndroidView(
                 factory = { ctx ->
                     PreviewView(ctx).apply {
                         scaleType = PreviewView.ScaleType.FIT_CENTER
-                    }.also { onSetPreviewView(it) }
+                    }.also {
+                        previewRef[0] = it
+                        onAttachPreviewView(it)
+                    }
                 },
                 modifier = Modifier
                     .fillMaxWidth()
@@ -159,7 +169,7 @@ fun PerceptionHomePreview(
                     .clip(RoundedCornerShape(12.dp))
             )
             DisposableEffect(Unit) {
-                onDispose { onSetPreviewView(null) }
+                onDispose { previewRef[0]?.let(onDetachPreviewView) }
             }
             Row(
                 modifier = Modifier.padding(top = 8.dp),

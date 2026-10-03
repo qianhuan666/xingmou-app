@@ -87,7 +87,8 @@ fun ChildScreen(
     onOpenApiKey: () -> Unit,
     onTogglePerception: (Boolean) -> Unit,
     onTogglePerceptionPreview: (Boolean) -> Unit,
-    onSetPerceptionPreviewView: (androidx.camera.view.PreviewView?) -> Unit,
+    onAttachPerceptionPreviewView: (androidx.camera.view.PreviewView) -> Unit,
+    onDetachPerceptionPreviewView: (androidx.camera.view.PreviewView) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -189,7 +190,8 @@ fun ChildScreen(
             if (selectedSection.value == ChildSection.TRAINING) {
                 PerceptionHomePreview(
                     state = state,
-                    onSetPreviewView = onSetPerceptionPreviewView
+                    onAttachPreviewView = onAttachPerceptionPreviewView,
+                    onDetachPreviewView = onDetachPerceptionPreviewView
                 )
                 BaselineCard(baseline, onStartBaseline, onResumeBaseline, onLeaveBaseline, onRestartBaseline, onBaselineAnswer)
                 if (selectedCourseLevel.value == null) {
@@ -241,7 +243,8 @@ fun ChildScreen(
                     state = state,
                     onTogglePerception = onTogglePerception,
                     onTogglePreview = onTogglePerceptionPreview,
-                    onSetPreviewView = onSetPerceptionPreviewView
+                    onAttachPreviewView = onAttachPerceptionPreviewView,
+                    onDetachPreviewView = onDetachPerceptionPreviewView
                 )
                 AccessibilityCard(
                     accessibility = accessibility,
