@@ -170,7 +170,10 @@ data class ChildUiState(
     val perceptionPreview: Boolean = false,
     val perceptionEmotion: String = "",
     val perceptionFocus: String = "",
-    val perceptionFeedback: String = ""
+    val perceptionFeedback: String = "",
+    /** 最近一次作答结果，驱动答题音效；null = 不计分的观察题，lastAnswerAt 每次作答都变化 */
+    val lastAnswerCorrect: Boolean? = null,
+    val lastAnswerAt: Long = 0L
 )
 
 data class CourseLevelUi(

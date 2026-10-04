@@ -19,6 +19,8 @@ class ChildSpeechController(context: Context) : TextToSpeech.OnInitListener {
             ready = result != TextToSpeech.LANG_MISSING_DATA && result != TextToSpeech.LANG_NOT_SUPPORTED
             textToSpeech.setSpeechRate(speechRate)
             if (ready) pendingText?.let(::speak)
+        } else {
+            android.util.Log.w("XingmouTTS", "init failed status=$status")
         }
     }
 
@@ -41,7 +43,21 @@ class ChildSpeechController(context: Context) : TextToSpeech.OnInitListener {
         val parameters = Bundle().apply {
             putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, speechVolume)
         }
-        textToSpeech.speak(text.take(80), TextToSpeech.QUEUE_FLUSH, parameters, "xingmou-child")
+        val utterance = text.take(80)
+        textToSpeech.speak(utterance, TextToSpeech.QUEUE_FLUSH, parameters, "xingmou-child")
+    }
+
+    /**
+     * 排队播报（不打断正在朗读的题目），用于感知提醒等次要语音。
+     * TTS 未就绪时直接丢弃——提醒类语音过期即失效。
+     */
+    fun speakQueued(text: String) {
+        if (text.isBlank() || !ready) return
+        val parameters = Bundle().apply {
+            putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, speechVolume)
+        }
+        val utterance = text.take(60)
+        textToSpeech.speak(utterance, TextToSpeech.QUEUE_ADD, parameters, "xingmou-perception")
     }
 
     fun stop() {

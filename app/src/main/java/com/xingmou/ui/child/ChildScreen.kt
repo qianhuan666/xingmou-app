@@ -101,10 +101,14 @@ fun ChildScreen(
 ) {
     val context = LocalContext.current
     val speechController = remember(context) { ChildSpeechController(context) }
+    val soundEffects = remember(context) { ChildSoundEffects() }
     val selectedSection = remember { mutableStateOf(ChildSection.TRAINING) }
     val selectedCourseLevel = remember { mutableStateOf<Int?>(null) }
     DisposableEffect(speechController) {
         onDispose { speechController.shutdown() }
+    }
+    DisposableEffect(soundEffects) {
+        onDispose { soundEffects.release() }
     }
     LaunchedEffect(accessibility.speechRate, accessibility.speechVolume) {
         speechController.setSpeechRate(accessibility.speechRate)
@@ -121,10 +125,35 @@ fun ChildScreen(
     }
     val curriculumQuestion = state.curriculumPlayer.question
     LaunchedEffect(curriculumQuestion?.id, curriculumQuestion?.type, accessibility.speechEnabled) {
-        val q = curriculumQuestion
-        if (accessibility.speechEnabled && q != null && q.type == QuestionType.AUDIO) {
-            val text = q.stimulus.ifBlank { q.prompt }
-            if (text.isNotBlank()) speechController.speak(text)
+        val q = curriculumQuestion ?: return@LaunchedEffect
+        if (!accessibility.speechEnabled) return@LaunchedEffect
+        // 听力题读刺激文本，其他题型读题干
+        val text = if (q.type == QuestionType.AUDIO) q.stimulus.ifBlank { q.prompt } else q.prompt
+        if (text.isNotBlank()) speechController.speak(text)
+    }
+    // 基线题目同样朗读题干（听力题读刺激文本）
+    val baselineQuestion = baseline.question
+    LaunchedEffect(baselineQuestion?.id, baselineQuestion?.type, accessibility.speechEnabled) {
+        val q = baselineQuestion ?: return@LaunchedEffect
+        if (!accessibility.speechEnabled) return@LaunchedEffect
+        val text = if (q.type == QuestionType.AUDIO) q.stimulus.ifBlank { q.prompt } else q.prompt
+        if (text.isNotBlank()) speechController.speak(text)
+    }
+    // 答题音效：作答瞬间即播；记录已播时间戳，避免重新组合时重放上一题的结果
+    val playedAnswerAt = remember { mutableStateOf(0L) }
+    LaunchedEffect(state.lastAnswerAt) {
+        if (state.lastAnswerAt == 0L || state.lastAnswerAt == playedAnswerAt.value) return@LaunchedEffect
+        playedAnswerAt.value = state.lastAnswerAt
+        when (state.lastAnswerCorrect) {
+            true -> soundEffects.correct()
+            false -> soundEffects.wrong()
+            null -> Unit
+        }
+    }
+    // 感知反馈温和语音提醒：排队播报，不打断正在朗读的题目
+    LaunchedEffect(state.perceptionFeedback) {
+        if (accessibility.speechEnabled && state.perceptionFeedback.isNotBlank()) {
+            speechController.speakQueued(state.perceptionFeedback)
         }
     }
     // 沉浸空间判断：基线进行中 或 进入了课程关卡

@@ -696,9 +696,18 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
 
     fun answerBaseline(option: Int) {
         if (_uiState.value.baseline.status != BaselineStatus.IN_PROGRESS || _uiState.value.baseline.isWorking) return
-        _uiState.update { it.copy(baseline = it.baseline.copy(isWorking = true)) }
+        // 作答瞬间就同步记录正误，让音效立即播放，不等落库
+        val answeredAt = System.currentTimeMillis()
+        val questionNow = _uiState.value.baseline.question
+        val preEvaluation = questionNow?.let {
+            runCatching { QuestionEvaluator.evaluate(it, option.coerceIn(0, it.options.lastIndex)) }.getOrNull()
+        }
+        _uiState.update { it.copy(
+            baseline = it.baseline.copy(isWorking = true),
+            child = it.child.copy(lastAnswerCorrect = preEvaluation?.correct, lastAnswerAt = answeredAt)
+        ) }
         viewModelScope.launch {
-            baselineSession = baselineEngine.answer(baselineSession, option, System.currentTimeMillis())
+            baselineSession = baselineEngine.answer(baselineSession, option, answeredAt)
             persistBaseline()
             if (baselineSession.status == BaselineStatus.COMPLETED) {
                 val now = System.currentTimeMillis()
@@ -1216,7 +1225,12 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
         }
         val completed = evaluation.completed
         val correct = evaluation.correct ?: completed
-        _uiState.update { it.copy(child = it.child.copy(curriculumPlayer = player.copy(isWorking = true))) }
+        // 作答瞬间就同步记录正误，让音效立即播放，不等落库
+        _uiState.update { it.copy(child = it.child.copy(
+            curriculumPlayer = player.copy(isWorking = true),
+            lastAnswerCorrect = evaluation.correct,
+            lastAnswerAt = System.currentTimeMillis()
+        )) }
         viewModelScope.launch {
             runCatching {
                 val now = System.currentTimeMillis()
