@@ -48,6 +48,8 @@ import com.xingmou.ui.parent.ParentScreen
 import com.xingmou.ui.professional.ProfessionalScreen
 import com.xingmou.ui.theme.XingmouTheme
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Box
@@ -205,12 +207,17 @@ private fun ChildEntryScreen(
                 }
             }
         }
-        TextButton(
-            onClick = onOpenAdult,
-            modifier = Modifier.align(Alignment.BottomEnd).padding(12.dp)
-        ) {
-            Text("⚙ 家长 / 老师", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
+        Text(
+            text = "⚙ 家长 / 老师 · 长按进入",
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(12.dp)
+                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.7f), RoundedCornerShape(10.dp))
+                .pointerInput(Unit) { detectTapGestures(onLongPress = { onOpenAdult() }) }
+                .padding(horizontal = 12.dp, vertical = 8.dp)
+        )
     }
 }
 
