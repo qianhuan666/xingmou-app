@@ -3,7 +3,6 @@ package com.xingmou.ui.professional
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -21,6 +20,8 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationRail
+import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -47,6 +48,8 @@ import com.xingmou.ui.theme.Warning
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+
+private enum class ProfessionalSection { ANALYSIS, PLAN, ASSESSMENT, CARE, AGENT }
 
 @Composable
 fun ProfessionalScreen(
@@ -81,41 +84,83 @@ fun ProfessionalScreen(
     onAnnotateAgentTrace: (String, String, String) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Column(
-        modifier = modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        Text("专业审核工作台", style = MaterialTheme.typography.headlineMedium)
-        Text("Agent 负责整理与草拟，方案确认和生效始终由专业人员完成。", color = MaterialTheme.colorScheme.onSurfaceVariant)
-
-        BoxWithConstraints(Modifier.fillMaxWidth()) {
-            val wide = maxWidth >= 920.dp
-            if (wide) {
-                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                        AnalysisPanel(state, onRefresh)
-                        ReportPanel(state)
-                        GroupReportPanel(state)
-                        TrainingDetailsPanel(state)
-                        AssessmentPanel(state, onAssessmentSelect, onAssessmentDateChange, onAssessmentSourceChange, onAssessmentScoresChange, onAssessmentNotesChange, onSaveAssessment)
-                        MethodLibraryPanel()
-                        CareWorkflowPanel(state, onAdvanceCareStage, onCareNoteChange, onCareClosureReasonChange, onCareFollowUpPlanChange, onCareFollowUpDateChange)
-                        HomeFeedbackPanel(state)
-                        AgentPanel(state, onRefreshAgentAudit, onOpenAgentAudit, onAnnotateAgentTrace)
-                    }
-                    PlanPanel(state, onReviewCommentChange, onPlanTaskChange, onPlanGoalChange, onPlanDifficultyChange, onPlanSupportLevelChange, onPlanFrequencyChange, onPlanDurationChange, onPlanStopConditionsChange, onCreateRevision, onCreateDraft, onConfirm, onActivate, onReject, Modifier.weight(1.12f))
-                }
-            } else {
-                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+    val selectedSection = remember { mutableStateOf(ProfessionalSection.ANALYSIS) }
+    Row(modifier = modifier.fillMaxSize()) {
+        NavigationRail(modifier = Modifier.padding(top = 16.dp)) {
+            NavigationRailItem(
+                selected = selectedSection.value == ProfessionalSection.ANALYSIS,
+                onClick = { selectedSection.value = ProfessionalSection.ANALYSIS },
+                icon = { Text("析", style = MaterialTheme.typography.titleLarge) },
+                label = { Text("分析") }
+            )
+            NavigationRailItem(
+                selected = selectedSection.value == ProfessionalSection.PLAN,
+                onClick = { selectedSection.value = ProfessionalSection.PLAN },
+                icon = { Text("案", style = MaterialTheme.typography.titleLarge) },
+                label = { Text("方案") }
+            )
+            NavigationRailItem(
+                selected = selectedSection.value == ProfessionalSection.ASSESSMENT,
+                onClick = { selectedSection.value = ProfessionalSection.ASSESSMENT },
+                icon = { Text("估", style = MaterialTheme.typography.titleLarge) },
+                label = { Text("评估") }
+            )
+            NavigationRailItem(
+                selected = selectedSection.value == ProfessionalSection.CARE,
+                onClick = { selectedSection.value = ProfessionalSection.CARE },
+                icon = { Text("个", style = MaterialTheme.typography.titleLarge) },
+                label = { Text("个案") }
+            )
+            NavigationRailItem(
+                selected = selectedSection.value == ProfessionalSection.AGENT,
+                onClick = { selectedSection.value = ProfessionalSection.AGENT },
+                icon = { Text("AI", style = MaterialTheme.typography.titleLarge) },
+                label = { Text("Agent") }
+            )
+        }
+        Column(
+            modifier = Modifier.weight(1f).fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Text(
+                when (selectedSection.value) {
+                    ProfessionalSection.ANALYSIS -> "过程分析"
+                    ProfessionalSection.PLAN -> "训练方案"
+                    ProfessionalSection.ASSESSMENT -> "量表与评估"
+                    ProfessionalSection.CARE -> "个案管理"
+                    ProfessionalSection.AGENT -> "Agent 运行审计"
+                },
+                style = MaterialTheme.typography.headlineMedium
+            )
+            Text(
+                when (selectedSection.value) {
+                    ProfessionalSection.ANALYSIS -> "查看能力分析、个体与分组报告及训练明细。"
+                    ProfessionalSection.PLAN -> "Agent 生成草案，专业人员确认并签署生效。"
+                    ProfessionalSection.ASSESSMENT -> "转录专业量表，并参考本地方法库。"
+                    ProfessionalSection.CARE -> "记录个案阶段与家庭反馈。"
+                    ProfessionalSection.AGENT -> "查看当前儿童的 Agent 运行记录与决策轨迹。"
+                },
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            when (selectedSection.value) {
+                ProfessionalSection.ANALYSIS -> {
                     AnalysisPanel(state, onRefresh)
                     ReportPanel(state)
                     GroupReportPanel(state)
                     TrainingDetailsPanel(state)
+                }
+                ProfessionalSection.PLAN -> {
+                    PlanPanel(state, onReviewCommentChange, onPlanTaskChange, onPlanGoalChange, onPlanDifficultyChange, onPlanSupportLevelChange, onPlanFrequencyChange, onPlanDurationChange, onPlanStopConditionsChange, onCreateRevision, onCreateDraft, onConfirm, onActivate, onReject, Modifier.fillMaxWidth())
+                }
+                ProfessionalSection.ASSESSMENT -> {
                     AssessmentPanel(state, onAssessmentSelect, onAssessmentDateChange, onAssessmentSourceChange, onAssessmentScoresChange, onAssessmentNotesChange, onSaveAssessment)
                     MethodLibraryPanel()
+                }
+                ProfessionalSection.CARE -> {
                     CareWorkflowPanel(state, onAdvanceCareStage, onCareNoteChange, onCareClosureReasonChange, onCareFollowUpPlanChange, onCareFollowUpDateChange)
                     HomeFeedbackPanel(state)
-                    PlanPanel(state, onReviewCommentChange, onPlanTaskChange, onPlanGoalChange, onPlanDifficultyChange, onPlanSupportLevelChange, onPlanFrequencyChange, onPlanDurationChange, onPlanStopConditionsChange, onCreateRevision, onCreateDraft, onConfirm, onActivate, onReject, Modifier.fillMaxWidth())
+                }
+                ProfessionalSection.AGENT -> {
                     AgentPanel(state, onRefreshAgentAudit, onOpenAgentAudit, onAnnotateAgentTrace)
                 }
             }
