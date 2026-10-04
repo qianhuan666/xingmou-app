@@ -21,19 +21,25 @@ class CatalogTest {
         assertTrue(RehabilitationMethods.all.any { it.id == "FAMILY" })
     }
 
-    @Test fun webQuestionBankContainsNinetyQuestionsAcrossTwentyTwoModules() {
-        assertEquals(24, QuestionCatalog.baselineQuestions.size)
-        assertEquals(66, QuestionCatalog.moduleQuestionBank.size)
-        assertEquals(66, QuestionCatalog.fullCourseQuestions.size)
+    @Test fun webQuestionBankContainsNinetyFiveQuestionsAcrossTwentyTwoModules() {
+        assertEquals(26, QuestionCatalog.baselineQuestions.size)
+        assertEquals(69, QuestionCatalog.moduleQuestionBank.size)
+        assertEquals(69, QuestionCatalog.fullCourseQuestions.size)
         assertEquals(22, QuestionCatalog.moduleQuestionBank.map { it.moduleId }.toSet().size)
-        assertEquals(90, QuestionCatalog.baselineQuestions.size + QuestionCatalog.moduleQuestionBank.size)
+        assertEquals(95, QuestionCatalog.baselineQuestions.size + QuestionCatalog.moduleQuestionBank.size)
         assertTrue(QuestionCatalog.moduleQuestionBank.all { it.version == 1 && it.sourceRef == "WEB_BANK_V1" })
         assertTrue(QuestionCatalog.baselineQuestions.all { it.version == 1 && it.sourceRef == "WEB_BANK_V1" })
     }
 
-    @Test fun webQuestionBankKeepsFourBaselineAndThreeModuleQuestionsPerUnit() {
-        assertEquals(mapOf("A" to 4, "B" to 4, "C" to 4, "D" to 4, "E" to 4, "F" to 4), QuestionCatalog.baselineQuestions.groupingBy { it.domain }.eachCount())
-        assertTrue(QuestionCatalog.moduleQuestionBank.groupingBy { it.moduleId }.eachCount().values.all { it == 3 })
+    @Test fun webQuestionBankKeepsQuestionsGroupedPerUnit() {
+        assertEquals(
+            mapOf("A" to 4, "B" to 4, "C" to 4, "D" to 4, "E" to 4, "F" to 4, "G" to 2),
+            QuestionCatalog.baselineQuestions.groupingBy { it.domain }.eachCount()
+        )
+        val moduleCounts = QuestionCatalog.moduleQuestionBank.groupingBy { it.moduleId }.eachCount()
+        // D03「跟着做」模块扩充了手势题（D03-04/05/06），其余模块仍保持每模块 3 题
+        assertEquals(6, moduleCounts["D03"])
+        assertTrue(moduleCounts.filterKeys { it != "D03" }.values.all { it == 3 })
     }
 
     @Test fun firstBaselineQuestionIncludesItsWebTargetCue() {

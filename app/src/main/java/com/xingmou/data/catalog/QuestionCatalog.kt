@@ -68,14 +68,16 @@ object QuestionCatalog {
         question("BL-E-02", "baseline", "E", QuestionType.CHOICE, "小朋友正在玩球，我想一起玩，可以怎么做？", listOf("💢", "🙋", "🏃"), 1, stimulus = "", previewMs = 0L),
         question("BL-E-03", "baseline", "E", QuestionType.CHOICE, "朋友指着天空说“看！”，我们可以看哪里？", listOf("👟", "☁️", "🍽️"), 1, stimulus = "🧒👉☁️", previewMs = 0L),
         question("BL-F-01", "baseline", "F", QuestionType.CHOICE, "刷牙的时候需要哪一样？", listOf("🪥", "🧦", "🥄"), 0, stimulus = "", previewMs = 0L),
-        question("BL-F-02", "baseline", "F", QuestionType.OBSERVED, "请先跟着做，再点“我完成了”", listOf("自己完成", "帮助后完成", "还没完成"), null, stimulus = "👏 🙌 👏", previewMs = 0L),
+        question("BL-F-02", "baseline", "F", QuestionType.OBSERVED, "请拍拍小手", listOf("自己完成", "帮助后完成", "还没完成"), null, stimulus = "👏", expectedAction = ExpectedAction.CLAP),
         question("BL-F-03", "baseline", "F", QuestionType.CHOICE, "准备出门，应该先穿哪一样？", listOf("🛏️", "👕", "🛁"), 1, stimulus = "🚪🌤️", previewMs = 0L),
         question("BL-A-04", "baseline", "A", QuestionType.CHOICE, "请点最大的圆", listOf("·", "•", "●"), 2, stimulus = "", previewMs = 0L),
         question("BL-B-04", "baseline", "B", QuestionType.MEMORY, "刚才看到哪个？", listOf("🏠", "🚗", "🌳"), 0, stimulus = "🏠", previewMs = 3_000L),
         question("BL-C-04", "baseline", "C", QuestionType.CHOICE, "杯子倒了会怎么样？", listOf("💧", "☀️", "🎈"), 0, stimulus = "", previewMs = 0L),
         question("BL-D-04", "baseline", "D", QuestionType.CHOICE, "请点可以喝的东西", listOf("🥛", "👟", "⚽"), 0, stimulus = "", previewMs = 0L),
         question("BL-E-04", "baseline", "E", QuestionType.CHOICE, "朋友帮助了我，可以怎么做？", listOf("谢谢", "抢走", "离开"), 0, stimulus = "", previewMs = 0L),
-        question("BL-F-04", "baseline", "F", QuestionType.OBSERVED, "跟着做：拍手、举手", listOf("自己完成", "帮助后完成", "还没完成"), null, stimulus = "", previewMs = 0L)
+        question("BL-F-04", "baseline", "F", QuestionType.OBSERVED, "跟着做：拍手、举手", listOf("自己完成", "帮助后完成", "还没完成"), null, stimulus = "", previewMs = 0L),
+        question("BL-G-01", "baseline", "G", QuestionType.OBSERVED, "请举起一只小手", listOf("自己完成", "帮助后完成", "还没完成"), null, stimulus = "🙌", expectedAction = ExpectedAction.RAISE_HAND),
+        question("BL-G-02", "baseline", "G", QuestionType.OBSERVED, "请竖起大拇指", listOf("自己完成", "帮助后完成", "还没完成"), null, stimulus = "👍", expectedAction = ExpectedAction.THUMB_UP)
     )
 
     val moduleQuestionBank: List<QuestionDefinition> = listOf(
@@ -103,12 +105,12 @@ object QuestionCatalog {
         question("M04-01", "M04", "B", QuestionType.MEMORY, "刚才最后一个是谁？", listOf("🦋", "🐟", "🐸", "🐰"), 0, stimulus = "🐟🐸🦋", previewMs = 3_000L),
         question("M04-02", "M04", "B", QuestionType.MEMORY, "刚才第一个是谁？", listOf("🌙", "🍎", "🚗", "⭐"), 1, stimulus = "🍎🚗🌙", previewMs = 3_000L),
         question("M04-03", "M04", "B", QuestionType.MEMORY, "刚才最后一个是谁？", listOf("☀️", "🌧️", "☁️", "🌙"), 1, stimulus = "☀️☁️🌧️", previewMs = 3_000L),
-        question("L01-01", "L01", "D", QuestionType.OBSERVED, "说出它的名字", listOf("自己完成", "帮助后完成", "还没完成"), null, stimulus = "🍎", previewMs = 0L),
-        question("L01-02", "L01", "D", QuestionType.OBSERVED, "说出它的名字", listOf("自己完成", "帮助后完成", "还没完成"), null, stimulus = "🐶", previewMs = 0L),
-        question("L01-03", "L01", "D", QuestionType.OBSERVED, "说出它的名字", listOf("自己完成", "帮助后完成", "还没完成"), null, stimulus = "🚗", previewMs = 0L),
-        question("L02-01", "L02", "D", QuestionType.OBSERVED, "看图说一句话", listOf("自己完成", "帮助后完成", "还没完成"), null, stimulus = "🐱 💤", previewMs = 0L),
-        question("L02-02", "L02", "D", QuestionType.OBSERVED, "看图说一句话", listOf("自己完成", "帮助后完成", "还没完成"), null, stimulus = "小朋友 ⚽", previewMs = 0L),
-        question("L02-03", "L02", "D", QuestionType.OBSERVED, "看图说一句话", listOf("自己完成", "帮助后完成", "还没完成"), null, stimulus = "妈妈 🍎", previewMs = 0L),
+        question("L01-01", "L01", "D", QuestionType.OBSERVED, "这是什么？说出它的名字", listOf("自己完成", "帮助后完成", "还没完成"), null, stimulus = "🍎", expectedSpeech = ExpectedSpeech(SpeechMode.KEYWORD, listOf("苹果"))),
+        question("L01-02", "L01", "D", QuestionType.OBSERVED, "这是什么？说出它的名字", listOf("自己完成", "帮助后完成", "还没完成"), null, stimulus = "🐶", expectedSpeech = ExpectedSpeech(SpeechMode.KEYWORD, listOf("小狗", "狗狗"))),
+        question("L01-03", "L01", "D", QuestionType.OBSERVED, "这是什么？说出它的名字", listOf("自己完成", "帮助后完成", "还没完成"), null, stimulus = "🚗", expectedSpeech = ExpectedSpeech(SpeechMode.KEYWORD, listOf("汽车", "车车"))),
+        question("L02-01", "L02", "D", QuestionType.OBSERVED, "看图说一句话吧", listOf("自己完成", "帮助后完成", "还没完成"), null, stimulus = "🐱 💤", expectedSpeech = ExpectedSpeech(SpeechMode.ANY)),
+        question("L02-02", "L02", "D", QuestionType.OBSERVED, "看图说一句话吧", listOf("自己完成", "帮助后完成", "还没完成"), null, stimulus = "小朋友 ⚽", expectedSpeech = ExpectedSpeech(SpeechMode.ANY)),
+        question("L02-03", "L02", "D", QuestionType.OBSERVED, "看图说一句话吧", listOf("自己完成", "帮助后完成", "还没完成"), null, stimulus = "妈妈 🍎", expectedSpeech = ExpectedSpeech(SpeechMode.ANY)),
         question("L03-01", "L03", "D", QuestionType.AUDIO, "请点会飞的动物", listOf("🐦", "🐟", "🐢", "🐶"), 0, stimulus = "", previewMs = 0L),
         question("L03-02", "L03", "D", QuestionType.AUDIO, "先点水果", listOf("🚗", "🍎", "👟", "🐶"), 1, stimulus = "", previewMs = 0L),
         question("L03-03", "L03", "D", QuestionType.AUDIO, "请点能喝的东西", listOf("🥛", "🧦", "⚽", "📕"), 0, stimulus = "", previewMs = 0L),
@@ -142,9 +144,12 @@ object QuestionCatalog {
         question("D02-01", "D02", "F", QuestionType.CHOICE, "轻轻点小星星", listOf("🌙", "⭐", "☁️", "☀️"), 1, stimulus = "", previewMs = 0L),
         question("D02-02", "D02", "F", QuestionType.CHOICE, "轻轻点小花", listOf("🌼", "🍎", "🚗", "🐟"), 0, stimulus = "", previewMs = 0L),
         question("D02-03", "D02", "F", QuestionType.CHOICE, "轻轻点小球", listOf("🎈", "⚽", "📕", "🧸"), 1, stimulus = "", previewMs = 0L),
-        question("D03-01", "D03", "F", QuestionType.OBSERVED, "跟着节奏拍手", listOf("自己完成", "帮助后完成", "还没完成"), null, stimulus = "👏  👏  👏", previewMs = 0L),
-        question("D03-02", "D03", "F", QuestionType.OBSERVED, "跟着做：举手、放下", listOf("自己完成", "帮助后完成", "还没完成"), null, stimulus = "🙌  ⬇️", previewMs = 0L),
-        question("D03-03", "D03", "F", QuestionType.OBSERVED, "跟着做：拍手、举手、拍手", listOf("自己完成", "帮助后完成", "还没完成"), null, stimulus = "👏 🙌 👏", previewMs = 0L)
+        question("D03-01", "D03", "F", QuestionType.OBSERVED, "跟着节奏拍拍手", listOf("自己完成", "帮助后完成", "还没完成"), null, stimulus = "👏  👏  👏", expectedAction = ExpectedAction.CLAP),
+        question("D03-02", "D03", "F", QuestionType.OBSERVED, "小手举起来，再放下", listOf("自己完成", "帮助后完成", "还没完成"), null, stimulus = "🙌  ⬇️", expectedAction = ExpectedAction.RAISE_HAND),
+        question("D03-03", "D03", "F", QuestionType.OBSERVED, "跟着做：拍手、举手、拍手", listOf("自己完成", "帮助后完成", "还没完成"), null, stimulus = "👏 🙌 👏", previewMs = 0L),
+        question("D03-04", "D03", "F", QuestionType.OBSERVED, "用手指一指", listOf("自己完成", "帮助后完成", "还没完成"), null, stimulus = "☝️", expectedAction = ExpectedAction.POINT_INDEX),
+        question("D03-05", "D03", "F", QuestionType.OBSERVED, "比一个耶", listOf("自己完成", "帮助后完成", "还没完成"), null, stimulus = "✌️", expectedAction = ExpectedAction.VICTORY),
+        question("D03-06", "D03", "F", QuestionType.OBSERVED, "张开小手掌", listOf("自己完成", "帮助后完成", "还没完成"), null, stimulus = "🖐️", expectedAction = ExpectedAction.OPEN_PALM)
     )
 
     val firstCourseQuestions: List<QuestionDefinition> = moduleQuestionBank.filter { it.moduleId == "M02" }
