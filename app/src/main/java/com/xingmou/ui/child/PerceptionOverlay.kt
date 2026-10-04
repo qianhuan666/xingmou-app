@@ -149,7 +149,8 @@ fun PerceptionHomePreview(
     state: ChildUiState,
     onAttachPreviewView: (PreviewView) -> Unit,
     onDetachPreviewView: (PreviewView) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    size: androidx.compose.ui.unit.Dp = 180.dp
 ) {
     if (!state.perceptionEnabled || !state.perceptionPreview) return
 
@@ -165,7 +166,7 @@ fun PerceptionHomePreview(
             }
         },
         modifier = modifier
-            .size(180.dp)
+            .size(size)
             .clip(CircleShape)
     )
     DisposableEffect(Unit) {

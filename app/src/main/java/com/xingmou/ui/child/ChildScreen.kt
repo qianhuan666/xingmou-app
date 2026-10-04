@@ -201,11 +201,14 @@ fun ChildScreen(
             }
 
             if (selectedSection.value == ChildSection.TRAINING) {
-                PerceptionHomePreview(
-                    state = state,
-                    onAttachPreviewView = onAttachPerceptionPreviewView,
-                    onDetachPreviewView = onDetachPerceptionPreviewView
-                )
+                // 沉浸空间打开时隐藏主页预览，把摄像头预览让给沉浸空间的小窗口（同一时刻只绑定一个）
+                if (!baselineImmersive && !courseImmersive) {
+                    PerceptionHomePreview(
+                        state = state,
+                        onAttachPreviewView = onAttachPerceptionPreviewView,
+                        onDetachPreviewView = onDetachPerceptionPreviewView
+                    )
+                }
                 if (!baselineImmersive) {
                     BaselineCard(baseline, onStartBaseline, onResumeBaseline, onLeaveBaseline, onRestartBaseline, onBaselineAnswer)
                 }
@@ -262,7 +265,10 @@ fun ChildScreen(
       when {
           baselineImmersive -> ImmersiveTestDialog(
               exitLabel = "暂时离开",
-              onExit = onLeaveBaseline
+              onExit = onLeaveBaseline,
+              state = state,
+              onAttachPreviewView = onAttachPerceptionPreviewView,
+              onDetachPreviewView = onDetachPerceptionPreviewView
           ) {
               BaselineCard(baseline, onStartBaseline, onResumeBaseline, onLeaveBaseline, onRestartBaseline, onBaselineAnswer, immersive = true)
           }
@@ -271,7 +277,10 @@ fun ChildScreen(
               onExit = {
                   selectedCourseLevel.value = null
                   onLeaveCurriculumLevel()
-              }
+              },
+              state = state,
+              onAttachPreviewView = onAttachPerceptionPreviewView,
+              onDetachPreviewView = onDetachPerceptionPreviewView
           ) {
               CurriculumPlayerCard(
                   player = state.curriculumPlayer,
@@ -297,6 +306,9 @@ fun ChildScreen(
 private fun ImmersiveTestDialog(
     exitLabel: String,
     onExit: () -> Unit,
+    state: ChildUiState,
+    onAttachPreviewView: (androidx.camera.view.PreviewView) -> Unit,
+    onDetachPreviewView: (androidx.camera.view.PreviewView) -> Unit,
     content: @Composable () -> Unit
 ) {
     androidx.compose.ui.window.Dialog(
@@ -320,7 +332,14 @@ private fun ImmersiveTestDialog(
             }
             onDispose { }
         }
-        ImmersiveTestSpace(exitLabel = exitLabel, onExit = onExit, content = content)
+        ImmersiveTestSpace(
+            exitLabel = exitLabel,
+            onExit = onExit,
+            state = state,
+            onAttachPreviewView = onAttachPreviewView,
+            onDetachPreviewView = onDetachPreviewView,
+            content = content
+        )
     }
 }
 
@@ -331,6 +350,9 @@ private fun ImmersiveTestDialog(
 private fun ImmersiveTestSpace(
     exitLabel: String,
     onExit: () -> Unit,
+    state: ChildUiState,
+    onAttachPreviewView: (androidx.camera.view.PreviewView) -> Unit,
+    onDetachPreviewView: (androidx.camera.view.PreviewView) -> Unit,
     content: @Composable () -> Unit
 ) {
     Box(
@@ -347,6 +369,17 @@ private fun ImmersiveTestSpace(
             )
     ) {
         SkyDecorations()
+        // 左上角固定的小窗口预览，与主页圆形预览同款；感知关闭或预览关闭时不显示
+        PerceptionHomePreview(
+            state = state,
+            onAttachPreviewView = onAttachPreviewView,
+            onDetachPreviewView = onDetachPreviewView,
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .windowInsetsPadding(WindowInsets.safeDrawing)
+                .padding(start = 16.dp, top = 4.dp),
+            size = 140.dp
+        )
         Column(
             modifier = Modifier
                 .fillMaxSize()
