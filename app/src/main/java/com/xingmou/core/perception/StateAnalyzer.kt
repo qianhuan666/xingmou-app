@@ -112,7 +112,7 @@ object StateAnalyzer {
         val thumbExtended = abs(landmarks[4].x - landmarks[2].x) > 0.05f
 
         return when {
-            count == 0 -> HandGesture.FIST
+            count == 0 && !thumbExtended -> HandGesture.FIST
             count == 5 || (count == 4 && thumbExtended) -> HandGesture.OPEN_PALM
             count == 1 && extended[0] -> HandGesture.POINT_INDEX
             count == 2 && extended[0] && extended[1] -> HandGesture.VICTORY
