@@ -705,6 +705,13 @@ private fun ChatCard(
         if (messages.isNotEmpty()) scrollState.animateScrollTo(scrollState.maxValue)
     }
 
+    // 儿童端仅支持 DeepSeek：若历史选择是豆包/千问，自动切回
+    LaunchedEffect(state.chatProvider) {
+        if (state.chatProvider != com.xingmou.core.llm.ChatLlmProvider.DEEPSEEK) {
+            onSelectProvider(com.xingmou.core.llm.ChatLlmProvider.DEEPSEEK)
+        }
+    }
+
     androidx.compose.foundation.layout.Box(modifier = Modifier.fillMaxWidth().heightIn(min = 320.dp)) {
         Column(
             modifier = Modifier.fillMaxWidth(),
@@ -717,7 +724,10 @@ private fun ChatCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text("模型：", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                com.xingmou.core.llm.ChatLlmProvider.entries.forEach { provider ->
+                // 儿童端交互仅保留 DeepSeek，豆包/千问不在此暴露
+                com.xingmou.core.llm.ChatLlmProvider.entries
+                    .filter { it == com.xingmou.core.llm.ChatLlmProvider.DEEPSEEK }
+                    .forEach { provider ->
                     androidx.compose.material3.FilterChip(
                         selected = state.chatProvider == provider,
                         onClick = { onSelectProvider(provider) },
