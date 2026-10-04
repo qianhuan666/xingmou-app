@@ -1,6 +1,8 @@
 package com.xingmou.ui.professional
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -9,6 +11,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
@@ -25,7 +29,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.xingmou.ProfessionalUiState
 import com.xingmou.HomeFeedbackUi
@@ -380,7 +387,7 @@ private fun PlanPanel(
         modifier = modifier,
         containerColor = if (state.planStatus == PlanStatus.ACTIVE) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface
     ) {
-        StatusLine("当前状态", state.planStatus?.name ?: "尚未创建")
+        PlanStatusStepper(state.planStatus)
         Spacer(Modifier.height(12.dp))
         Text(state.planSummary, style = MaterialTheme.typography.bodyLarge)
         if (state.planDiffs.isNotEmpty()) {
@@ -433,6 +440,74 @@ private fun PlanPanel(
             PlanStatus.ACTIVE -> Text("方案已由专业人员签署生效。后续变更应创建新版本。", color = Success)
             else -> Text("当前状态不可在本页面继续变更。", color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
+    }
+}
+
+/** 训练方案生命周期步骤条：草案 → 已确认 → 已生效，退回态单独标红。 */
+@Composable
+private fun PlanStatusStepper(status: PlanStatus?, modifier: Modifier = Modifier) {
+    val labels = if (status == PlanStatus.REJECTED) listOf("已退回", "已确认", "已生效") else listOf("草案", "已确认", "已生效")
+    val currentIndex = when (status) {
+        null -> -1
+        PlanStatus.DRAFT -> 0
+        PlanStatus.CONFIRMED -> 1
+        PlanStatus.ACTIVE, PlanStatus.SUPERSEDED, PlanStatus.ARCHIVED -> 2
+        PlanStatus.REJECTED -> 0
+    }
+    Row(modifier = modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+        labels.forEachIndexed { index, label ->
+            val stepState = when {
+                status == PlanStatus.REJECTED && index == 0 -> PlanStepState.REJECTED
+                index < currentIndex -> PlanStepState.DONE
+                index == currentIndex -> PlanStepState.CURRENT
+                else -> PlanStepState.TODO
+            }
+            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                    PlanStepConnector(filled = index > 0 && index <= currentIndex, modifier = Modifier.weight(1f))
+                    PlanStepCircle(stepState, index + 1)
+                    PlanStepConnector(filled = index < currentIndex, modifier = Modifier.weight(1f))
+                }
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    label,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = when (stepState) {
+                        PlanStepState.DONE -> Success
+                        PlanStepState.CURRENT -> MaterialTheme.colorScheme.primary
+                        PlanStepState.REJECTED -> Warning
+                        PlanStepState.TODO -> MaterialTheme.colorScheme.onSurfaceVariant
+                    }
+                )
+            }
+        }
+    }
+}
+
+private enum class PlanStepState { DONE, CURRENT, REJECTED, TODO }
+
+@Composable
+private fun PlanStepConnector(filled: Boolean, modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier
+            .height(2.dp)
+            .background(if (filled) Success else MaterialTheme.colorScheme.outlineVariant)
+    )
+}
+
+@Composable
+private fun PlanStepCircle(state: PlanStepState, number: Int) {
+    val (bg, content, contentColor) = when (state) {
+        PlanStepState.DONE -> Triple(Success, "✓", Color.White)
+        PlanStepState.CURRENT -> Triple(MaterialTheme.colorScheme.primary, "$number", MaterialTheme.colorScheme.onPrimary)
+        PlanStepState.REJECTED -> Triple(Warning, "!", Color.White)
+        PlanStepState.TODO -> Triple(MaterialTheme.colorScheme.surfaceVariant, "$number", MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+    Box(
+        modifier = Modifier.size(26.dp).clip(CircleShape).background(bg),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(content, style = MaterialTheme.typography.labelMedium, color = contentColor)
     }
 }
 
