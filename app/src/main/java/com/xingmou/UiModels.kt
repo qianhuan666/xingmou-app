@@ -87,6 +87,26 @@ fun agentStateLabel(state: AgentRunState): String = when (state) {
     AgentRunState.CANCELLED -> "已取消"
 }
 
+/** 把家长端知识检索路由映射为友好说明，用于「回答依据」可解释性面板。 */
+fun parentRouteLabel(route: KnowledgeRoute?): String = when (route) {
+    KnowledgeRoute.NORMAL -> "已审核资料直接匹配"
+    KnowledgeRoute.CLARIFY -> "信息不足，等待补充细节"
+    KnowledgeRoute.NOT_FOUND -> "未匹配到已审核条目"
+    KnowledgeRoute.REFER -> "涉及诊疗，建议专业人员评估"
+    KnowledgeRoute.SAFETY_STOP -> "安全筛查已停止"
+    null -> "尚未检索"
+}
+
+/** 把家长端风险等级映射为友好文案。 */
+fun parentRiskLabel(raw: String): String = when (raw) {
+    "NONE" -> "未发现风险"
+    "PAUSE" -> "需关注"
+    "SAFETY_STOP" -> "已安全停止"
+    "需要补充" -> "信息不足"
+    "未评估" -> "尚未评估"
+    else -> raw
+}
+
 /** 交互模式聊天消息。 */
 data class ChatMessageUi(
     val id: String,

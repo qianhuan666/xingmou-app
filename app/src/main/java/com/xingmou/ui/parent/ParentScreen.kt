@@ -41,6 +41,8 @@ import androidx.compose.ui.unit.sp
 import com.xingmou.ParentDomainStatUi
 import com.xingmou.ParentUiState
 import com.xingmou.RainbowProfileUi
+import com.xingmou.parentRiskLabel
+import com.xingmou.parentRouteLabel
 import com.xingmou.core.safety.SafeResponses
 import com.xingmou.ui.components.AgentStatusLine
 import com.xingmou.ui.components.SectionSurface
@@ -305,6 +307,16 @@ private fun ResultPanel(state: ParentUiState, modifier: Modifier) {
                     Text(source, modifier = Modifier.padding(top = 6.dp), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSecondaryContainer)
                 }
             }
+        }
+        if (state.suggestions.isNotEmpty() || state.agentRunId != null) {
+            HorizontalDivider(Modifier.padding(vertical = 16.dp))
+            Text("回答依据", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+            Spacer(Modifier.height(6.dp))
+            StatusLine("来源约束", "已审核资料 · 同一领域最多 2 条 · 总数最多 3 条")
+            Spacer(Modifier.height(6.dp))
+            StatusLine("风险筛查", parentRiskLabel(state.riskLabel), valueColor = if (state.riskLabel == "SAFETY_STOP") Warning else MaterialTheme.colorScheme.onSurface)
+            Spacer(Modifier.height(6.dp))
+            StatusLine("决策路由", parentRouteLabel(state.route))
         }
         state.agentRunId?.let { runId ->
             HorizontalDivider(Modifier.padding(vertical = 16.dp))
