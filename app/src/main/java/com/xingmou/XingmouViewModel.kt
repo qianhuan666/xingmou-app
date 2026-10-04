@@ -94,6 +94,7 @@ import kotlinx.coroutines.launch
 class XingmouViewModel(application: Application) : AndroidViewModel(application) {
     private val accessibilityPreferences = application.getSharedPreferences("xingmou_accessibility", 0)
     private val curriculumPrefs = application.getSharedPreferences("xingmou_curriculum", 0)
+    private val loginPreferences = application.getSharedPreferences("xingmou_login", 0)
     private val database = QizhiDatabase.getInstance(application)
     private val eventCoordinator = AgentEventCoordinator(
         AgentEventProcessor(),
@@ -161,6 +162,7 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
     private var feedbackController: FeedbackController? = null
     private var sessionRecorder: SessionRecorder? = null
     private var lastMeltdown = false
+    private var lastChildRestoreAttempted = false
 
     init {
         viewModelScope.launch {
@@ -179,6 +181,12 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                 current?.let { loadBaseline(it) }
                 current?.let { loadCourseProgress(it.childId) }
                 current?.let { loadHomeSupport(it.childId) }
+                if (!lastChildRestoreAttempted) {
+                    lastChildRestoreAttempted = true
+                    loginPreferences.getString("last_child_id", null)
+                        ?.takeIf { id -> children.any { it.childId == id } }
+                        ?.let { quickEnterChild(it) }
+                }
             }
         }
         refreshProfessionalAnalysis()
@@ -1012,6 +1020,7 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
             loadBaseline(child)
             loadCourseProgress(child.childId)
             loadHomeSupport(child.childId)
+            loginPreferences.edit().putString("last_child_id", childId).apply()
         }
     }
 

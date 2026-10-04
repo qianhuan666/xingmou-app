@@ -57,6 +57,17 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import com.xingmou.ui.components.XiaoXingMark
 import com.xingmou.ui.components.domainBarColor
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.platform.LocalContext
+import com.xingmou.ui.child.ChildSpeechController
 
 @Composable
 fun XingmouApp(viewModel: XingmouViewModel) {
@@ -144,6 +155,25 @@ private fun ChildEntryScreen(
     onEnterChild: (String) -> Unit,
     onOpenAdult: () -> Unit
 ) {
+    val context = LocalContext.current
+    val speechController = remember(context) { ChildSpeechController(context) }
+    DisposableEffect(speechController) {
+        onDispose { speechController.shutdown() }
+    }
+    LaunchedEffect(state.accessibility.speechRate, state.accessibility.speechVolume) {
+        speechController.setSpeechRate(state.accessibility.speechRate)
+        speechController.setSpeechVolume(state.accessibility.speechVolume)
+    }
+    LaunchedEffect(state.accessibility.speechEnabled) {
+        if (state.accessibility.speechEnabled) speechController.speak("今天谁来玩呀？点一下你的头像就可以开始。")
+        else speechController.stop()
+    }
+    val infiniteTransition = rememberInfiniteTransition()
+    val logoScale by infiniteTransition.animateFloat(
+        initialValue = 1f,
+        targetValue = 1.06f,
+        animationSpec = infiniteRepeatable(tween(1200), RepeatMode.Reverse)
+    )
     Box(
         modifier = Modifier.fillMaxSize().background(
             Brush.verticalGradient(listOf(Color(0xFFB3E5FC), Color(0xFFFFF3E0)))
@@ -154,7 +184,7 @@ private fun ChildEntryScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            XiaoXingMark(modifier = Modifier.size(96.dp))
+            XiaoXingMark(modifier = Modifier.size(96.dp).scale(logoScale))
             Text("星眸", style = MaterialTheme.typography.headlineMedium, modifier = Modifier.padding(top = 8.dp))
             Text("今天谁来玩呀？", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp, bottom = 28.dp))
             if (state.availableChildren.isEmpty()) {
