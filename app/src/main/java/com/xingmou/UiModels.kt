@@ -20,6 +20,7 @@ data class XingmouUiState(
     val loginIdentifier: String = "",
     val loginPassword: String = "",
     val loginMessage: String = "请选择登录身份。",
+    val showAdultLogin: Boolean = false,
     val selectedPort: Port = Port.CHILD,
     val activeChildId: String = "child-seed",
     val activeChildAlias: String = "小星",

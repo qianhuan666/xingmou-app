@@ -47,6 +47,16 @@ import com.xingmou.ui.child.ChildScreen
 import com.xingmou.ui.parent.ParentScreen
 import com.xingmou.ui.professional.ProfessionalScreen
 import com.xingmou.ui.theme.XingmouTheme
+import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import com.xingmou.ui.components.XiaoXingMark
+import com.xingmou.ui.components.domainBarColor
 
 @Composable
 fun XingmouApp(viewModel: XingmouViewModel) {
@@ -66,13 +76,22 @@ fun XingmouApp(viewModel: XingmouViewModel) {
     CompositionLocalProvider(LocalDensity provides androidx.compose.ui.unit.Density(density.density, fontScale)) {
         XingmouTheme(highContrast = state.accessibility.highContrast) {
             if (!state.isLoggedIn) {
-                IdentityLoginScreen(
-                    state = state,
-                    onSelectRole = viewModel::selectLoginRole,
-                    onIdentifierChange = viewModel::updateLoginIdentifier,
-                    onPasswordChange = viewModel::updateLoginPassword,
-                    onLogin = { state.loginRole?.let(viewModel::loginAs) }
-                )
+                if (state.showAdultLogin) {
+                    AdultLoginPanel(
+                        state = state,
+                        onBack = viewModel::closeAdultLogin,
+                        onSelectRole = viewModel::selectLoginRole,
+                        onIdentifierChange = viewModel::updateLoginIdentifier,
+                        onPasswordChange = viewModel::updateLoginPassword,
+                        onLogin = { state.loginRole?.let(viewModel::loginAs) }
+                    )
+                } else {
+                    ChildEntryScreen(
+                        state = state,
+                        onEnterChild = viewModel::quickEnterChild,
+                        onOpenAdult = viewModel::openAdultLogin
+                    )
+                }
                 return@XingmouTheme
             }
             Scaffold(
@@ -120,17 +139,114 @@ fun XingmouApp(viewModel: XingmouViewModel) {
 }
 
 @Composable
-private fun IdentityLoginScreen(
+private fun ChildEntryScreen(
     state: com.xingmou.XingmouUiState,
+    onEnterChild: (String) -> Unit,
+    onOpenAdult: () -> Unit
+) {
+    Box(
+        modifier = Modifier.fillMaxSize().background(
+            Brush.verticalGradient(listOf(Color(0xFFB3E5FC), Color(0xFFFFF3E0)))
+        )
+    ) {
+        Column(
+            modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp, vertical = 32.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            XiaoXingMark(modifier = Modifier.size(96.dp))
+            Text("星眸", style = MaterialTheme.typography.headlineMedium, modifier = Modifier.padding(top = 8.dp))
+            Text("今天谁来玩呀？", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp, bottom = 28.dp))
+            if (state.availableChildren.isEmpty()) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text("还没有小朋友档案", style = MaterialTheme.typography.titleMedium)
+                    Text("请家长或老师先创建一份档案", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Button(onClick = onOpenAdult) { Text("家长/老师先创建") }
+                }
+            } else {
+                Row(
+                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(14.dp, Alignment.CenterHorizontally)
+                ) {
+                    state.availableChildren.forEach { child ->
+                        ChildAvatarCard(child = child, onClick = { onEnterChild(child.childId) })
+                    }
+                    AddChildCard(onClick = onOpenAdult)
+                }
+            }
+        }
+        TextButton(
+            onClick = onOpenAdult,
+            modifier = Modifier.align(Alignment.BottomEnd).padding(12.dp)
+        ) {
+            Text("⚙ 家长 / 老师", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable
+private fun ChildAvatarCard(child: com.xingmou.ChildSummaryUi, onClick: () -> Unit) {
+    val colorKeys = listOf("coral", "sky", "amber", "violet", "mint", "blue")
+    val avatarColor = domainBarColor(colorKeys[Math.floorMod(child.childId.hashCode(), colorKeys.size)])
+    val archived = child.status == "archived"
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+        modifier = Modifier.width(96.dp)
+    ) {
+        Surface(
+            onClick = onClick,
+            modifier = Modifier.size(88.dp),
+            shape = CircleShape,
+            color = if (archived) MaterialTheme.colorScheme.surfaceVariant else avatarColor,
+            border = BorderStroke(2.dp, if (archived) MaterialTheme.colorScheme.outline else Color.White)
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Text(
+                    child.alias.take(1),
+                    style = MaterialTheme.typography.headlineLarge,
+                    color = if (archived) MaterialTheme.colorScheme.onSurfaceVariant else Color.White
+                )
+            }
+        }
+        Text(child.alias, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(child.ageBand, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable
+private fun AddChildCard(onClick: () -> Unit) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+        modifier = Modifier.width(96.dp)
+    ) {
+        OutlinedButton(
+            onClick = onClick,
+            modifier = Modifier.size(88.dp),
+            shape = CircleShape,
+            contentPadding = PaddingValues(0.dp)
+        ) {
+            Text("＋", style = MaterialTheme.typography.headlineLarge)
+        }
+        Text("新朋友", style = MaterialTheme.typography.titleMedium)
+        Text("新建档案", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable
+private fun AdultLoginPanel(
+    state: com.xingmou.XingmouUiState,
+    onBack: () -> Unit,
     onSelectRole: (Port) -> Unit,
     onIdentifierChange: (String) -> Unit,
     onPasswordChange: (String) -> Unit,
     onLogin: () -> Unit
 ) {
     val roles = listOf(
-        Triple(Port.CHILD, "★", "儿童"),
         Triple(Port.PARENT, "♥", "家长"),
-        Triple(Port.PROFESSIONAL, "+", "康复专业人员")
+        Triple(Port.PROFESSIONAL, "+", "康复专业人员"),
+        Triple(Port.CHILD, "★", "儿童体验")
     )
     Surface(color = MaterialTheme.colorScheme.background, modifier = Modifier.fillMaxSize()) {
         Column(
@@ -138,16 +254,19 @@ private fun IdentityLoginScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
+            TextButton(onClick = onBack, modifier = Modifier.align(Alignment.Start)) {
+                Text("← 返回孩子入口")
+            }
             Surface(
-                modifier = Modifier.size(76.dp),
-                shape = RoundedCornerShape(24.dp),
+                modifier = Modifier.size(64.dp),
+                shape = RoundedCornerShape(20.dp),
                 color = MaterialTheme.colorScheme.primaryContainer
             ) {
                 BoxWithConstraints(contentAlignment = Alignment.Center) {
                     Text("星", style = MaterialTheme.typography.headlineLarge, color = MaterialTheme.colorScheme.primary)
                 }
             }
-            Text("星眸", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(top = 10.dp))
+            Text("星眸 · 家长与老师", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(top = 10.dp))
             Card(
                 modifier = Modifier.fillMaxWidth().padding(top = 22.dp),
                 shape = RoundedCornerShape(16.dp),

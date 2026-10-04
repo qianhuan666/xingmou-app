@@ -974,6 +974,47 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
         _uiState.update { it.copy(loginRole = port, loginMessage = "") }
     }
 
+    fun openAdultLogin() {
+        _uiState.update {
+            it.copy(showAdultLogin = true, loginRole = it.loginRole ?: Port.PARENT, loginMessage = "请选择登录身份。")
+        }
+    }
+
+    fun closeAdultLogin() {
+        _uiState.update { it.copy(showAdultLogin = false, loginMessage = "") }
+    }
+
+    /** 儿童零输入进入：复用本机 session 隐式登录并直接切到对应儿童档案。 */
+    fun quickEnterChild(childId: String) {
+        if (_uiState.value.availableChildren.none { it.childId == childId }) return
+        viewModelScope.launch {
+            val child = database.childDao().findById(childId) ?: return@launch
+            val session = database.localSessionDao().active()
+            val user = session?.let { database.localUserDao().findById(it.userId) }
+                ?: database.localUserDao().activeForOrganization(SeedData.DEMO_ORGANIZATION_ID)
+                    .firstOrNull { it.login == "parent" }
+            if (user == null) return@launch
+            database.localSessionDao().revokeAllActive()
+            database.localSessionDao().upsert(
+                LocalSessionEntity(newId("session"), user.userId, user.role, createdAt = System.currentTimeMillis(), expiresAt = null)
+            )
+            activeChildId = child.childId
+            _uiState.update {
+                it.copy(
+                    isLoggedIn = true, loginRole = Port.CHILD, selectedPort = Port.CHILD,
+                    activeChildId = child.childId, activeChildAlias = child.alias,
+                    localUserName = user.displayName, localUserRole = user.role,
+                    loginIdentifier = "", loginPassword = "", loginMessage = "",
+                    showAdultLogin = false
+                )
+            }
+            loadConsentState(child.childId)
+            loadBaseline(child)
+            loadCourseProgress(child.childId)
+            loadHomeSupport(child.childId)
+        }
+    }
+
     fun loginAs(port: Port) {
         val state = _uiState.value
         val identifier = state.loginIdentifier.trim()
