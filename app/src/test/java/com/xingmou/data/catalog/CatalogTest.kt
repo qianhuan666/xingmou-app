@@ -33,7 +33,7 @@ class CatalogTest {
 
     @Test fun webQuestionBankKeepsQuestionsGroupedPerUnit() {
         assertEquals(
-            mapOf("A" to 4, "B" to 4, "C" to 4, "D" to 4, "E" to 4, "F" to 4, "G" to 2),
+            mapOf("A" to 4, "B" to 4, "C" to 4, "D" to 4, "E" to 4, "F" to 6),
             QuestionCatalog.baselineQuestions.groupingBy { it.domain }.eachCount()
         )
         val moduleCounts = QuestionCatalog.moduleQuestionBank.groupingBy { it.moduleId }.eachCount()

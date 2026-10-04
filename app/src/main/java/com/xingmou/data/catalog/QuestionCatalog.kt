@@ -76,8 +76,8 @@ object QuestionCatalog {
         question("BL-D-04", "baseline", "D", QuestionType.CHOICE, "请点可以喝的东西", listOf("🥛", "👟", "⚽"), 0, stimulus = "", previewMs = 0L),
         question("BL-E-04", "baseline", "E", QuestionType.CHOICE, "朋友帮助了我，可以怎么做？", listOf("谢谢", "抢走", "离开"), 0, stimulus = "", previewMs = 0L),
         question("BL-F-04", "baseline", "F", QuestionType.OBSERVED, "跟着做：拍手、举手", listOf("自己完成", "帮助后完成", "还没完成"), null, stimulus = "", previewMs = 0L),
-        question("BL-G-01", "baseline", "G", QuestionType.OBSERVED, "请举起一只小手", listOf("自己完成", "帮助后完成", "还没完成"), null, stimulus = "🙌", expectedAction = ExpectedAction.RAISE_HAND),
-        question("BL-G-02", "baseline", "G", QuestionType.OBSERVED, "请竖起大拇指", listOf("自己完成", "帮助后完成", "还没完成"), null, stimulus = "👍", expectedAction = ExpectedAction.THUMB_UP)
+        question("BL-F-05", "baseline", "F", QuestionType.OBSERVED, "请举起一只小手", listOf("自己完成", "帮助后完成", "还没完成"), null, stimulus = "🙌", expectedAction = ExpectedAction.RAISE_HAND),
+        question("BL-F-06", "baseline", "F", QuestionType.OBSERVED, "请竖起大拇指", listOf("自己完成", "帮助后完成", "还没完成"), null, stimulus = "👍", expectedAction = ExpectedAction.THUMB_UP)
     )
 
     val moduleQuestionBank: List<QuestionDefinition> = listOf(
