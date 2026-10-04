@@ -64,6 +64,12 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
@@ -88,64 +94,78 @@ fun XingmouApp(viewModel: XingmouViewModel) {
     val fontScale = if (state.accessibility.largeText) 1.15f else 1.0f
     CompositionLocalProvider(LocalDensity provides androidx.compose.ui.unit.Density(density.density, fontScale)) {
         XingmouTheme(highContrast = state.accessibility.highContrast) {
-            if (!state.isLoggedIn) {
-                if (state.showAdultLogin) {
-                    AdultLoginPanel(
-                        state = state,
-                        onBack = viewModel::closeAdultLogin,
-                        onSelectRole = viewModel::selectLoginRole,
-                        onIdentifierChange = viewModel::updateLoginIdentifier,
-                        onPasswordChange = viewModel::updateLoginPassword,
-                        onLogin = { state.loginRole?.let(viewModel::loginAs) }
-                    )
-                } else {
-                    ChildEntryScreen(
-                        state = state,
-                        onEnterChild = viewModel::quickEnterChild,
-                        onOpenAdult = viewModel::openAdultLogin
-                    )
-                }
-                return@XingmouTheme
-            }
-            Scaffold(
-                containerColor = MaterialTheme.colorScheme.background,
-                topBar = {
-                    ChildContextBar(
-                        state = state,
-                        onSelectChild = viewModel::selectChild,
-                        onCreateChild = viewModel::createLocalChild,
-                        onUpdateChild = viewModel::updateActiveChild,
-                        onArchiveChild = viewModel::archiveActiveChild,
-                        onRemoteAiConsentChange = viewModel::setRemoteAiConsent,
-                        onExportConsentChange = viewModel::setExportConsent,
-                        onExportAuthorizedData = {
-                            exportLauncher.launch("xingmou-${state.activeChildId}-${System.currentTimeMillis()}.json")
-                        },
-                        onExportAuthorizedCsv = {
-                            csvExportLauncher.launch("xingmou-${state.activeChildId}-${System.currentTimeMillis()}.csv")
-                        },
-                        onImportAuthorizedData = { importLauncher.launch(arrayOf("application/json", "text/*")) },
-                        onConfirmImport = viewModel::confirmAuthorizedImport,
-                        onCancelImport = viewModel::cancelAuthorizedImport,
-                        onDeleteChild = viewModel::deleteActiveChild,
-                        onSaveApiKey = viewModel::saveChatApiKey,
-                        onClearApiKey = viewModel::clearChatApiKey,
-                        onSaveModelEndpoint = viewModel::saveModelEndpoint,
-                        apiKeyOpen = apiKeyOpen
-                        ,onSaveLocalOrganization = viewModel::saveLocalOrganization,
-                        onCreateLocalRoleUser = viewModel::createLocalRoleUser,
-                        onUpdateLocalRoleUser = viewModel::updateLocalRoleUser
-                        ,onLogout = viewModel::logout
-                    )
+            AnimatedContent(
+                targetState = state.isLoggedIn,
+                transitionSpec = {
+                    if (targetState) {
+                        (fadeIn(tween(400)) + scaleIn(initialScale = 1.15f, animationSpec = tween(400)))
+                            .togetherWith(fadeOut(tween(300)) + scaleOut(targetScale = 0.92f, animationSpec = tween(300)))
+                    } else {
+                        (fadeIn(tween(300)) + scaleIn(initialScale = 0.92f, animationSpec = tween(300)))
+                            .togetherWith(fadeOut(tween(300)) + scaleOut(targetScale = 1.15f, animationSpec = tween(300)))
+                    }
                 },
-                bottomBar = { AppStatusBand(aiConfigured = state.aiConfigured, remoteAiConsent = state.remoteAiConsent) }
-            ) { padding ->
-                PortContent(
-                    viewModel = viewModel,
-                    port = state.selectedPort,
-                    onOpenApiKey = { apiKeyOpen.value = true },
-                    modifier = Modifier.fillMaxSize().padding(padding)
-                )
+                label = "loginTransition"
+            ) { loggedIn ->
+                if (loggedIn) {
+                    Scaffold(
+                        containerColor = MaterialTheme.colorScheme.background,
+                        topBar = {
+                            ChildContextBar(
+                                state = state,
+                                onSelectChild = viewModel::selectChild,
+                                onCreateChild = viewModel::createLocalChild,
+                                onUpdateChild = viewModel::updateActiveChild,
+                                onArchiveChild = viewModel::archiveActiveChild,
+                                onRemoteAiConsentChange = viewModel::setRemoteAiConsent,
+                                onExportConsentChange = viewModel::setExportConsent,
+                                onExportAuthorizedData = {
+                                    exportLauncher.launch("xingmou-${state.activeChildId}-${System.currentTimeMillis()}.json")
+                                },
+                                onExportAuthorizedCsv = {
+                                    csvExportLauncher.launch("xingmou-${state.activeChildId}-${System.currentTimeMillis()}.csv")
+                                },
+                                onImportAuthorizedData = { importLauncher.launch(arrayOf("application/json", "text/*")) },
+                                onConfirmImport = viewModel::confirmAuthorizedImport,
+                                onCancelImport = viewModel::cancelAuthorizedImport,
+                                onDeleteChild = viewModel::deleteActiveChild,
+                                onSaveApiKey = viewModel::saveChatApiKey,
+                                onClearApiKey = viewModel::clearChatApiKey,
+                                onSaveModelEndpoint = viewModel::saveModelEndpoint,
+                                apiKeyOpen = apiKeyOpen
+                                ,onSaveLocalOrganization = viewModel::saveLocalOrganization,
+                                onCreateLocalRoleUser = viewModel::createLocalRoleUser,
+                                onUpdateLocalRoleUser = viewModel::updateLocalRoleUser
+                                ,onLogout = viewModel::logout
+                            )
+                        },
+                        bottomBar = { AppStatusBand(aiConfigured = state.aiConfigured, remoteAiConsent = state.remoteAiConsent) }
+                    ) { padding ->
+                        PortContent(
+                            viewModel = viewModel,
+                            port = state.selectedPort,
+                            onOpenApiKey = { apiKeyOpen.value = true },
+                            modifier = Modifier.fillMaxSize().padding(padding)
+                        )
+                    }
+                } else {
+                    if (state.showAdultLogin) {
+                        AdultLoginPanel(
+                            state = state,
+                            onBack = viewModel::closeAdultLogin,
+                            onSelectRole = viewModel::selectLoginRole,
+                            onIdentifierChange = viewModel::updateLoginIdentifier,
+                            onPasswordChange = viewModel::updateLoginPassword,
+                            onLogin = { state.loginRole?.let(viewModel::loginAs) }
+                        )
+                    } else {
+                        ChildEntryScreen(
+                            state = state,
+                            onEnterChild = viewModel::quickEnterChild,
+                            onOpenAdult = viewModel::openAdultLogin
+                        )
+                    }
+                }
             }
         }
     }
