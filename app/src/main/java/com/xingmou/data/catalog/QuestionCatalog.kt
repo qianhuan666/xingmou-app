@@ -3,6 +3,18 @@ package com.xingmou.data.catalog
 /** 统一题目模型，基线和课程都通过同一份结构渲染。 */
 enum class QuestionType { CHOICE, MEMORY, SEQUENCE, SORTING, AUDIO, OBSERVED }
 
+/** 摄像头动作题期望的动作；null 表示非动作题。 */
+enum class ExpectedAction { CLAP, RAISE_HAND, POINT_INDEX, THUMB_UP, VICTORY, OPEN_PALM }
+
+/** 语音题检测方式：KEYWORD=说出目标词；ANY=只要有效开口。 */
+enum class SpeechMode { KEYWORD, ANY }
+
+/** 语音题的期望；keywords 为模糊匹配词表（含同义词/儿语）。 */
+data class ExpectedSpeech(
+    val mode: SpeechMode,
+    val keywords: List<String> = emptyList()
+)
+
 data class QuestionDefinition(
     val id: String,
     val version: Int,
@@ -16,11 +28,27 @@ data class QuestionDefinition(
     val assetKey: String = "training_star",
     /** 题目示例/刺激材料；仅 MEMORY 题会在作答前暂时隐藏。 */
     val stimulus: String = "",
-    val previewMs: Long = 3_000L
+    val previewMs: Long = 3_000L,
+    val expectedAction: ExpectedAction? = null,
+    val expectedSpeech: ExpectedSpeech? = null
 )
 
-private fun question(id: String, moduleId: String, domain: String, type: QuestionType, prompt: String, options: List<String>, correctOption: Int?, stimulus: String = "", previewMs: Long = 0L): QuestionDefinition =
-    QuestionDefinition(id, 1, moduleId, domain, type, prompt, options, correctOption, "WEB_BANK_V1", stimulus = stimulus, previewMs = previewMs)
+private fun question(
+    id: String,
+    moduleId: String,
+    domain: String,
+    type: QuestionType,
+    prompt: String,
+    options: List<String>,
+    correctOption: Int?,
+    stimulus: String = "",
+    previewMs: Long = 0L,
+    expectedAction: ExpectedAction? = null,
+    expectedSpeech: ExpectedSpeech? = null
+): QuestionDefinition =
+    QuestionDefinition(id, 1, moduleId, domain, type, prompt, options, correctOption, "WEB_BANK_V1",
+        stimulus = stimulus, previewMs = previewMs,
+        expectedAction = expectedAction, expectedSpeech = expectedSpeech)
 
 object QuestionCatalog {
     val baselineQuestions: List<QuestionDefinition> = listOf(
