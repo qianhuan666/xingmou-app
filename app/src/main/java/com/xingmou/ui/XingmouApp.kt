@@ -432,6 +432,24 @@ private fun AdultLoginPanel(
 }
 
 @Composable
+private fun PerceptionIndicator() {
+    val infinite = rememberInfiniteTransition()
+    val alpha by infinite.animateFloat(
+        initialValue = 1f,
+        targetValue = 0.25f,
+        animationSpec = infiniteRepeatable(tween(900), RepeatMode.Reverse)
+    )
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        modifier = Modifier.padding(end = 8.dp)
+    ) {
+        Box(Modifier.size(10.dp).clip(CircleShape).background(Color(0xFF2E7D32).copy(alpha = alpha)))
+        Text("守护中", style = MaterialTheme.typography.labelSmall, color = Color(0xFF2E7D32))
+    }
+}
+
+@Composable
 private fun ChildContextBar(
     state: com.xingmou.XingmouUiState,
     onSelectChild: (String) -> Unit,
@@ -456,6 +474,7 @@ private fun ChildContextBar(
     ,onLogout: () -> Unit
 ) {
     val expandedState = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+    val moreExpanded = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
     val dialogMode = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<String?>(null) }
     val aliasState = androidx.compose.runtime.remember(state.activeChildAlias) { androidx.compose.runtime.mutableStateOf(state.activeChildAlias) }
     val ageBandState = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf("学龄期") }
@@ -475,18 +494,12 @@ private fun ChildContextBar(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text("当前儿童：${state.activeChildAlias}", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+            if (state.selectedPort == Port.CHILD && state.child.perceptionEnabled) {
+                PerceptionIndicator()
+            }
             TextButton(onClick = { expandedState.value = true }, enabled = state.availableChildren.isNotEmpty()) { Text("切换档案") }
             if (state.selectedPort != Port.CHILD) {
-                TextButton(onClick = { aliasState.value = ""; ageBandState.value = "学龄期"; dialogMode.value = "create" }) { Text("新建") }
-                TextButton(onClick = { dialogMode.value = "edit" }) { Text("编辑") }
-            }
-            if (state.selectedPort == Port.PROFESSIONAL) {
-                TextButton(onClick = onArchiveChild, enabled = state.availableChildren.size > 1) { Text("归档") }
-                TextButton(onClick = { consentOpen.value = true }) { Text("授权") }
-                TextButton(onClick = { institutionOpen.value = true }) { Text("机构设置") }
-                TextButton(onClick = { apiKeyInput.value = ""; apiKeyOpen.value = true }) { Text("机构 API Key") }
-            } else if (state.selectedPort == Port.PARENT) {
-                TextButton(onClick = { consentOpen.value = true }) { Text("授权") }
+                TextButton(onClick = { moreExpanded.value = true }) { Text("⋯ 更多") }
             }
             TextButton(onClick = onLogout) { Text("退出当前端") }
             DropdownMenu(expanded = expandedState.value, onDismissRequest = { expandedState.value = false }) {
@@ -494,6 +507,40 @@ private fun ChildContextBar(
                     DropdownMenuItem(
                         text = { Text("${child.alias} · ${child.ageBand}") },
                         onClick = { expandedState.value = false; onSelectChild(child.childId) }
+                    )
+                }
+            }
+            DropdownMenu(expanded = moreExpanded.value, onDismissRequest = { moreExpanded.value = false }) {
+                DropdownMenuItem(
+                    text = { Text("新建儿童") },
+                    onClick = { moreExpanded.value = false; aliasState.value = ""; ageBandState.value = "学龄期"; dialogMode.value = "create" }
+                )
+                DropdownMenuItem(
+                    text = { Text("编辑当前儿童") },
+                    onClick = { moreExpanded.value = false; dialogMode.value = "edit" }
+                )
+                if (state.selectedPort == Port.PROFESSIONAL) {
+                    DropdownMenuItem(
+                        text = { Text("归档当前儿童") },
+                        enabled = state.availableChildren.size > 1,
+                        onClick = { moreExpanded.value = false; onArchiveChild() }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("数据授权") },
+                        onClick = { moreExpanded.value = false; consentOpen.value = true }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("机构设置") },
+                        onClick = { moreExpanded.value = false; institutionOpen.value = true }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("机构 API Key") },
+                        onClick = { moreExpanded.value = false; apiKeyInput.value = ""; apiKeyOpen.value = true }
+                    )
+                } else {
+                    DropdownMenuItem(
+                        text = { Text("数据授权") },
+                        onClick = { moreExpanded.value = false; consentOpen.value = true }
                     )
                 }
             }
@@ -726,6 +773,7 @@ private fun PortContent(
             onPauseTask = viewModel::pauseHomeTask,
             onAdvanceDemo = viewModel::advanceHomeDemo,
             onMoodChange = viewModel::updateFeedbackMood,
+            onQuickRecordMood = viewModel::quickRecordMood,
             onFeedbackNoteChange = viewModel::updateFeedbackNote,
             onSubmitFeedback = viewModel::submitHomeFeedback,
             onSubmitObservation = viewModel::submitParentObservation,

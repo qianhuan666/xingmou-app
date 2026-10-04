@@ -1,5 +1,7 @@
 package com.xingmou.ui.parent
 
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -9,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
@@ -19,13 +22,23 @@ import androidx.compose.material3.NavigationRail
 import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.drawText
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.xingmou.ParentDomainStatUi
 import com.xingmou.ParentUiState
 import com.xingmou.RainbowProfileUi
 import com.xingmou.core.safety.SafeResponses
@@ -46,6 +59,7 @@ fun ParentScreen(
     onPauseTask: () -> Unit,
     onAdvanceDemo: () -> Unit,
     onMoodChange: (String) -> Unit,
+    onQuickRecordMood: (String) -> Unit,
     onFeedbackNoteChange: (String) -> Unit,
     onSubmitFeedback: () -> Unit,
     onSubmitObservation: () -> Unit,
@@ -97,7 +111,7 @@ fun ParentScreen(
                 ParentSection.COMPANIONSHIP -> {
                     HomeTaskPanel(
                         state, onCompleteTask, onSkipTask, onPauseTask, onAdvanceDemo,
-                        onMoodChange, onFeedbackNoteChange, onSubmitFeedback
+                        onMoodChange, onQuickRecordMood, onFeedbackNoteChange, onSubmitFeedback
                     )
                     ReminderPanel()
                 }
@@ -144,6 +158,7 @@ private fun HomeTaskPanel(
     onPause: () -> Unit,
     onAdvanceDemo: () -> Unit,
     onMoodChange: (String) -> Unit,
+    onQuickRecordMood: (String) -> Unit,
     onNoteChange: (String) -> Unit,
     onSubmit: () -> Unit
 ) {
@@ -173,8 +188,8 @@ private fun HomeTaskPanel(
             modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
         ) { Text(if (state.homeDemoStep >= 4) "重新开始示范" else "完成本步") }
         HorizontalDivider(Modifier.padding(vertical = 14.dp))
-        Text("今天的状态", style = MaterialTheme.typography.titleMedium)
-        ChoiceRow("今日状态", listOf("状态平稳", "睡眠不足", "情绪波动", "配合度较高"), state.feedbackMood, onMoodChange)
+        Text("今天的状态（点一下即记录）", style = MaterialTheme.typography.titleMedium)
+        MoodQuickRow(selected = state.feedbackMood, onQuickRecord = onQuickRecordMood)
         OutlinedTextField(
             value = state.feedbackNote,
             onValueChange = onNoteChange,
@@ -207,13 +222,31 @@ private fun DemoSteps(current: Int, disabled: Boolean) {
     }
 }
 
+private data class MoodOption(val emoji: String, val label: String)
+
+private val MOOD_OPTIONS = listOf(
+    MoodOption("😊", "状态平稳"),
+    MoodOption("😴", "睡眠不足"),
+    MoodOption("😣", "情绪波动"),
+    MoodOption("🤝", "配合度较高")
+)
+
 @Composable
-private fun ChoiceRow(label: String, options: List<String>, selected: String, onChange: (String) -> Unit) {
-    Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
-        Text(label, modifier = Modifier.weight(0.28f))
-        options.forEach { option ->
-            TextButton(onClick = { onChange(option) }, modifier = Modifier.weight(0.24f)) {
-                Text(if (option == selected) "✓ $option" else option)
+private fun MoodQuickRow(selected: String, onQuickRecord: (String) -> Unit) {
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+        MOOD_OPTIONS.forEach { option ->
+            val isSelected = option.label == selected
+            Surface(
+                onClick = { onQuickRecord(option.label) },
+                modifier = Modifier.weight(1f),
+                shape = MaterialTheme.shapes.medium,
+                color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
+                border = if (isSelected) BorderStroke(1.dp, MaterialTheme.colorScheme.primary) else null
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(vertical = 10.dp)) {
+                    Text(option.emoji, style = MaterialTheme.typography.titleLarge)
+                    Text(option.label, style = MaterialTheme.typography.labelSmall, maxLines = 1)
+                }
             }
         }
     }
@@ -315,22 +348,81 @@ private fun ParentProfileCard(profile: RainbowProfileUi) {
 }
 
 @Composable
+private fun DomainRadarChart(domains: List<ParentDomainStatUi>) {
+    val textMeasurer = rememberTextMeasurer()
+    val primary = MaterialTheme.colorScheme.primary
+    val onSurface = MaterialTheme.colorScheme.onSurface
+    val gridColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
+    Canvas(modifier = Modifier.fillMaxWidth().height(300.dp).padding(vertical = 8.dp)) {
+        val n = domains.size
+        if (n < 3) return@Canvas
+        val cx = size.width / 2f
+        val cy = size.height / 2f
+        val maxRadius = size.minDimension / 2f - 44.dp.toPx()
+        val angleStep = (2f * Math.PI / n).toFloat()
+        val startAngle = -Math.PI.toFloat() / 2f
+        fun pointAt(index: Int, radius: Float): Offset {
+            val angle = startAngle + angleStep * index
+            return Offset(cx + kotlin.math.cos(angle) * radius, cy + kotlin.math.sin(angle) * radius)
+        }
+        listOf(0.25f, 0.5f, 0.75f, 1f).forEach { fraction ->
+            val radius = maxRadius * fraction
+            val grid = Path()
+            repeat(n) { i ->
+                val p = pointAt(i, radius)
+                if (i == 0) grid.moveTo(p.x, p.y) else grid.lineTo(p.x, p.y)
+            }
+            grid.close()
+            drawPath(grid, color = gridColor, style = Stroke(width = 1.dp.toPx()))
+        }
+        repeat(n) { i ->
+            drawLine(gridColor, pointAt(i, 0f), pointAt(i, maxRadius), strokeWidth = 1.dp.toPx())
+        }
+        val dataPath = Path()
+        domains.forEachIndexed { i, domain ->
+            val radius = maxRadius * (domain.accuracy / 100f).coerceIn(0f, 1f)
+            val p = pointAt(i, radius)
+            if (i == 0) dataPath.moveTo(p.x, p.y) else dataPath.lineTo(p.x, p.y)
+        }
+        dataPath.close()
+        drawPath(dataPath, color = primary.copy(alpha = 0.18f))
+        drawPath(dataPath, color = primary, style = Stroke(width = 2.dp.toPx()))
+        val labelStyle = TextStyle(fontSize = 12.sp, color = onSurface)
+        domains.forEachIndexed { i, domain ->
+            val radius = maxRadius * (domain.accuracy / 100f).coerceIn(0f, 1f)
+            val p = pointAt(i, radius)
+            drawCircle(domainBarColor(domain.colorKey), radius = 5.dp.toPx(), center = p)
+            val labelPoint = pointAt(i, maxRadius + 20.dp.toPx())
+            val label = "${domain.emoji}${domain.name}"
+            val measured = textMeasurer.measure(label, style = labelStyle)
+            drawText(
+                textMeasurer, label,
+                topLeft = Offset(labelPoint.x - measured.size.width / 2f, labelPoint.y - measured.size.height / 2f),
+                style = labelStyle
+            )
+        }
+    }
+}
+
+@Composable
 private fun ParentTrainingStatsCard(state: ParentUiState) {
     SectionSurface(title = "六域训练概览", supporting = "来自当前儿童的本地训练记录，展示练习量与正确率。") {
-        state.domainOverview.forEachIndexed { index, domain ->
-            if (index > 0) HorizontalDivider(Modifier.padding(vertical = 8.dp))
-            Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-                Text(domain.emoji, style = MaterialTheme.typography.headlineSmall)
-                Column(Modifier.weight(1f)) {
-                    Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-                        Text(domain.name, style = MaterialTheme.typography.titleSmall)
-                        Text(if (domain.count == 0) "暂无记录" else "正确率 ${domain.accuracy}% · ${domain.count} 次", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (state.domainOverview.isEmpty()) {
+            Text("暂无六域训练记录。", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        } else {
+            DomainRadarChart(state.domainOverview)
+            HorizontalDivider(Modifier.padding(vertical = 10.dp))
+            state.domainOverview.chunked(2).forEach { row ->
+                Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                    row.forEach { domain ->
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                            Text(domain.emoji, style = MaterialTheme.typography.bodyLarge)
+                            Column(Modifier.padding(start = 8.dp)) {
+                                Text(domain.name, style = MaterialTheme.typography.labelMedium)
+                                Text(if (domain.count == 0) "暂无记录" else "正确率 ${domain.accuracy}% · ${domain.count} 次", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
                     }
-                    LinearProgressIndicator(
-                        progress = { domain.accuracy / 100f },
-                        color = domainBarColor(domain.colorKey),
-                        modifier = Modifier.fillMaxWidth().padding(top = 6.dp)
-                    )
                 }
             }
         }

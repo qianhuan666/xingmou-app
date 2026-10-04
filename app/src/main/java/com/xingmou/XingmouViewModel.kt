@@ -1267,8 +1267,8 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                         message = when {
                             passed -> "太棒了！这一关通过了。"
                             finished -> "这一关结束，可以再试一次。"
-                            correct -> "做得好！"
-                            else -> "没关系，下一个活动。"
+                            correct -> listOf("做得好！", "真棒！", "答对啦！", "太厉害了！")[Math.floorMod(runTotal, 4)]
+                            else -> listOf("没关系，你已经很棒了，继续。", "别着急，我们看看下一个。", "这次没选对也没关系，继续加油。", "已经很认真啦，慢慢来。")[Math.floorMod(runTotal, 4)]
                         },
                         finished = finished,
                         passed = passed
@@ -1328,7 +1328,7 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                 val updated = snapshot.apply(decision).copy(
                     recentResults = (snapshot.recentResults + result).takeLast(3),
                     consecutiveFailures = failures,
-                    instruction = if (correct) "再找一次圆形" else "看一看，再选一次"
+                    instruction = if (correct) "再找一次圆形" else "没关系，慢慢看，再试一次。"
                 )
                 _uiState.update { it.copy(child = updated) }
                 loadCourseProgress(childId)
@@ -1444,6 +1444,21 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                 )
             )
             _uiState.update { it.copy(parent = it.parent.copy(feedbackMessage = "观察已保存到当前儿童档案。", feedbackNote = "")) }
+        }
+    }
+
+    /** 家长端一键记录今天的状态：点一下表情即写入一条 mood 反馈，无需填写备注。 */
+    fun quickRecordMood(mood: String) {
+        viewModelScope.launch {
+            val task = database.homeTaskDao().latestForChild(childId)
+            database.homeFeedbackDao().insert(
+                HomeFeedbackEntity(
+                    feedbackId = newId("feedback"), childId = childId, taskId = task?.taskId,
+                    mood = mood, fatigue = "",
+                    note = "", createdAt = System.currentTimeMillis()
+                )
+            )
+            _uiState.update { it.copy(parent = it.parent.copy(feedbackMood = mood, feedbackMessage = "已记录今天的状态：${mood}")) }
         }
     }
 
