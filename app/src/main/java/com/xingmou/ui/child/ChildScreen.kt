@@ -1,6 +1,7 @@
 package com.xingmou.ui.child
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.WindowInsets
@@ -262,7 +264,7 @@ fun ChildScreen(
               exitLabel = "暂时离开",
               onExit = onLeaveBaseline
           ) {
-              BaselineCard(baseline, onStartBaseline, onResumeBaseline, onLeaveBaseline, onRestartBaseline, onBaselineAnswer)
+              BaselineCard(baseline, onStartBaseline, onResumeBaseline, onLeaveBaseline, onRestartBaseline, onBaselineAnswer, immersive = true)
           }
           courseImmersive -> ImmersiveTestDialog(
               exitLabel = "返回关卡地图",
@@ -305,16 +307,18 @@ private fun ImmersiveTestDialog(
         )
     ) {
         val view = androidx.compose.ui.platform.LocalView.current
-        androidx.compose.runtime.SideEffect {
+        androidx.compose.runtime.DisposableEffect(Unit) {
             val window = (view.parent as? androidx.compose.ui.window.DialogWindowProvider)?.window
             window?.let {
                 it.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT))
+                it.clearFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND)
                 it.setDimAmount(0f)
                 it.setLayout(
                     android.view.ViewGroup.LayoutParams.MATCH_PARENT,
                     android.view.ViewGroup.LayoutParams.MATCH_PARENT
                 )
             }
+            onDispose { }
         }
         ImmersiveTestSpace(exitLabel = exitLabel, onExit = onExit, content = content)
     }
@@ -359,14 +363,49 @@ private fun ImmersiveTestSpace(
                     modifier = Modifier.heightIn(min = 52.dp).semantics { contentDescription = exitLabel }
                 ) { Text("← $exitLabel", style = MaterialTheme.typography.titleMedium) }
             }
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth(0.82f)
-                    .clip(RoundedCornerShape(32.dp))
-                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.95f))
-                    .padding(28.dp)
-            ) {
-                content()
+            val glassShape = RoundedCornerShape(36.dp)
+            Box(modifier = Modifier.fillMaxWidth(0.86f)) {
+                // 假投影：卡片下方三层偏移填充块（被卡片本体遮挡，仅下缘可见），兼容所有渲染器
+                Box(
+                    Modifier
+                        .matchParentSize()
+                        .offset(y = 10.dp)
+                        .background(androidx.compose.ui.graphics.Color(0x1233506B), glassShape)
+                )
+                Box(
+                    Modifier
+                        .matchParentSize()
+                        .offset(y = 20.dp)
+                        .background(androidx.compose.ui.graphics.Color(0x0D33506B), glassShape)
+                )
+                Box(
+                    Modifier
+                        .matchParentSize()
+                        .offset(y = 30.dp)
+                        .background(androidx.compose.ui.graphics.Color(0x0833506B), glassShape)
+                )
+                // 玻璃卡片本体
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(glassShape)
+                        .background(
+                            androidx.compose.ui.graphics.Brush.verticalGradient(
+                                listOf(
+                                    androidx.compose.ui.graphics.Color.White.copy(alpha = 0.80f),
+                                    androidx.compose.ui.graphics.Color.White.copy(alpha = 0.60f)
+                                )
+                            )
+                        )
+                        .border(
+                            1.dp,
+                            androidx.compose.ui.graphics.Color.White.copy(alpha = 0.85f),
+                            glassShape
+                        )
+                        .padding(26.dp)
+                ) {
+                    content()
+                }
             }
         }
     }
@@ -440,7 +479,8 @@ private fun CurriculumPlayerCard(
             else -> player.levelTitle
         },
         supporting = player.message,
-        containerColor = if (isSafetyStopped) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface
+        containerColor = if (isSafetyStopped) MaterialTheme.colorScheme.primaryContainer else androidx.compose.ui.graphics.Color.Transparent,
+        immersive = true
     ) {
         if (isSafetyStopped) {
             Text("训练已经停止。请不要继续操作。", color = Error, style = MaterialTheme.typography.titleMedium)
@@ -460,7 +500,7 @@ private fun CurriculumPlayerCard(
             Text("第 ${player.levelOrder} 关 · 活动 ${player.activityIndex + 1} / ${player.activityTotal} · ${player.activityLabel}", style = MaterialTheme.typography.labelLarge)
             if (isPreviewing.value) {
                 Text("请认真看一看，${((previewRemainingMs.value + 999L) / 1000L).coerceAtLeast(1L)} 秒后开始选择。")
-                StimulusCard(question.stimulus, "记忆示例")
+                StimulusCard(question.stimulus, "记忆示例", immersive = true)
                 LinearProgressIndicator(
                     progress = {
                         1f - (previewRemainingMs.value.toFloat() / question.previewMs.coerceAtLeast(1L).toFloat()).coerceIn(0f, 1f)
@@ -468,7 +508,7 @@ private fun CurriculumPlayerCard(
                     modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp)
                 )
             } else {
-                if (isMemoryQuestion != true && question.stimulus.isNotBlank()) StimulusCard(question.stimulus, "题目示例")
+                if (isMemoryQuestion != true && question.stimulus.isNotBlank()) StimulusCard(question.stimulus, "题目示例", immersive = true)
                 Text(question.prompt, style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(vertical = 8.dp))
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
                     question.options.withIndex().toList().chunked(2).forEach { rowOptions ->
@@ -487,14 +527,13 @@ private fun CurriculumPlayerCard(
                 modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp).semantics { contentDescription = "让儿童休息" },
                 enabled = !player.isWorking
             ) { Text("先休息") }
-            TextButton(onClick = onLeave, modifier = Modifier.fillMaxWidth().semantics { contentDescription = "暂时离开这一关" }) { Text("暂时离开这一关") }
         }
     }
 }
 
 @Composable
-private fun StimulusCard(stimulus: String, label: String) {
-    SectionSurface(title = label, containerColor = MaterialTheme.colorScheme.secondaryContainer) {
+private fun StimulusCard(stimulus: String, label: String, immersive: Boolean = false) {
+    SectionSurface(title = label, containerColor = MaterialTheme.colorScheme.secondaryContainer, immersive = immersive) {
         Text(
             stimulus,
             modifier = Modifier.fillMaxWidth().padding(vertical = 18.dp),
@@ -713,7 +752,8 @@ private fun BaselineCard(
     onResume: () -> Unit,
     onLeave: () -> Unit,
     onRestart: () -> Unit,
-    onAnswer: (Int) -> Unit
+    onAnswer: (Int) -> Unit,
+    immersive: Boolean = false
 ) {
     val question = state.question
     val isMemoryQuestion = question?.type == QuestionType.MEMORY
@@ -744,7 +784,8 @@ private fun BaselineCard(
     SectionSurface(
         title = "六题起点小测",
         supporting = state.message,
-        containerColor = MaterialTheme.colorScheme.tertiaryContainer
+        containerColor = if (immersive) androidx.compose.ui.graphics.Color.Transparent else MaterialTheme.colorScheme.tertiaryContainer,
+        immersive = immersive
     ) {
         when (state.status) {
             BaselineStatus.NOT_STARTED, BaselineStatus.NEEDS_RETEST -> {
@@ -761,7 +802,7 @@ private fun BaselineCard(
                     Text("${state.currentIndex + 1} / ${state.totalCount}", style = MaterialTheme.typography.labelLarge)
                     if (isPreviewing.value) {
                         Text("请记住下面的示例，${((previewRemainingMs.value + 999L) / 1000L).coerceAtLeast(1L)} 秒后开始选择。")
-                        StimulusCard(question.stimulus, "记忆示例")
+                        StimulusCard(question.stimulus, "记忆示例", immersive)
                         LinearProgressIndicator(
                             progress = {
                                 1f - (previewRemainingMs.value.toFloat() / question.previewMs.coerceAtLeast(1L).toFloat()).coerceIn(0f, 1f)
@@ -770,7 +811,7 @@ private fun BaselineCard(
                         )
                     } else {
                         Text(question.prompt, style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(vertical = 8.dp))
-                        if (!isMemoryQuestion && question.stimulus.isNotBlank()) StimulusCard(question.stimulus, "题目示例")
+                        if (!isMemoryQuestion && question.stimulus.isNotBlank()) StimulusCard(question.stimulus, "题目示例", immersive)
                         question.options.forEachIndexed { index, option ->
                             OutlinedButton(
                                 onClick = { onAnswer(index) },
@@ -779,7 +820,9 @@ private fun BaselineCard(
                             ) { Text(option, style = enlargedVisualStyle(MaterialTheme.typography.titleMedium, option)) }
                             Spacer(Modifier.height(8.dp))
                         }
-                        TextButton(onClick = onLeave, modifier = Modifier.fillMaxWidth().semantics { contentDescription = "暂时离开六题起点小测" }) { Text("暂时离开基线") }
+                        if (!immersive) {
+                            TextButton(onClick = onLeave, modifier = Modifier.fillMaxWidth().semantics { contentDescription = "暂时离开六题起点小测" }) { Text("暂时离开基线") }
+                        }
                     }
                 }
             }

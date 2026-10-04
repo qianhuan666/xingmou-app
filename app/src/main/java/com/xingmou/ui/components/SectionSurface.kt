@@ -23,13 +23,22 @@ fun SectionSurface(
     modifier: Modifier = Modifier,
     supporting: String? = null,
     containerColor: Color? = null,
+    immersive: Boolean = false,
     content: @Composable ColumnScope.() -> Unit
 ) {
+    val baseColor = containerColor ?: MaterialTheme.colorScheme.surface
+    // 注意：Color.Transparent 的 RGB 为 0，直接 copy(alpha) 会变成半透明黑色，
+    // 所以透明色必须原样保留，只有真实颜色才降透明度。
+    val resolvedColor = when {
+        !immersive -> baseColor
+        baseColor.alpha == 0f -> Color.Transparent
+        else -> baseColor.copy(alpha = 0.5f)
+    }
     Surface(
         modifier = modifier,
-        shape = MaterialTheme.shapes.large,
-        color = containerColor ?: MaterialTheme.colorScheme.surface,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+        shape = if (immersive) androidx.compose.foundation.shape.RoundedCornerShape(28.dp) else MaterialTheme.shapes.large,
+        color = resolvedColor,
+        border = if (immersive) null else BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
     ) {
         Column(modifier = Modifier.padding(20.dp)) {
             Text(title, style = MaterialTheme.typography.titleLarge, modifier = Modifier.semantics { heading() })
