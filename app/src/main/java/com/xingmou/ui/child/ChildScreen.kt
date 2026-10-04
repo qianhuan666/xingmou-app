@@ -1,5 +1,7 @@
 package com.xingmou.ui.child
 
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -36,6 +38,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import kotlinx.coroutines.delay
@@ -49,9 +52,12 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.xingmou.AccessibilityUiState
+import com.xingmou.AutoDetectState
 import com.xingmou.ChildUiState
 import com.xingmou.BaselineUiState
 import com.xingmou.CurriculumLevelStatus
+import com.xingmou.DetectMode
+import com.xingmou.DetectPhase
 import com.xingmou.CurriculumLevelUi
 import com.xingmou.CurriculumMapUi
 import com.xingmou.CurriculumPlayerUi
@@ -97,6 +103,8 @@ fun ChildScreen(
     onTogglePerceptionPreview: (Boolean) -> Unit,
     onAttachPerceptionPreviewView: (androidx.camera.view.PreviewView) -> Unit,
     onDetachPerceptionPreviewView: (androidx.camera.view.PreviewView) -> Unit,
+    onDetectPermissionResolved: (Boolean) -> Unit,
+    onDetectChooseManual: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -239,7 +247,17 @@ fun ChildScreen(
                     )
                 }
                 if (!baselineImmersive) {
-                    BaselineCard(baseline, onStartBaseline, onResumeBaseline, onLeaveBaseline, onRestartBaseline, onBaselineAnswer)
+                    BaselineCard(
+                        baseline,
+                        onStartBaseline,
+                        onResumeBaseline,
+                        onLeaveBaseline,
+                        onRestartBaseline,
+                        onBaselineAnswer,
+                        autoDetect = state.autoDetect,
+                        onDetectPermissionResult = onDetectPermissionResolved,
+                        onDetectManual = onDetectChooseManual
+                    )
                 }
                 if (selectedCourseLevel.value == null) {
                     CurriculumMapCard(
@@ -299,7 +317,18 @@ fun ChildScreen(
               onAttachPreviewView = onAttachPerceptionPreviewView,
               onDetachPreviewView = onDetachPerceptionPreviewView
           ) {
-              BaselineCard(baseline, onStartBaseline, onResumeBaseline, onLeaveBaseline, onRestartBaseline, onBaselineAnswer, immersive = true)
+              BaselineCard(
+                  baseline,
+                  onStartBaseline,
+                  onResumeBaseline,
+                  onLeaveBaseline,
+                  onRestartBaseline,
+                  onBaselineAnswer,
+                  autoDetect = state.autoDetect,
+                  onDetectPermissionResult = onDetectPermissionResolved,
+                  onDetectManual = onDetectChooseManual,
+                  immersive = true
+              )
           }
           courseImmersive -> ImmersiveTestDialog(
               exitLabel = "返回关卡地图",
@@ -321,7 +350,10 @@ fun ChildScreen(
                   onLeave = {
                       selectedCourseLevel.value = null
                       onLeaveCurriculumLevel()
-                  }
+                  },
+                  autoDetect = state.autoDetect,
+                  onDetectPermissionResult = onDetectPermissionResolved,
+                  onDetectManual = onDetectChooseManual
               )
           }
       }
@@ -503,7 +535,10 @@ private fun CurriculumPlayerCard(
     onAnswer: (Int) -> Unit,
     onPause: () -> Unit,
     onResume: () -> Unit,
-    onLeave: () -> Unit
+    onLeave: () -> Unit,
+    autoDetect: AutoDetectState,
+    onDetectPermissionResult: (Boolean) -> Unit,
+    onDetectManual: () -> Unit
 ) {
     val question = player.question
     val isMemoryQuestion = question?.type == QuestionType.MEMORY
@@ -572,12 +607,21 @@ private fun CurriculumPlayerCard(
             } else {
                 if (isMemoryQuestion != true && question.stimulus.isNotBlank()) StimulusCard(question.stimulus, "题目示例", immersive = true)
                 Text(question.prompt, style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(vertical = 8.dp))
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-                    question.options.withIndex().toList().chunked(2).forEach { rowOptions ->
-                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-                            rowOptions.forEach { (optionIndex, option) ->
-                                val buttonModifier = if (rowOptions.size == 1) Modifier.fillMaxWidth() else Modifier.weight(1f)
-                                ChoiceButton(option, optionIndex, onAnswer, buttonModifier, !player.isWorking)
+                ObservedAnswerArea(
+                    question = question,
+                    detect = autoDetect,
+                    isWorking = player.isWorking,
+                    onAnswer = onAnswer,
+                    onPermissionResult = onDetectPermissionResult,
+                    onManual = onDetectManual
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+                        question.options.withIndex().toList().chunked(2).forEach { rowOptions ->
+                            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+                                rowOptions.forEach { (optionIndex, option) ->
+                                    val buttonModifier = if (rowOptions.size == 1) Modifier.fillMaxWidth() else Modifier.weight(1f)
+                                    ChoiceButton(option, optionIndex, onAnswer, buttonModifier, !player.isWorking)
+                                }
                             }
                         }
                     }
@@ -815,6 +859,9 @@ private fun BaselineCard(
     onLeave: () -> Unit,
     onRestart: () -> Unit,
     onAnswer: (Int) -> Unit,
+    autoDetect: AutoDetectState,
+    onDetectPermissionResult: (Boolean) -> Unit,
+    onDetectManual: () -> Unit,
     immersive: Boolean = false
 ) {
     val question = state.question
@@ -874,13 +921,22 @@ private fun BaselineCard(
                     } else {
                         Text(question.prompt, style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(vertical = 8.dp))
                         if (!isMemoryQuestion && question.stimulus.isNotBlank()) StimulusCard(question.stimulus, "题目示例", immersive)
-                        question.options.forEachIndexed { index, option ->
-                            OutlinedButton(
-                                onClick = { onAnswer(index) },
-                                enabled = !state.isWorking,
-                                modifier = Modifier.fillMaxWidth().heightIn(min = if (containsVisualMaterial(option)) 120.dp else 56.dp).semantics { contentDescription = "回答起点小测：$option" }
-                            ) { Text(option, style = enlargedVisualStyle(MaterialTheme.typography.titleMedium, option)) }
-                            Spacer(Modifier.height(8.dp))
+                        ObservedAnswerArea(
+                            question = question,
+                            detect = autoDetect,
+                            isWorking = state.isWorking,
+                            onAnswer = onAnswer,
+                            onPermissionResult = onDetectPermissionResult,
+                            onManual = onDetectManual
+                        ) {
+                            question.options.forEachIndexed { index, option ->
+                                OutlinedButton(
+                                    onClick = { onAnswer(index) },
+                                    enabled = !state.isWorking,
+                                    modifier = Modifier.fillMaxWidth().heightIn(min = if (containsVisualMaterial(option)) 120.dp else 56.dp).semantics { contentDescription = "回答起点小测：$option" }
+                                ) { Text(option, style = enlargedVisualStyle(MaterialTheme.typography.titleMedium, option)) }
+                                Spacer(Modifier.height(8.dp))
+                            }
                         }
                         if (!immersive) {
                             TextButton(onClick = onLeave, modifier = Modifier.fillMaxWidth().semantics { contentDescription = "暂时离开六题起点小测" }) { Text("暂时离开基线") }
@@ -922,6 +978,101 @@ private fun ChoiceButton(label: String, optionIndex: Int, onChoice: (Int) -> Uni
         enabled = enabled
     ) {
         Text(label, style = enlargedVisualStyle(MaterialTheme.typography.titleLarge, label))
+    }
+}
+
+// ===================== 观察题自动检测 =====================
+
+/**
+ * 观察题作答区：非检测题/无会话时渲染普通选项（normalContent，保持各卡片原布局）；
+ * 检测会话激活时按相位渲染权限门、检测面板或「提示 + 手动选项」兜底。
+ */
+@Composable
+private fun ObservedAnswerArea(
+    question: com.xingmou.data.catalog.QuestionDefinition,
+    detect: AutoDetectState,
+    isWorking: Boolean,
+    onAnswer: (Int) -> Unit,
+    onPermissionResult: (Boolean) -> Unit,
+    onManual: () -> Unit,
+    normalContent: @Composable () -> Unit
+) {
+    val detectable = question.expectedAction != null || question.expectedSpeech != null
+    val active = detectable && detect.questionId == question.id
+    if (!active || detect.phase == DetectPhase.IDLE) {
+        normalContent()
+        return
+    }
+    when (detect.phase) {
+        DetectPhase.AWAIT_PERMISSION -> QuestionPermissionGate(
+            permission = detect.permission,
+            onResult = onPermissionResult,
+            onManual = onManual
+        )
+        DetectPhase.DETECTING, DetectPhase.RETRYING, DetectPhase.HIT -> Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            DetectPanel(detect)
+            if (detect.phase != DetectPhase.HIT) {
+                TextButton(onClick = onManual) { Text("我想用手点") }
+            }
+        }
+        DetectPhase.MANUAL_FALLBACK, DetectPhase.IDLE -> Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(detect.hint, style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+            normalContent()
+        }
+    }
+}
+
+/** 检测中面板：呼吸光圈 + 模式 emoji + 提示语 + 倒计时进度条。 */
+@Composable
+private fun DetectPanel(detect: AutoDetectState) {
+    val infinite = androidx.compose.animation.core.rememberInfiniteTransition(label = "breath")
+    val scale by infinite.animateFloat(
+        initialValue = 0.92f, targetValue = 1.08f,
+        animationSpec = androidx.compose.animation.core.infiniteRepeatable(
+            androidx.compose.animation.core.tween(1100),
+            repeatMode = androidx.compose.animation.core.RepeatMode.Reverse
+        ), label = "scale"
+    )
+    val ringColor = when (detect.phase) {
+        DetectPhase.HIT -> androidx.compose.ui.graphics.Color(0xFF4CAF50)
+        DetectPhase.RETRYING -> androidx.compose.ui.graphics.Color(0xFFFFC107)
+        else -> MaterialTheme.colorScheme.primary
+    }
+    val emoji = when {
+        detect.phase == DetectPhase.HIT -> "✅"
+        detect.mode == DetectMode.SPEECH -> "🎤"
+        else -> "👏"
+    }
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Box(
+            modifier = Modifier.size(132.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Canvas(Modifier.size(132.dp)) {
+                drawCircle(
+                    color = ringColor.copy(alpha = 0.25f),
+                    radius = size.minDimension / 2f * if (detect.phase == DetectPhase.HIT) 1f else scale
+                )
+            }
+            Text(emoji, fontSize = 56.sp)
+        }
+        Text(detect.hint, style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center)
+        if (detect.phase == DetectPhase.DETECTING || detect.phase == DetectPhase.RETRYING) {
+            val progress = if (detect.timeoutMs > 0)
+                detect.remainingMs.toFloat() / detect.timeoutMs else 0f
+            LinearProgressIndicator(
+                progress = { progress.coerceIn(0f, 1f) },
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
     }
 }
 

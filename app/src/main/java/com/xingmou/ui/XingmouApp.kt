@@ -762,6 +762,8 @@ private fun PortContent(
             onTogglePerceptionPreview = viewModel::togglePerceptionPreview,
             onAttachPerceptionPreviewView = viewModel::attachPerceptionPreviewView,
             onDetachPerceptionPreviewView = viewModel::detachPerceptionPreviewView,
+            onDetectPermissionResolved = viewModel::onDetectPermissionResolved,
+            onDetectChooseManual = viewModel::onDetectChooseManual,
             modifier = modifier
         )
         Port.PARENT -> ParentScreen(
