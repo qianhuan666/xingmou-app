@@ -442,15 +442,19 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
             PackageManager.PERMISSION_GRANTED
 
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-            val available = if (isCamera) {
-                granted
-            } else {
-                granted && SpeechAnswerDetector(getApplication(), {}, {}).isAvailable()
-            }
+            // 未授权：停留在 AWAIT_PERMISSION，由 QuestionPermissionGate 引导申请（不自动兜底）。
+            // 语音题已授权但系统无识别服务：视同不可用，直接手动兜底。
+            val serviceUnavailable = isCamera.not() &&
+                !SpeechAnswerDetector(getApplication(), {}, {}).isAvailable()
             withContext(kotlinx.coroutines.Dispatchers.Main) {
                 if (detectController.session?.questionId != q.id) return@withContext
-                detectController.onPermissionReady(available)
-                if (available) startDetectionHardware(q) else pushDetectState(q, DetectPhase.MANUAL_FALLBACK)
+                if (!granted) return@withContext
+                detectController.onPermissionReady(!serviceUnavailable)
+                if (serviceUnavailable) {
+                    pushDetectState(q, DetectPhase.MANUAL_FALLBACK)
+                } else {
+                    startDetectionHardware(q)
+                }
             }
         }
     }
@@ -589,7 +593,10 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun onDetectChooseManual() {
+        // AWAIT_PERMISSION 由 chooseManual 处理；DETECTING/RETRYING 由 forceManual 处理。
+        // 硬件继续运行，孩子手动作/开口仍可自动作答，谁先到算谁。
         detectController.chooseManual()
+        detectController.forceManual()
         val q = currentDetectQuestion(_uiState.value) ?: return
         pushDetectState(q, DetectPhase.MANUAL_FALLBACK)
     }
