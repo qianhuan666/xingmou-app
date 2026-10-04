@@ -64,7 +64,8 @@ class PerceptionManager(
     private var lastFpsCheckTime = 0L
     private var fpsInWindow = 0
     // MediaPipe 原生库不可用时的精简模式
-    private var liteMode = false
+    @Volatile var liteMode: Boolean = false
+        private set
 
     fun start() {
         runCatching { initLandmarkers() }.onFailure {
