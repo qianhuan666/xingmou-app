@@ -20,10 +20,10 @@ class ChildSoundEffects {
     private var track: AudioTrack? = null
 
     /** 答对：880Hz → 1174Hz（A5 → D6），明快不吵。 */
-    fun correct() = play(chime(first = 880.0, second = 1174.7, noteSeconds = 0.14, gain = 0.50))
+    fun correct() = play(chime(first = 880.0, second = 1174.7, noteSeconds = 0.16, gain = 0.55))
 
     /** 答错：392Hz → 330Hz（G4 → E4），低柔短促。 */
-    fun wrong() = play(chime(first = 392.0, second = 329.6, noteSeconds = 0.16, gain = 0.32))
+    fun wrong() = play(chime(first = 392.0, second = 329.6, noteSeconds = 0.18, gain = 0.42))
 
     private fun chime(first: Double, second: Double, noteSeconds: Double, gain: Double): ShortArray {
         val sampleRate = 22_050
@@ -48,7 +48,9 @@ class ChildSoundEffects {
             val newTrack = AudioTrack.Builder()
                 .setAudioAttributes(
                     AudioAttributes.Builder()
-                        .setUsage(AudioAttributes.USAGE_ASSISTANCE_SONIFICATION)
+                        // 路由到媒体音流（STREAM_MUSIC）：音量受媒体音量控制，
+                        // 不能用 ASSISTANCE_SONIFICATION——那会走系统音流，模拟器上常被静音
+                        .setUsage(AudioAttributes.USAGE_MEDIA)
                         .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
                         .build()
                 )
