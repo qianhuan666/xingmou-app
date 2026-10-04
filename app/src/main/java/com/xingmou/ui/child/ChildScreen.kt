@@ -1,6 +1,9 @@
 package com.xingmou.ui.child
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -9,8 +12,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.rememberScrollState
@@ -35,6 +42,7 @@ import kotlinx.coroutines.delay
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
@@ -87,7 +95,8 @@ fun ChildScreen(
     onOpenApiKey: () -> Unit,
     onTogglePerception: (Boolean) -> Unit,
     onTogglePerceptionPreview: (Boolean) -> Unit,
-    onSetPerceptionPreviewView: (androidx.camera.view.PreviewView?) -> Unit,
+    onAttachPerceptionPreviewView: (androidx.camera.view.PreviewView) -> Unit,
+    onDetachPerceptionPreviewView: (androidx.camera.view.PreviewView) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -118,7 +127,12 @@ fun ChildScreen(
             if (text.isNotBlank()) speechController.speak(text)
         }
     }
-    Row(modifier = modifier.fillMaxSize()) {
+    // 沉浸空间判断：基线进行中 或 进入了课程关卡
+    val baselineImmersive = baseline.isOpen && baseline.status == BaselineStatus.IN_PROGRESS
+    val courseImmersive = selectedCourseLevel.value != null
+
+    Box(modifier = modifier.fillMaxSize()) {
+      Row(modifier = Modifier.fillMaxSize()) {
         NavigationRail(
             modifier = Modifier.fillMaxHeight(),
             containerColor = MaterialTheme.colorScheme.surface
@@ -187,7 +201,17 @@ fun ChildScreen(
             }
 
             if (selectedSection.value == ChildSection.TRAINING) {
-                BaselineCard(baseline, onStartBaseline, onResumeBaseline, onLeaveBaseline, onRestartBaseline, onBaselineAnswer)
+                // 沉浸空间打开时隐藏主页预览，把摄像头预览让给沉浸空间的小窗口（同一时刻只绑定一个）
+                if (!baselineImmersive && !courseImmersive) {
+                    PerceptionHomePreview(
+                        state = state,
+                        onAttachPreviewView = onAttachPerceptionPreviewView,
+                        onDetachPreviewView = onDetachPerceptionPreviewView
+                    )
+                }
+                if (!baselineImmersive) {
+                    BaselineCard(baseline, onStartBaseline, onResumeBaseline, onLeaveBaseline, onRestartBaseline, onBaselineAnswer)
+                }
                 if (selectedCourseLevel.value == null) {
                     CurriculumMapCard(
                         map = state.curriculumMap,
@@ -200,25 +224,8 @@ fun ChildScreen(
                         }
                     )
                 } else {
-                    TextButton(
-                        onClick = {
-                            selectedCourseLevel.value = null
-                            onLeaveCurriculumLevel()
-                        },
-                        modifier = Modifier.fillMaxWidth().semantics { contentDescription = "返回关卡地图" }
-                    ) { Text("← 返回关卡地图") }
-                    CurriculumPlayerCard(
-                        player = state.curriculumPlayer,
-                        isPaused = state.isPaused,
-                        isSafetyStopped = state.isSafetyStopped,
-                        onAnswer = onAnswerCurriculumActivity,
-                        onPause = onPause,
-                        onResume = onResume,
-                        onLeave = {
-                            selectedCourseLevel.value = null
-                            onLeaveCurriculumLevel()
-                        }
-                    )
+                    // 关卡播放由全屏沉浸空间承载，此处不重复渲染
+                    Text("小星正在准备这一关…", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             } else if (selectedSection.value == ChildSection.CHAT) {
                 ChatCard(
@@ -237,7 +244,8 @@ fun ChildScreen(
                     state = state,
                     onTogglePerception = onTogglePerception,
                     onTogglePreview = onTogglePerceptionPreview,
-                    onSetPreviewView = onSetPerceptionPreviewView
+                    onAttachPreviewView = onAttachPerceptionPreviewView,
+                    onDetachPreviewView = onDetachPerceptionPreviewView
                 )
                 AccessibilityCard(
                     accessibility = accessibility,
@@ -251,6 +259,210 @@ fun ChildScreen(
                 )
             }
         }
+      }
+
+      // ===== 儿童专属沉浸测试空间（全屏 Dialog，盖住顶栏和导航） =====
+      when {
+          baselineImmersive -> ImmersiveTestDialog(
+              exitLabel = "暂时离开",
+              onExit = onLeaveBaseline,
+              state = state,
+              onAttachPreviewView = onAttachPerceptionPreviewView,
+              onDetachPreviewView = onDetachPerceptionPreviewView
+          ) {
+              BaselineCard(baseline, onStartBaseline, onResumeBaseline, onLeaveBaseline, onRestartBaseline, onBaselineAnswer, immersive = true)
+          }
+          courseImmersive -> ImmersiveTestDialog(
+              exitLabel = "返回关卡地图",
+              onExit = {
+                  selectedCourseLevel.value = null
+                  onLeaveCurriculumLevel()
+              },
+              state = state,
+              onAttachPreviewView = onAttachPerceptionPreviewView,
+              onDetachPreviewView = onDetachPerceptionPreviewView
+          ) {
+              CurriculumPlayerCard(
+                  player = state.curriculumPlayer,
+                  isPaused = state.isPaused,
+                  isSafetyStopped = state.isSafetyStopped,
+                  onAnswer = onAnswerCurriculumActivity,
+                  onPause = onPause,
+                  onResume = onResume,
+                  onLeave = {
+                      selectedCourseLevel.value = null
+                      onLeaveCurriculumLevel()
+                  }
+              )
+          }
+      }
+    }
+}
+
+/**
+ * 全屏 Dialog 承载沉浸空间：无变暗、透明窗口、延伸到状态栏下，返回键等同于退出。
+ */
+@Composable
+private fun ImmersiveTestDialog(
+    exitLabel: String,
+    onExit: () -> Unit,
+    state: ChildUiState,
+    onAttachPreviewView: (androidx.camera.view.PreviewView) -> Unit,
+    onDetachPreviewView: (androidx.camera.view.PreviewView) -> Unit,
+    content: @Composable () -> Unit
+) {
+    androidx.compose.ui.window.Dialog(
+        onDismissRequest = onExit,
+        properties = androidx.compose.ui.window.DialogProperties(
+            usePlatformDefaultWidth = false,
+            decorFitsSystemWindows = false
+        )
+    ) {
+        val view = androidx.compose.ui.platform.LocalView.current
+        androidx.compose.runtime.DisposableEffect(Unit) {
+            val window = (view.parent as? androidx.compose.ui.window.DialogWindowProvider)?.window
+            window?.let {
+                it.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT))
+                it.clearFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND)
+                it.setDimAmount(0f)
+                it.setLayout(
+                    android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                    android.view.ViewGroup.LayoutParams.MATCH_PARENT
+                )
+            }
+            onDispose { }
+        }
+        ImmersiveTestSpace(
+            exitLabel = exitLabel,
+            onExit = onExit,
+            state = state,
+            onAttachPreviewView = onAttachPreviewView,
+            onDetachPreviewView = onDetachPreviewView,
+            content = content
+        )
+    }
+}
+
+/**
+ * 儿童测试沉浸空间：柔和天空渐变 + 太阳云朵，题目卡片浮在中间。
+ */
+@Composable
+private fun ImmersiveTestSpace(
+    exitLabel: String,
+    onExit: () -> Unit,
+    state: ChildUiState,
+    onAttachPreviewView: (androidx.camera.view.PreviewView) -> Unit,
+    onDetachPreviewView: (androidx.camera.view.PreviewView) -> Unit,
+    content: @Composable () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(
+                androidx.compose.ui.graphics.Brush.verticalGradient(
+                    listOf(
+                        androidx.compose.ui.graphics.Color(0xFF9ED8FF),
+                        androidx.compose.ui.graphics.Color(0xFFCDEFF0),
+                        androidx.compose.ui.graphics.Color(0xFFFFF2C4)
+                    )
+                )
+            )
+    ) {
+        SkyDecorations()
+        // 左上角固定的小窗口预览，与主页圆形预览同款；感知关闭或预览关闭时不显示
+        PerceptionHomePreview(
+            state = state,
+            onAttachPreviewView = onAttachPreviewView,
+            onDetachPreviewView = onDetachPreviewView,
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .windowInsetsPadding(WindowInsets.safeDrawing)
+                .padding(start = 16.dp, top = 4.dp),
+            size = 140.dp
+        )
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .windowInsetsPadding(WindowInsets.safeDrawing)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 48.dp, vertical = 20.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                OutlinedButton(
+                    onClick = onExit,
+                    shape = RoundedCornerShape(28.dp),
+                    modifier = Modifier.heightIn(min = 52.dp).semantics { contentDescription = exitLabel }
+                ) { Text("← $exitLabel", style = MaterialTheme.typography.titleMedium) }
+            }
+            val glassShape = RoundedCornerShape(36.dp)
+            Box(modifier = Modifier.fillMaxWidth(0.86f)) {
+                // 假投影：卡片下方三层偏移填充块（被卡片本体遮挡，仅下缘可见），兼容所有渲染器
+                Box(
+                    Modifier
+                        .matchParentSize()
+                        .offset(y = 10.dp)
+                        .background(androidx.compose.ui.graphics.Color(0x1233506B), glassShape)
+                )
+                Box(
+                    Modifier
+                        .matchParentSize()
+                        .offset(y = 20.dp)
+                        .background(androidx.compose.ui.graphics.Color(0x0D33506B), glassShape)
+                )
+                Box(
+                    Modifier
+                        .matchParentSize()
+                        .offset(y = 30.dp)
+                        .background(androidx.compose.ui.graphics.Color(0x0833506B), glassShape)
+                )
+                // 玻璃卡片本体
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(glassShape)
+                        .background(
+                            androidx.compose.ui.graphics.Brush.verticalGradient(
+                                listOf(
+                                    androidx.compose.ui.graphics.Color.White.copy(alpha = 0.80f),
+                                    androidx.compose.ui.graphics.Color.White.copy(alpha = 0.60f)
+                                )
+                            )
+                        )
+                        .border(
+                            1.dp,
+                            androidx.compose.ui.graphics.Color.White.copy(alpha = 0.85f),
+                            glassShape
+                        )
+                        .padding(26.dp)
+                ) {
+                    content()
+                }
+            }
+        }
+    }
+}
+
+/** 太阳和白云装饰，纯 Canvas 绘制，安静不抢眼。 */
+@Composable
+private fun SkyDecorations() {
+    androidx.compose.foundation.Canvas(modifier = Modifier.fillMaxSize()) {
+        val w = size.width
+        // 太阳光晕 + 太阳（右上）
+        drawCircle(androidx.compose.ui.graphics.Color(0xFFFFF3C4), radius = 150f, center = androidx.compose.ui.geometry.Offset(w - 170f, 170f))
+        drawCircle(androidx.compose.ui.graphics.Color(0xFFFFE082), radius = 85f, center = androidx.compose.ui.geometry.Offset(w - 170f, 170f))
+        // 云朵（白色半透明，圆叠加成云形）
+        val cloudColor = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.75f)
+        fun cloud(cx: Float, cy: Float, s: Float) {
+            drawCircle(cloudColor, radius = 46f * s, center = androidx.compose.ui.geometry.Offset(cx - 42f * s, cy + 10f * s))
+            drawCircle(cloudColor, radius = 62f * s, center = androidx.compose.ui.geometry.Offset(cx, cy - 12f * s))
+            drawCircle(cloudColor, radius = 44f * s, center = androidx.compose.ui.geometry.Offset(cx + 46f * s, cy + 12f * s))
+            drawCircle(cloudColor, radius = 52f * s, center = androidx.compose.ui.geometry.Offset(cx + 8f * s, cy + 18f * s))
+        }
+        cloud(w * 0.16f, 220f, 1.1f)
+        cloud(w * 0.52f, 130f, 0.8f)
+        cloud(w * 0.8f, 420f, 0.9f)
     }
 }
 
@@ -300,7 +512,8 @@ private fun CurriculumPlayerCard(
             else -> player.levelTitle
         },
         supporting = player.message,
-        containerColor = if (isSafetyStopped) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface
+        containerColor = if (isSafetyStopped) MaterialTheme.colorScheme.primaryContainer else androidx.compose.ui.graphics.Color.Transparent,
+        immersive = true
     ) {
         if (isSafetyStopped) {
             Text("训练已经停止。请不要继续操作。", color = Error, style = MaterialTheme.typography.titleMedium)
@@ -320,7 +533,7 @@ private fun CurriculumPlayerCard(
             Text("第 ${player.levelOrder} 关 · 活动 ${player.activityIndex + 1} / ${player.activityTotal} · ${player.activityLabel}", style = MaterialTheme.typography.labelLarge)
             if (isPreviewing.value) {
                 Text("请认真看一看，${((previewRemainingMs.value + 999L) / 1000L).coerceAtLeast(1L)} 秒后开始选择。")
-                StimulusCard(question.stimulus, "记忆示例")
+                StimulusCard(question.stimulus, "记忆示例", immersive = true)
                 LinearProgressIndicator(
                     progress = {
                         1f - (previewRemainingMs.value.toFloat() / question.previewMs.coerceAtLeast(1L).toFloat()).coerceIn(0f, 1f)
@@ -328,7 +541,7 @@ private fun CurriculumPlayerCard(
                     modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp)
                 )
             } else {
-                if (isMemoryQuestion != true && question.stimulus.isNotBlank()) StimulusCard(question.stimulus, "题目示例")
+                if (isMemoryQuestion != true && question.stimulus.isNotBlank()) StimulusCard(question.stimulus, "题目示例", immersive = true)
                 Text(question.prompt, style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(vertical = 8.dp))
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
                     question.options.withIndex().toList().chunked(2).forEach { rowOptions ->
@@ -347,14 +560,13 @@ private fun CurriculumPlayerCard(
                 modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp).semantics { contentDescription = "让儿童休息" },
                 enabled = !player.isWorking
             ) { Text("先休息") }
-            TextButton(onClick = onLeave, modifier = Modifier.fillMaxWidth().semantics { contentDescription = "暂时离开这一关" }) { Text("暂时离开这一关") }
         }
     }
 }
 
 @Composable
-private fun StimulusCard(stimulus: String, label: String) {
-    SectionSurface(title = label, containerColor = MaterialTheme.colorScheme.secondaryContainer) {
+private fun StimulusCard(stimulus: String, label: String, immersive: Boolean = false) {
+    SectionSurface(title = label, containerColor = MaterialTheme.colorScheme.secondaryContainer, immersive = immersive) {
         Text(
             stimulus,
             modifier = Modifier.fillMaxWidth().padding(vertical = 18.dp),
@@ -573,7 +785,8 @@ private fun BaselineCard(
     onResume: () -> Unit,
     onLeave: () -> Unit,
     onRestart: () -> Unit,
-    onAnswer: (Int) -> Unit
+    onAnswer: (Int) -> Unit,
+    immersive: Boolean = false
 ) {
     val question = state.question
     val isMemoryQuestion = question?.type == QuestionType.MEMORY
@@ -604,7 +817,8 @@ private fun BaselineCard(
     SectionSurface(
         title = "六题起点小测",
         supporting = state.message,
-        containerColor = MaterialTheme.colorScheme.tertiaryContainer
+        containerColor = if (immersive) androidx.compose.ui.graphics.Color.Transparent else MaterialTheme.colorScheme.tertiaryContainer,
+        immersive = immersive
     ) {
         when (state.status) {
             BaselineStatus.NOT_STARTED, BaselineStatus.NEEDS_RETEST -> {
@@ -621,7 +835,7 @@ private fun BaselineCard(
                     Text("${state.currentIndex + 1} / ${state.totalCount}", style = MaterialTheme.typography.labelLarge)
                     if (isPreviewing.value) {
                         Text("请记住下面的示例，${((previewRemainingMs.value + 999L) / 1000L).coerceAtLeast(1L)} 秒后开始选择。")
-                        StimulusCard(question.stimulus, "记忆示例")
+                        StimulusCard(question.stimulus, "记忆示例", immersive)
                         LinearProgressIndicator(
                             progress = {
                                 1f - (previewRemainingMs.value.toFloat() / question.previewMs.coerceAtLeast(1L).toFloat()).coerceIn(0f, 1f)
@@ -630,7 +844,7 @@ private fun BaselineCard(
                         )
                     } else {
                         Text(question.prompt, style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(vertical = 8.dp))
-                        if (!isMemoryQuestion && question.stimulus.isNotBlank()) StimulusCard(question.stimulus, "题目示例")
+                        if (!isMemoryQuestion && question.stimulus.isNotBlank()) StimulusCard(question.stimulus, "题目示例", immersive)
                         question.options.forEachIndexed { index, option ->
                             OutlinedButton(
                                 onClick = { onAnswer(index) },
@@ -639,7 +853,9 @@ private fun BaselineCard(
                             ) { Text(option, style = enlargedVisualStyle(MaterialTheme.typography.titleMedium, option)) }
                             Spacer(Modifier.height(8.dp))
                         }
-                        TextButton(onClick = onLeave, modifier = Modifier.fillMaxWidth().semantics { contentDescription = "暂时离开六题起点小测" }) { Text("暂时离开基线") }
+                        if (!immersive) {
+                            TextButton(onClick = onLeave, modifier = Modifier.fillMaxWidth().semantics { contentDescription = "暂时离开六题起点小测" }) { Text("暂时离开基线") }
+                        }
                     }
                 }
             }
@@ -698,6 +914,13 @@ private fun ChatCard(
         if (messages.isNotEmpty()) scrollState.animateScrollTo(scrollState.maxValue)
     }
 
+    // 儿童端仅支持 DeepSeek：若历史选择是豆包/千问，自动切回
+    LaunchedEffect(state.chatProvider) {
+        if (state.chatProvider != com.xingmou.core.llm.ChatLlmProvider.DEEPSEEK) {
+            onSelectProvider(com.xingmou.core.llm.ChatLlmProvider.DEEPSEEK)
+        }
+    }
+
     androidx.compose.foundation.layout.Box(modifier = Modifier.fillMaxWidth().heightIn(min = 320.dp)) {
         Column(
             modifier = Modifier.fillMaxWidth(),
@@ -710,7 +933,10 @@ private fun ChatCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text("模型：", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                com.xingmou.core.llm.ChatLlmProvider.entries.forEach { provider ->
+                // 儿童端交互仅保留 DeepSeek，豆包/千问不在此暴露
+                com.xingmou.core.llm.ChatLlmProvider.entries
+                    .filter { it == com.xingmou.core.llm.ChatLlmProvider.DEEPSEEK }
+                    .forEach { provider ->
                     androidx.compose.material3.FilterChip(
                         selected = state.chatProvider == provider,
                         onClick = { onSelectProvider(provider) },

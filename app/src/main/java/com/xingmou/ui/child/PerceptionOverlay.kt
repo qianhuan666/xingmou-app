@@ -5,13 +5,18 @@ import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.view.PreviewView
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -23,6 +28,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -37,7 +43,8 @@ fun PerceptionOverlay(
     state: ChildUiState,
     onTogglePerception: (Boolean) -> Unit,
     onTogglePreview: (Boolean) -> Unit,
-    onSetPreviewView: (PreviewView?) -> Unit,
+    onAttachPreviewView: (PreviewView) -> Unit,
+    onDetachPreviewView: (PreviewView) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -83,11 +90,15 @@ fun PerceptionOverlay(
                     )
                 }
                 if (state.perceptionPreview) {
+                    val previewRef = remember { arrayOfNulls<PreviewView>(1) }
                     AndroidView(
                         factory = { ctx ->
                             PreviewView(ctx).apply {
                                 scaleType = PreviewView.ScaleType.FIT_CENTER
-                            }.also { onSetPreviewView(it) }
+                            }.also {
+                                previewRef[0] = it
+                                onAttachPreviewView(it)
+                            }
                         },
                         modifier = Modifier
                             .fillMaxWidth()
@@ -96,7 +107,7 @@ fun PerceptionOverlay(
                             .clip(RoundedCornerShape(12.dp))
                     )
                     DisposableEffect(Unit) {
-                        onDispose { onSetPreviewView(null) }
+                        onDispose { previewRef[0]?.let(onDetachPreviewView) }
                     }
                 }
                 Row(
@@ -126,6 +137,40 @@ fun PerceptionOverlay(
                 }
             }
         }
+    }
+}
+
+/**
+ * 主页（训练页）顶部的实时监测小窗口。
+ * 仅在感知开启且预览开启时显示；与设置页共用同一 PreviewView 绑定（两处不会同时存在）。
+ */
+@Composable
+fun PerceptionHomePreview(
+    state: ChildUiState,
+    onAttachPreviewView: (PreviewView) -> Unit,
+    onDetachPreviewView: (PreviewView) -> Unit,
+    modifier: Modifier = Modifier,
+    size: androidx.compose.ui.unit.Dp = 180.dp
+) {
+    if (!state.perceptionEnabled || !state.perceptionPreview) return
+
+    // 纯圆形窗口，无卡片背景、无文字
+    val previewRef = remember { arrayOfNulls<PreviewView>(1) }
+    AndroidView(
+        factory = { ctx ->
+            PreviewView(ctx).apply {
+                scaleType = PreviewView.ScaleType.FILL_CENTER
+            }.also {
+                previewRef[0] = it
+                onAttachPreviewView(it)
+            }
+        },
+        modifier = modifier
+            .size(size)
+            .clip(CircleShape)
+    )
+    DisposableEffect(Unit) {
+        onDispose { previewRef[0]?.let(onDetachPreviewView) }
     }
 }
 

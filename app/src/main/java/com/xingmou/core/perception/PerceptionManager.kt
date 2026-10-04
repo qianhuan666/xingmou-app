@@ -38,8 +38,26 @@ class PerceptionManager(
     private var poseLandmarker: PoseLandmarker? = null
     private var handLandmarker: HandLandmarker? = null
     private var cameraProvider: ProcessCameraProvider? = null
-    var previewView: PreviewView? = null
-        set(value) { field = value; bindCamera() }
+    private var previewView: PreviewView? = null
+    private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
+
+    /** 绑定预览视图；新旧页面切换时新视图先 attach，旧视图的 detach 会被身份校验拦截 */
+    fun attachPreviewView(pv: PreviewView) {
+        mainHandler.removeCallbacksAndMessages(null)
+        if (previewView === pv) return
+        previewView = pv
+        bindCamera()
+    }
+
+    /** 延迟解绑，给新页面的 attach 留出时间；期间若已 attach 新视图则跳过 */
+    fun detachPreviewView(pv: PreviewView) {
+        mainHandler.postDelayed({
+            if (previewView === pv) {
+                previewView = null
+                bindCamera()
+            }
+        }, 150)
+    }
 
     // 降级控制
     private var degradedMode = false
@@ -61,6 +79,8 @@ class PerceptionManager(
     }
 
     fun stop() {
+        mainHandler.removeCallbacksAndMessages(null)
+        previewView = null
         cameraProvider?.unbindAll()
         cameraProvider = null
         faceLandmarker?.close()
@@ -108,7 +128,15 @@ class PerceptionManager(
             provider.unbindAll()
             val useCases = mutableListOf<androidx.camera.core.UseCase>(analysis)
             previewView?.let { pv ->
-                val preview = Preview.Builder().build().also { it.setSurfaceProvider(pv.surfaceProvider) }
+                val preview = Preview.Builder()
+                    .setResolutionSelector(
+                        androidx.camera.core.resolutionselector.ResolutionSelector.Builder()
+                            .setAspectRatioStrategy(
+                                androidx.camera.core.resolutionselector.AspectRatioStrategy.RATIO_4_3_FALLBACK_AUTO_STRATEGY
+                            )
+                            .build()
+                    )
+                    .build().also { it.setSurfaceProvider(pv.surfaceProvider) }
                 useCases.add(0, preview)
             }
             // 优先前置摄像头，没有则退回后置
