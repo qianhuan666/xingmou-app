@@ -20,6 +20,7 @@ data class XingmouUiState(
     val loginIdentifier: String = "",
     val loginPassword: String = "",
     val loginMessage: String = "请选择登录身份。",
+    val showAdultLogin: Boolean = false,
     val selectedPort: Port = Port.CHILD,
     val activeChildId: String = "child-seed",
     val activeChildAlias: String = "小星",
@@ -70,6 +71,41 @@ data class AccessibilityUiState(
 fun normalizeSpeechRate(rate: Float): Float = rate.coerceIn(0.75f, 1.25f)
 
 fun normalizeSpeechVolume(volume: Float): Float = volume.coerceIn(0.5f, 1.0f)
+
+/** 把 Agent 运行状态机映射为面向家长/专业人员的友好进度文案。 */
+fun agentStateLabel(state: AgentRunState): String = when (state) {
+    AgentRunState.CREATED -> "准备中"
+    AgentRunState.ROUTING -> "正在识别风险与权限…"
+    AgentRunState.PLANNING -> "正在规划分析步骤…"
+    AgentRunState.EXECUTING_TOOL -> "正在检索已审核资料…"
+    AgentRunState.VALIDATING -> "正在校验结论与来源…"
+    AgentRunState.WAITING_APPROVAL -> "等待专业审核…"
+    AgentRunState.PAUSED -> "已暂停"
+    AgentRunState.SAFETY_STOP -> "已安全停止"
+    AgentRunState.COMPLETED -> "分析完成"
+    AgentRunState.FAILED -> "分析未完成，已转本地兜底"
+    AgentRunState.CANCELLED -> "已取消"
+}
+
+/** 把家长端知识检索路由映射为友好说明，用于「回答依据」可解释性面板。 */
+fun parentRouteLabel(route: KnowledgeRoute?): String = when (route) {
+    KnowledgeRoute.NORMAL -> "已审核资料直接匹配"
+    KnowledgeRoute.CLARIFY -> "信息不足，等待补充细节"
+    KnowledgeRoute.NOT_FOUND -> "未匹配到已审核条目"
+    KnowledgeRoute.REFER -> "涉及诊疗，建议专业人员评估"
+    KnowledgeRoute.SAFETY_STOP -> "安全筛查已停止"
+    null -> "尚未检索"
+}
+
+/** 把家长端风险等级映射为友好文案。 */
+fun parentRiskLabel(raw: String): String = when (raw) {
+    "NONE" -> "未发现风险"
+    "PAUSE" -> "需关注"
+    "SAFETY_STOP" -> "已安全停止"
+    "需要补充" -> "信息不足"
+    "未评估" -> "尚未评估"
+    else -> raw
+}
 
 /** 交互模式聊天消息。 */
 data class ChatMessageUi(

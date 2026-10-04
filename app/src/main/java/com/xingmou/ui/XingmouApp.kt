@@ -47,6 +47,45 @@ import com.xingmou.ui.child.ChildScreen
 import com.xingmou.ui.parent.ParentScreen
 import com.xingmou.ui.professional.ProfessionalScreen
 import com.xingmou.ui.theme.XingmouTheme
+import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import com.xingmou.ui.components.XiaoXingMark
+import com.xingmou.ui.components.domainBarColor
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.foundation.layout.offset
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.platform.LocalContext
+import com.xingmou.ui.child.ChildSpeechController
 
 @Composable
 fun XingmouApp(viewModel: XingmouViewModel) {
@@ -65,54 +104,184 @@ fun XingmouApp(viewModel: XingmouViewModel) {
     val fontScale = if (state.accessibility.largeText) 1.15f else 1.0f
     CompositionLocalProvider(LocalDensity provides androidx.compose.ui.unit.Density(density.density, fontScale)) {
         XingmouTheme(highContrast = state.accessibility.highContrast) {
-            if (!state.isLoggedIn) {
-                IdentityLoginScreen(
-                    state = state,
-                    onSelectRole = viewModel::selectLoginRole,
-                    onIdentifierChange = viewModel::updateLoginIdentifier,
-                    onPasswordChange = viewModel::updateLoginPassword,
-                    onLogin = { state.loginRole?.let(viewModel::loginAs) }
-                )
-                return@XingmouTheme
-            }
-            Scaffold(
-                containerColor = MaterialTheme.colorScheme.background,
-                topBar = {
-                    ChildContextBar(
-                        state = state,
-                        onSelectChild = viewModel::selectChild,
-                        onCreateChild = viewModel::createLocalChild,
-                        onUpdateChild = viewModel::updateActiveChild,
-                        onArchiveChild = viewModel::archiveActiveChild,
-                        onRemoteAiConsentChange = viewModel::setRemoteAiConsent,
-                        onExportConsentChange = viewModel::setExportConsent,
-                        onExportAuthorizedData = {
-                            exportLauncher.launch("xingmou-${state.activeChildId}-${System.currentTimeMillis()}.json")
-                        },
-                        onExportAuthorizedCsv = {
-                            csvExportLauncher.launch("xingmou-${state.activeChildId}-${System.currentTimeMillis()}.csv")
-                        },
-                        onImportAuthorizedData = { importLauncher.launch(arrayOf("application/json", "text/*")) },
-                        onConfirmImport = viewModel::confirmAuthorizedImport,
-                        onCancelImport = viewModel::cancelAuthorizedImport,
-                        onDeleteChild = viewModel::deleteActiveChild,
-                        onSaveApiKey = viewModel::saveChatApiKey,
-                        onClearApiKey = viewModel::clearChatApiKey,
-                        onSaveModelEndpoint = viewModel::saveModelEndpoint,
-                        apiKeyOpen = apiKeyOpen
-                        ,onSaveLocalOrganization = viewModel::saveLocalOrganization,
-                        onCreateLocalRoleUser = viewModel::createLocalRoleUser,
-                        onUpdateLocalRoleUser = viewModel::updateLocalRoleUser
-                        ,onLogout = viewModel::logout
-                    )
+            AnimatedContent(
+                targetState = state.isLoggedIn,
+                transitionSpec = {
+                    if (targetState) {
+                        // 进入：头像已放大铺满全屏，这里只淡入，主界面平滑浮现
+                        fadeIn(tween(500)).togetherWith(fadeOut(tween(400)))
+                    } else {
+                        (fadeIn(tween(300)) + scaleIn(initialScale = 0.95f, animationSpec = tween(300)))
+                            .togetherWith(fadeOut(tween(300)) + scaleOut(targetScale = 1.05f, animationSpec = tween(300)))
+                    }
                 },
-                bottomBar = { AppStatusBand(aiConfigured = state.aiConfigured, remoteAiConsent = state.remoteAiConsent) }
-            ) { padding ->
-                PortContent(
-                    viewModel = viewModel,
-                    port = state.selectedPort,
-                    onOpenApiKey = { apiKeyOpen.value = true },
-                    modifier = Modifier.fillMaxSize().padding(padding)
+                label = "loginTransition"
+            ) { loggedIn ->
+                if (loggedIn) {
+                    Scaffold(
+                        containerColor = MaterialTheme.colorScheme.background,
+                        topBar = {
+                            ChildContextBar(
+                                state = state,
+                                onSelectChild = viewModel::selectChild,
+                                onCreateChild = viewModel::createLocalChild,
+                                onUpdateChild = viewModel::updateActiveChild,
+                                onArchiveChild = viewModel::archiveActiveChild,
+                                onRemoteAiConsentChange = viewModel::setRemoteAiConsent,
+                                onExportConsentChange = viewModel::setExportConsent,
+                                onExportAuthorizedData = {
+                                    exportLauncher.launch("xingmou-${state.activeChildId}-${System.currentTimeMillis()}.json")
+                                },
+                                onExportAuthorizedCsv = {
+                                    csvExportLauncher.launch("xingmou-${state.activeChildId}-${System.currentTimeMillis()}.csv")
+                                },
+                                onImportAuthorizedData = { importLauncher.launch(arrayOf("application/json", "text/*")) },
+                                onConfirmImport = viewModel::confirmAuthorizedImport,
+                                onCancelImport = viewModel::cancelAuthorizedImport,
+                                onDeleteChild = viewModel::deleteActiveChild,
+                                onSaveApiKey = viewModel::saveChatApiKey,
+                                onClearApiKey = viewModel::clearChatApiKey,
+                                onSaveModelEndpoint = viewModel::saveModelEndpoint,
+                                apiKeyOpen = apiKeyOpen
+                                ,onSaveLocalOrganization = viewModel::saveLocalOrganization,
+                                onCreateLocalRoleUser = viewModel::createLocalRoleUser,
+                                onUpdateLocalRoleUser = viewModel::updateLocalRoleUser
+                                ,onLogout = viewModel::logout
+                            )
+                        },
+                        bottomBar = { AppStatusBand(aiConfigured = state.aiConfigured, remoteAiConsent = state.remoteAiConsent) }
+                    ) { padding ->
+                        PortContent(
+                            viewModel = viewModel,
+                            port = state.selectedPort,
+                            onOpenApiKey = { apiKeyOpen.value = true },
+                            modifier = Modifier.fillMaxSize().padding(padding)
+                        )
+                    }
+                } else {
+                    if (state.showAdultLogin) {
+                        AdultLoginPanel(
+                            state = state,
+                            onBack = viewModel::closeAdultLogin,
+                            onSelectRole = viewModel::selectLoginRole,
+                            onIdentifierChange = viewModel::updateLoginIdentifier,
+                            onPasswordChange = viewModel::updateLoginPassword,
+                            onLogin = { state.loginRole?.let(viewModel::loginAs) }
+                        )
+                    } else {
+                        ChildEntryScreen(
+                            state = state,
+                            onEnterChild = viewModel::quickEnterChild,
+                            onOpenAdult = viewModel::openAdultLogin
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+private data class ExpandingAvatar(
+    val childId: String,
+    val color: Color,
+    val centerX: Float,
+    val centerY: Float,
+    val sizePx: Float
+)
+
+@Composable
+private fun ChildEntryScreen(
+    state: com.xingmou.XingmouUiState,
+    onEnterChild: (String) -> Unit,
+    onOpenAdult: () -> Unit
+) {
+    val context = LocalContext.current
+    val speechController = remember(context) { ChildSpeechController(context) }
+    DisposableEffect(speechController) {
+        onDispose { speechController.shutdown() }
+    }
+    LaunchedEffect(state.accessibility.speechRate, state.accessibility.speechVolume) {
+        speechController.setSpeechRate(state.accessibility.speechRate)
+        speechController.setSpeechVolume(state.accessibility.speechVolume)
+    }
+    LaunchedEffect(state.accessibility.speechEnabled) {
+        if (state.accessibility.speechEnabled) speechController.speak("今天谁来玩呀？点一下你的头像就可以开始。")
+        else speechController.stop()
+    }
+    val infiniteTransition = rememberInfiniteTransition()
+    val logoScale by infiniteTransition.animateFloat(
+        initialValue = 1f,
+        targetValue = 1.06f,
+        animationSpec = infiniteRepeatable(tween(1200), RepeatMode.Reverse)
+    )
+    val screenSize = remember { androidx.compose.runtime.mutableStateOf(IntSize.Zero) }
+    val expandingAvatar = remember { androidx.compose.runtime.mutableStateOf<ExpandingAvatar?>(null) }
+    val avatarScale = remember { Animatable(1f) }
+    val density = LocalDensity.current
+    LaunchedEffect(expandingAvatar.value) {
+        val target = expandingAvatar.value ?: return@LaunchedEffect
+        val w = screenSize.value.width
+        val h = screenSize.value.height
+        val coverScale = if (w > 0 && h > 0) (kotlin.math.sqrt((w * w + h * h).toFloat()) * 1.15f) / target.sizePx else 16f
+        avatarScale.snapTo(1f)
+        avatarScale.animateTo(coverScale, animationSpec = tween(520, easing = FastOutSlowInEasing))
+        onEnterChild(target.childId)
+    }
+    Box(
+        modifier = Modifier.fillMaxSize()
+            .onSizeChanged { screenSize.value = it }
+            .background(
+                Brush.verticalGradient(listOf(Color(0xFFB3E5FC), Color(0xFFFFF3E0)))
+            )
+    ) {
+        Column(
+            modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp, vertical = 32.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            XiaoXingMark(modifier = Modifier.size(96.dp).scale(logoScale))
+            Text("星眸", style = MaterialTheme.typography.headlineMedium, modifier = Modifier.padding(top = 8.dp))
+            Text("今天谁来玩呀？", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp, bottom = 28.dp))
+            if (state.availableChildren.isEmpty()) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text("还没有小朋友档案", style = MaterialTheme.typography.titleMedium)
+                    Text("请家长或老师先创建一份档案", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Button(onClick = onOpenAdult) { Text("家长/老师先创建") }
+                }
+            } else {
+                Row(
+                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(14.dp, Alignment.CenterHorizontally)
+                ) {
+                    state.availableChildren.forEach { child ->
+                        ChildAvatarCard(child = child, onAvatarTap = { expandingAvatar.value = it })
+                    }
+                    AddChildCard(onClick = onOpenAdult)
+                }
+            }
+        }
+        Text(
+            text = "⚙ 家长 / 老师 · 长按进入",
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(12.dp)
+                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.7f), RoundedCornerShape(10.dp))
+                .pointerInput(Unit) { detectTapGestures(onLongPress = { onOpenAdult() }) }
+                .padding(horizontal = 12.dp, vertical = 8.dp)
+        )
+        val expanding = expandingAvatar.value
+        if (expanding != null) {
+            val baseDp = (expanding.sizePx / density.density).dp
+            Box(modifier = Modifier.fillMaxSize()) {
+                Box(
+                    modifier = Modifier
+                        .offset { IntOffset((expanding.centerX - expanding.sizePx / 2f).toInt(), (expanding.centerY - expanding.sizePx / 2f).toInt()) }
+                        .size(baseDp)
+                        .scale(avatarScale.value)
+                        .clip(CircleShape)
+                        .background(expanding.color)
                 )
             }
         }
@@ -120,17 +289,72 @@ fun XingmouApp(viewModel: XingmouViewModel) {
 }
 
 @Composable
-private fun IdentityLoginScreen(
+private fun ChildAvatarCard(child: com.xingmou.ChildSummaryUi, onAvatarTap: (ExpandingAvatar) -> Unit) {
+    val colorKeys = listOf("coral", "sky", "amber", "violet", "mint", "blue")
+    val avatarColor = domainBarColor(colorKeys[Math.floorMod(child.childId.hashCode(), colorKeys.size)])
+    val archived = child.status == "archived"
+    val avatarRect = remember { androidx.compose.runtime.mutableStateOf(Rect.Zero) }
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+        modifier = Modifier.width(96.dp)
+    ) {
+        Surface(
+            onClick = { onAvatarTap(ExpandingAvatar(child.childId, avatarColor, avatarRect.value.center.x, avatarRect.value.center.y, avatarRect.value.width)) },
+            modifier = Modifier.size(88.dp).onGloballyPositioned {
+                val topLeft = it.localToRoot(Offset.Zero)
+                avatarRect.value = Rect(topLeft.x, topLeft.y, topLeft.x + it.size.width, topLeft.y + it.size.height)
+            },
+            shape = CircleShape,
+            color = if (archived) MaterialTheme.colorScheme.surfaceVariant else avatarColor,
+            border = BorderStroke(2.dp, if (archived) MaterialTheme.colorScheme.outline else Color.White)
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Text(
+                    child.alias.take(1),
+                    style = MaterialTheme.typography.headlineLarge,
+                    color = if (archived) MaterialTheme.colorScheme.onSurfaceVariant else Color.White
+                )
+            }
+        }
+        Text(child.alias, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(child.ageBand, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable
+private fun AddChildCard(onClick: () -> Unit) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+        modifier = Modifier.width(96.dp)
+    ) {
+        OutlinedButton(
+            onClick = onClick,
+            modifier = Modifier.size(88.dp),
+            shape = CircleShape,
+            contentPadding = PaddingValues(0.dp)
+        ) {
+            Text("＋", style = MaterialTheme.typography.headlineLarge)
+        }
+        Text("新朋友", style = MaterialTheme.typography.titleMedium)
+        Text("新建档案", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable
+private fun AdultLoginPanel(
     state: com.xingmou.XingmouUiState,
+    onBack: () -> Unit,
     onSelectRole: (Port) -> Unit,
     onIdentifierChange: (String) -> Unit,
     onPasswordChange: (String) -> Unit,
     onLogin: () -> Unit
 ) {
     val roles = listOf(
-        Triple(Port.CHILD, "★", "儿童"),
         Triple(Port.PARENT, "♥", "家长"),
-        Triple(Port.PROFESSIONAL, "+", "康复专业人员")
+        Triple(Port.PROFESSIONAL, "+", "康复专业人员"),
+        Triple(Port.CHILD, "★", "儿童体验")
     )
     Surface(color = MaterialTheme.colorScheme.background, modifier = Modifier.fillMaxSize()) {
         Column(
@@ -138,16 +362,19 @@ private fun IdentityLoginScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
+            TextButton(onClick = onBack, modifier = Modifier.align(Alignment.Start)) {
+                Text("← 返回孩子入口")
+            }
             Surface(
-                modifier = Modifier.size(76.dp),
-                shape = RoundedCornerShape(24.dp),
+                modifier = Modifier.size(64.dp),
+                shape = RoundedCornerShape(20.dp),
                 color = MaterialTheme.colorScheme.primaryContainer
             ) {
                 BoxWithConstraints(contentAlignment = Alignment.Center) {
                     Text("星", style = MaterialTheme.typography.headlineLarge, color = MaterialTheme.colorScheme.primary)
                 }
             }
-            Text("星眸", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(top = 10.dp))
+            Text("星眸 · 家长与老师", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(top = 10.dp))
             Card(
                 modifier = Modifier.fillMaxWidth().padding(top = 22.dp),
                 shape = RoundedCornerShape(16.dp),
@@ -205,6 +432,24 @@ private fun IdentityLoginScreen(
 }
 
 @Composable
+private fun PerceptionIndicator() {
+    val infinite = rememberInfiniteTransition()
+    val alpha by infinite.animateFloat(
+        initialValue = 1f,
+        targetValue = 0.25f,
+        animationSpec = infiniteRepeatable(tween(900), RepeatMode.Reverse)
+    )
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        modifier = Modifier.padding(end = 8.dp)
+    ) {
+        Box(Modifier.size(10.dp).clip(CircleShape).background(Color(0xFF2E7D32).copy(alpha = alpha)))
+        Text("守护中", style = MaterialTheme.typography.labelSmall, color = Color(0xFF2E7D32))
+    }
+}
+
+@Composable
 private fun ChildContextBar(
     state: com.xingmou.XingmouUiState,
     onSelectChild: (String) -> Unit,
@@ -229,6 +474,7 @@ private fun ChildContextBar(
     ,onLogout: () -> Unit
 ) {
     val expandedState = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+    val moreExpanded = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
     val dialogMode = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<String?>(null) }
     val aliasState = androidx.compose.runtime.remember(state.activeChildAlias) { androidx.compose.runtime.mutableStateOf(state.activeChildAlias) }
     val ageBandState = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf("学龄期") }
@@ -248,18 +494,12 @@ private fun ChildContextBar(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text("当前儿童：${state.activeChildAlias}", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+            if (state.selectedPort == Port.CHILD && state.child.perceptionEnabled) {
+                PerceptionIndicator()
+            }
             TextButton(onClick = { expandedState.value = true }, enabled = state.availableChildren.isNotEmpty()) { Text("切换档案") }
             if (state.selectedPort != Port.CHILD) {
-                TextButton(onClick = { aliasState.value = ""; ageBandState.value = "学龄期"; dialogMode.value = "create" }) { Text("新建") }
-                TextButton(onClick = { dialogMode.value = "edit" }) { Text("编辑") }
-            }
-            if (state.selectedPort == Port.PROFESSIONAL) {
-                TextButton(onClick = onArchiveChild, enabled = state.availableChildren.size > 1) { Text("归档") }
-                TextButton(onClick = { consentOpen.value = true }) { Text("授权") }
-                TextButton(onClick = { institutionOpen.value = true }) { Text("机构设置") }
-                TextButton(onClick = { apiKeyInput.value = ""; apiKeyOpen.value = true }) { Text("机构 API Key") }
-            } else if (state.selectedPort == Port.PARENT) {
-                TextButton(onClick = { consentOpen.value = true }) { Text("授权") }
+                TextButton(onClick = { moreExpanded.value = true }) { Text("⋯ 更多") }
             }
             TextButton(onClick = onLogout) { Text("退出当前端") }
             DropdownMenu(expanded = expandedState.value, onDismissRequest = { expandedState.value = false }) {
@@ -267,6 +507,40 @@ private fun ChildContextBar(
                     DropdownMenuItem(
                         text = { Text("${child.alias} · ${child.ageBand}") },
                         onClick = { expandedState.value = false; onSelectChild(child.childId) }
+                    )
+                }
+            }
+            DropdownMenu(expanded = moreExpanded.value, onDismissRequest = { moreExpanded.value = false }) {
+                DropdownMenuItem(
+                    text = { Text("新建儿童") },
+                    onClick = { moreExpanded.value = false; aliasState.value = ""; ageBandState.value = "学龄期"; dialogMode.value = "create" }
+                )
+                DropdownMenuItem(
+                    text = { Text("编辑当前儿童") },
+                    onClick = { moreExpanded.value = false; dialogMode.value = "edit" }
+                )
+                if (state.selectedPort == Port.PROFESSIONAL) {
+                    DropdownMenuItem(
+                        text = { Text("归档当前儿童") },
+                        enabled = state.availableChildren.size > 1,
+                        onClick = { moreExpanded.value = false; onArchiveChild() }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("数据授权") },
+                        onClick = { moreExpanded.value = false; consentOpen.value = true }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("机构设置") },
+                        onClick = { moreExpanded.value = false; institutionOpen.value = true }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("机构 API Key") },
+                        onClick = { moreExpanded.value = false; apiKeyInput.value = ""; apiKeyOpen.value = true }
+                    )
+                } else {
+                    DropdownMenuItem(
+                        text = { Text("数据授权") },
+                        onClick = { moreExpanded.value = false; consentOpen.value = true }
                     )
                 }
             }
@@ -499,6 +773,7 @@ private fun PortContent(
             onPauseTask = viewModel::pauseHomeTask,
             onAdvanceDemo = viewModel::advanceHomeDemo,
             onMoodChange = viewModel::updateFeedbackMood,
+            onQuickRecordMood = viewModel::quickRecordMood,
             onFeedbackNoteChange = viewModel::updateFeedbackNote,
             onSubmitFeedback = viewModel::submitHomeFeedback,
             onSubmitObservation = viewModel::submitParentObservation,

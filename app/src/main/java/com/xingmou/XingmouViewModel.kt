@@ -10,6 +10,7 @@ import com.xingmou.core.agent.AgentEventProcessor
 import com.xingmou.core.agent.AgentOrchestrationRequest
 import com.xingmou.core.agent.AgentOrchestrationResult
 import com.xingmou.core.agent.AgentOrchestrator
+import com.xingmou.core.agent.AgentRunState
 import com.xingmou.core.agent.DecisionTraceFactory
 import com.xingmou.core.agent.DecisionEvidence
 import com.xingmou.core.agent.PolicyBackedModelGateway
@@ -94,6 +95,7 @@ import kotlinx.coroutines.launch
 class XingmouViewModel(application: Application) : AndroidViewModel(application) {
     private val accessibilityPreferences = application.getSharedPreferences("xingmou_accessibility", 0)
     private val curriculumPrefs = application.getSharedPreferences("xingmou_curriculum", 0)
+    private val loginPreferences = application.getSharedPreferences("xingmou_login", 0)
     private val database = QizhiDatabase.getInstance(application)
     private val eventCoordinator = AgentEventCoordinator(
         AgentEventProcessor(),
@@ -161,6 +163,7 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
     private var feedbackController: FeedbackController? = null
     private var sessionRecorder: SessionRecorder? = null
     private var lastMeltdown = false
+    private var lastChildRestoreAttempted = false
 
     init {
         viewModelScope.launch {
@@ -179,6 +182,12 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                 current?.let { loadBaseline(it) }
                 current?.let { loadCourseProgress(it.childId) }
                 current?.let { loadHomeSupport(it.childId) }
+                if (!lastChildRestoreAttempted) {
+                    lastChildRestoreAttempted = true
+                    loginPreferences.getString("last_child_id", null)
+                        ?.takeIf { id -> children.any { it.childId == id } }
+                        ?.let { quickEnterChild(it) }
+                }
             }
         }
         refreshProfessionalAnalysis()
@@ -974,6 +983,48 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
         _uiState.update { it.copy(loginRole = port, loginMessage = "") }
     }
 
+    fun openAdultLogin() {
+        _uiState.update {
+            it.copy(showAdultLogin = true, loginRole = it.loginRole ?: Port.PARENT, loginMessage = "请选择登录身份。")
+        }
+    }
+
+    fun closeAdultLogin() {
+        _uiState.update { it.copy(showAdultLogin = false, loginMessage = "") }
+    }
+
+    /** 儿童零输入进入：复用本机 session 隐式登录并直接切到对应儿童档案。 */
+    fun quickEnterChild(childId: String) {
+        if (_uiState.value.availableChildren.none { it.childId == childId }) return
+        viewModelScope.launch {
+            val child = database.childDao().findById(childId) ?: return@launch
+            val session = database.localSessionDao().active()
+            val user = session?.let { database.localUserDao().findById(it.userId) }
+                ?: database.localUserDao().activeForOrganization(SeedData.DEMO_ORGANIZATION_ID)
+                    .firstOrNull { it.login == "parent" }
+            if (user == null) return@launch
+            database.localSessionDao().revokeAllActive()
+            database.localSessionDao().upsert(
+                LocalSessionEntity(newId("session"), user.userId, user.role, createdAt = System.currentTimeMillis(), expiresAt = null)
+            )
+            activeChildId = child.childId
+            _uiState.update {
+                it.copy(
+                    isLoggedIn = true, loginRole = Port.CHILD, selectedPort = Port.CHILD,
+                    activeChildId = child.childId, activeChildAlias = child.alias,
+                    localUserName = user.displayName, localUserRole = user.role,
+                    loginIdentifier = "", loginPassword = "", loginMessage = "",
+                    showAdultLogin = false
+                )
+            }
+            loadConsentState(child.childId)
+            loadBaseline(child)
+            loadCourseProgress(child.childId)
+            loadHomeSupport(child.childId)
+            loginPreferences.edit().putString("last_child_id", childId).apply()
+        }
+    }
+
     fun loginAs(port: Port) {
         val state = _uiState.value
         val identifier = state.loginIdentifier.trim()
@@ -1217,8 +1268,8 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                         message = when {
                             passed -> "太棒了！这一关通过了。"
                             finished -> "这一关结束，可以再试一次。"
-                            correct -> "做得好！"
-                            else -> "没关系，下一个活动。"
+                            correct -> listOf("做得好！", "真棒！", "答对啦！", "太厉害了！")[Math.floorMod(runTotal, 4)]
+                            else -> listOf("没关系，你已经很棒了，继续。", "别着急，我们看看下一个。", "这次没选对也没关系，继续加油。", "已经很认真啦，慢慢来。")[Math.floorMod(runTotal, 4)]
                         },
                         finished = finished,
                         passed = passed
@@ -1278,7 +1329,7 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                 val updated = snapshot.apply(decision).copy(
                     recentResults = (snapshot.recentResults + result).takeLast(3),
                     consecutiveFailures = failures,
-                    instruction = if (correct) "再找一次圆形" else "看一看，再选一次"
+                    instruction = if (correct) "再找一次圆形" else "没关系，慢慢看，再试一次。"
                 )
                 _uiState.update { it.copy(child = updated) }
                 loadCourseProgress(childId)
@@ -1397,6 +1448,21 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
+    /** 家长端一键记录今天的状态：点一下表情即写入一条 mood 反馈，无需填写备注。 */
+    fun quickRecordMood(mood: String) {
+        viewModelScope.launch {
+            val task = database.homeTaskDao().latestForChild(childId)
+            database.homeFeedbackDao().insert(
+                HomeFeedbackEntity(
+                    feedbackId = newId("feedback"), childId = childId, taskId = task?.taskId,
+                    mood = mood, fatigue = "",
+                    note = "", createdAt = System.currentTimeMillis()
+                )
+            )
+            _uiState.update { it.copy(parent = it.parent.copy(feedbackMood = mood, feedbackMessage = "已记录今天的状态：${mood}")) }
+        }
+    }
+
     /** 工作台「写下观察」补充的提交入口：把观察文本作为家庭观察提交给专业人员查看。 */
     fun submitParentObservation() {
         val parent = _uiState.value.parent
@@ -1423,7 +1489,7 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
             _uiState.update { it.copy(parent = it.parent.copy(message = "请先写下一个具体观察。", riskLabel = "需要补充")) }
             return
         }
-        _uiState.update { it.copy(parent = it.parent.copy(isWorking = true, message = "正在读取本地已审核知识…")) }
+        _uiState.update { it.copy(parent = it.parent.copy(isWorking = true, message = "正在读取本地已审核知识…", agentStatus = agentStateLabel(AgentRunState.CREATED))) }
         viewModelScope.launch {
             runCatching {
                 val now = System.currentTimeMillis()
@@ -1446,7 +1512,9 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                         childId = scopedChildId,
                         input = AgentContextInput(Port.PARENT, sessionForChild(scopedChildId), query, knowledgeItems = knowledge, recentRecords = records)
                     )
-                )
+                ) { state ->
+                    _uiState.update { it.copy(parent = it.parent.copy(agentStatus = agentStateLabel(state))) }
+                }
                 recordAgentOutcome(orchestrationAgent, orchestration, now, scopedChildId)
                 val localMessage = when (retrieval.route) {
                     KnowledgeRoute.NORMAL -> retrieval.reason
@@ -1473,13 +1541,13 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                             riskLabel = retrieval.riskLevel,
                             isWorking = false,
                             agentRunId = runId,
-                            agentStatus = orchestration.route.name
+                            agentStatus = agentStateLabel(orchestration.state)
                         )
                     )
                 }
             }.onFailure { error ->
                 _uiState.update {
-                    it.copy(parent = it.parent.copy(isWorking = false, message = SafeResponses.INSUFFICIENT_DATA, agentStatus = "FAILED: ${error.javaClass.simpleName}"))
+                    it.copy(parent = it.parent.copy(isWorking = false, message = SafeResponses.INSUFFICIENT_DATA, agentStatus = agentStateLabel(AgentRunState.FAILED)))
                 }
             }
         }
@@ -1725,7 +1793,7 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
     fun createPlanDraft() {
         val professional = _uiState.value.professional
         if (!professional.dataSufficient || professional.isWorking) return
-        _uiState.update { it.copy(professional = it.professional.copy(isWorking = true, reviewMessage = "正在生成受控草案…")) }
+        _uiState.update { it.copy(professional = it.professional.copy(isWorking = true, reviewMessage = "正在生成受控草案…", agentStatus = agentStateLabel(AgentRunState.CREATED))) }
         viewModelScope.launch {
             runCatching {
                 check(planStateMachine.createDraft(PlanActor.MODEL).accepted)
@@ -1743,7 +1811,9 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                         childId = scopedChildId,
                         input = AgentContextInput(Port.PROFESSIONAL, sessionForChild(scopedChildId), "基于现有训练记录生成待审核草案", knowledgeItems = knowledge, recentRecords = records)
                     )
-                )
+                ) { state ->
+                    _uiState.update { it.copy(professional = it.professional.copy(agentStatus = agentStateLabel(state))) }
+                }
                 recordAgentOutcome(orchestrationAgent, orchestration, now, scopedChildId)
                 val modelGoal = orchestration.output?.get("plan")
                     ?.takeIf { it.isJsonObject }?.asJsonObject?.get("observable_goal")
@@ -1796,12 +1866,12 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                         reviewMessage = if (modelGoal != null) "AI 待审核目标已写入草案；请核对后确认、签署。" else "本地草案已生成，需先确认，再签署生效。",
                         isWorking = false,
                         agentRunId = runId,
-                        agentStatus = orchestration.route.name,
+                        agentStatus = agentStateLabel(orchestration.state),
                         recentEvent = "PLAN_DRAFT_CREATED"
                     ))
                 }
             }.onFailure { error ->
-                _uiState.update { it.copy(professional = it.professional.copy(isWorking = false, reviewMessage = "草案生成失败：${error.message ?: "未知错误"}")) }
+                _uiState.update { it.copy(professional = it.professional.copy(isWorking = false, reviewMessage = "草案生成失败：${error.message ?: "未知错误"}", agentStatus = agentStateLabel(AgentRunState.FAILED))) }
             }
         }
     }
@@ -1832,7 +1902,7 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                     reviewMessage = "新版本已创建，需确认后才能签署生效。",
                     isWorking = false,
                     agentRunId = runId,
-                    agentStatus = "PROFESSIONAL_EDIT",
+                    agentStatus = "已由专业人员编辑",
                     recentEvent = "PLAN_REVISION_CREATED"
                 )) }
             }.onFailure { error ->

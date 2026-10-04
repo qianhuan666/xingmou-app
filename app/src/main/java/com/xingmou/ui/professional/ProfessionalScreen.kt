@@ -1,7 +1,8 @@
 package com.xingmou.ui.professional
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -9,6 +10,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
@@ -17,6 +20,8 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationRail
+import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -25,13 +30,17 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.xingmou.ProfessionalUiState
 import com.xingmou.HomeFeedbackUi
 import com.xingmou.data.catalog.AssessmentCatalog
 import com.xingmou.data.catalog.RehabilitationMethods
 import com.xingmou.core.domain.PlanStatus
+import com.xingmou.ui.components.AgentStatusLine
 import com.xingmou.ui.components.SectionSurface
 import com.xingmou.ui.components.StatusLine
 import com.xingmou.ui.theme.Success
@@ -39,6 +48,8 @@ import com.xingmou.ui.theme.Warning
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+
+private enum class ProfessionalSection { ANALYSIS, PLAN, ASSESSMENT, CARE, AGENT }
 
 @Composable
 fun ProfessionalScreen(
@@ -73,41 +84,83 @@ fun ProfessionalScreen(
     onAnnotateAgentTrace: (String, String, String) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Column(
-        modifier = modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        Text("专业审核工作台", style = MaterialTheme.typography.headlineMedium)
-        Text("Agent 负责整理与草拟，方案确认和生效始终由专业人员完成。", color = MaterialTheme.colorScheme.onSurfaceVariant)
-
-        BoxWithConstraints(Modifier.fillMaxWidth()) {
-            val wide = maxWidth >= 920.dp
-            if (wide) {
-                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                        AnalysisPanel(state, onRefresh)
-                        ReportPanel(state)
-                        GroupReportPanel(state)
-                        TrainingDetailsPanel(state)
-                        AssessmentPanel(state, onAssessmentSelect, onAssessmentDateChange, onAssessmentSourceChange, onAssessmentScoresChange, onAssessmentNotesChange, onSaveAssessment)
-                        MethodLibraryPanel()
-                        CareWorkflowPanel(state, onAdvanceCareStage, onCareNoteChange, onCareClosureReasonChange, onCareFollowUpPlanChange, onCareFollowUpDateChange)
-                        HomeFeedbackPanel(state)
-                        AgentPanel(state, onRefreshAgentAudit, onOpenAgentAudit, onAnnotateAgentTrace)
-                    }
-                    PlanPanel(state, onReviewCommentChange, onPlanTaskChange, onPlanGoalChange, onPlanDifficultyChange, onPlanSupportLevelChange, onPlanFrequencyChange, onPlanDurationChange, onPlanStopConditionsChange, onCreateRevision, onCreateDraft, onConfirm, onActivate, onReject, Modifier.weight(1.12f))
-                }
-            } else {
-                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+    val selectedSection = remember { mutableStateOf(ProfessionalSection.ANALYSIS) }
+    Row(modifier = modifier.fillMaxSize()) {
+        NavigationRail(modifier = Modifier.padding(top = 16.dp)) {
+            NavigationRailItem(
+                selected = selectedSection.value == ProfessionalSection.ANALYSIS,
+                onClick = { selectedSection.value = ProfessionalSection.ANALYSIS },
+                icon = { Text("析", style = MaterialTheme.typography.titleLarge) },
+                label = { Text("分析") }
+            )
+            NavigationRailItem(
+                selected = selectedSection.value == ProfessionalSection.PLAN,
+                onClick = { selectedSection.value = ProfessionalSection.PLAN },
+                icon = { Text("案", style = MaterialTheme.typography.titleLarge) },
+                label = { Text("方案") }
+            )
+            NavigationRailItem(
+                selected = selectedSection.value == ProfessionalSection.ASSESSMENT,
+                onClick = { selectedSection.value = ProfessionalSection.ASSESSMENT },
+                icon = { Text("估", style = MaterialTheme.typography.titleLarge) },
+                label = { Text("评估") }
+            )
+            NavigationRailItem(
+                selected = selectedSection.value == ProfessionalSection.CARE,
+                onClick = { selectedSection.value = ProfessionalSection.CARE },
+                icon = { Text("个", style = MaterialTheme.typography.titleLarge) },
+                label = { Text("个案") }
+            )
+            NavigationRailItem(
+                selected = selectedSection.value == ProfessionalSection.AGENT,
+                onClick = { selectedSection.value = ProfessionalSection.AGENT },
+                icon = { Text("AI", style = MaterialTheme.typography.titleLarge) },
+                label = { Text("Agent") }
+            )
+        }
+        Column(
+            modifier = Modifier.weight(1f).fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Text(
+                when (selectedSection.value) {
+                    ProfessionalSection.ANALYSIS -> "过程分析"
+                    ProfessionalSection.PLAN -> "训练方案"
+                    ProfessionalSection.ASSESSMENT -> "量表与评估"
+                    ProfessionalSection.CARE -> "个案管理"
+                    ProfessionalSection.AGENT -> "Agent 运行审计"
+                },
+                style = MaterialTheme.typography.headlineMedium
+            )
+            Text(
+                when (selectedSection.value) {
+                    ProfessionalSection.ANALYSIS -> "查看能力分析、个体与分组报告及训练明细。"
+                    ProfessionalSection.PLAN -> "Agent 生成草案，专业人员确认并签署生效。"
+                    ProfessionalSection.ASSESSMENT -> "转录专业量表，并参考本地方法库。"
+                    ProfessionalSection.CARE -> "记录个案阶段与家庭反馈。"
+                    ProfessionalSection.AGENT -> "查看当前儿童的 Agent 运行记录与决策轨迹。"
+                },
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            when (selectedSection.value) {
+                ProfessionalSection.ANALYSIS -> {
                     AnalysisPanel(state, onRefresh)
                     ReportPanel(state)
                     GroupReportPanel(state)
                     TrainingDetailsPanel(state)
+                }
+                ProfessionalSection.PLAN -> {
+                    PlanPanel(state, onReviewCommentChange, onPlanTaskChange, onPlanGoalChange, onPlanDifficultyChange, onPlanSupportLevelChange, onPlanFrequencyChange, onPlanDurationChange, onPlanStopConditionsChange, onCreateRevision, onCreateDraft, onConfirm, onActivate, onReject, Modifier.fillMaxWidth())
+                }
+                ProfessionalSection.ASSESSMENT -> {
                     AssessmentPanel(state, onAssessmentSelect, onAssessmentDateChange, onAssessmentSourceChange, onAssessmentScoresChange, onAssessmentNotesChange, onSaveAssessment)
                     MethodLibraryPanel()
+                }
+                ProfessionalSection.CARE -> {
                     CareWorkflowPanel(state, onAdvanceCareStage, onCareNoteChange, onCareClosureReasonChange, onCareFollowUpPlanChange, onCareFollowUpDateChange)
                     HomeFeedbackPanel(state)
-                    PlanPanel(state, onReviewCommentChange, onPlanTaskChange, onPlanGoalChange, onPlanDifficultyChange, onPlanSupportLevelChange, onPlanFrequencyChange, onPlanDurationChange, onPlanStopConditionsChange, onCreateRevision, onCreateDraft, onConfirm, onActivate, onReject, Modifier.fillMaxWidth())
+                }
+                ProfessionalSection.AGENT -> {
                     AgentPanel(state, onRefreshAgentAudit, onOpenAgentAudit, onAnnotateAgentTrace)
                 }
             }
@@ -379,7 +432,7 @@ private fun PlanPanel(
         modifier = modifier,
         containerColor = if (state.planStatus == PlanStatus.ACTIVE) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface
     ) {
-        StatusLine("当前状态", state.planStatus?.name ?: "尚未创建")
+        PlanStatusStepper(state.planStatus)
         Spacer(Modifier.height(12.dp))
         Text(state.planSummary, style = MaterialTheme.typography.bodyLarge)
         if (state.planDiffs.isNotEmpty()) {
@@ -435,11 +488,79 @@ private fun PlanPanel(
     }
 }
 
+/** 训练方案生命周期步骤条：草案 → 已确认 → 已生效，退回态单独标红。 */
+@Composable
+private fun PlanStatusStepper(status: PlanStatus?, modifier: Modifier = Modifier) {
+    val labels = if (status == PlanStatus.REJECTED) listOf("已退回", "已确认", "已生效") else listOf("草案", "已确认", "已生效")
+    val currentIndex = when (status) {
+        null -> -1
+        PlanStatus.DRAFT -> 0
+        PlanStatus.CONFIRMED -> 1
+        PlanStatus.ACTIVE, PlanStatus.SUPERSEDED, PlanStatus.ARCHIVED -> 2
+        PlanStatus.REJECTED -> 0
+    }
+    Row(modifier = modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+        labels.forEachIndexed { index, label ->
+            val stepState = when {
+                status == PlanStatus.REJECTED && index == 0 -> PlanStepState.REJECTED
+                index < currentIndex -> PlanStepState.DONE
+                index == currentIndex -> PlanStepState.CURRENT
+                else -> PlanStepState.TODO
+            }
+            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                    PlanStepConnector(filled = index > 0 && index <= currentIndex, modifier = Modifier.weight(1f))
+                    PlanStepCircle(stepState, index + 1)
+                    PlanStepConnector(filled = index < currentIndex, modifier = Modifier.weight(1f))
+                }
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    label,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = when (stepState) {
+                        PlanStepState.DONE -> Success
+                        PlanStepState.CURRENT -> MaterialTheme.colorScheme.primary
+                        PlanStepState.REJECTED -> Warning
+                        PlanStepState.TODO -> MaterialTheme.colorScheme.onSurfaceVariant
+                    }
+                )
+            }
+        }
+    }
+}
+
+private enum class PlanStepState { DONE, CURRENT, REJECTED, TODO }
+
+@Composable
+private fun PlanStepConnector(filled: Boolean, modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier
+            .height(2.dp)
+            .background(if (filled) Success else MaterialTheme.colorScheme.outlineVariant)
+    )
+}
+
+@Composable
+private fun PlanStepCircle(state: PlanStepState, number: Int) {
+    val (bg, content, contentColor) = when (state) {
+        PlanStepState.DONE -> Triple(Success, "✓", Color.White)
+        PlanStepState.CURRENT -> Triple(MaterialTheme.colorScheme.primary, "$number", MaterialTheme.colorScheme.onPrimary)
+        PlanStepState.REJECTED -> Triple(Warning, "!", Color.White)
+        PlanStepState.TODO -> Triple(MaterialTheme.colorScheme.surfaceVariant, "$number", MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+    Box(
+        modifier = Modifier.size(26.dp).clip(CircleShape).background(bg),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(content, style = MaterialTheme.typography.labelMedium, color = contentColor)
+    }
+}
+
 @Composable
 private fun AgentPanel(state: ProfessionalUiState, onRefreshAudit: () -> Unit, onOpenAudit: (String) -> Unit, onAnnotateTrace: (String, String, String) -> Unit) {
     val timeFormat = remember { SimpleDateFormat("MM-dd HH:mm:ss", Locale.getDefault()) }
     SectionSurface(title = "Agent 运行", supporting = "本地可审计信息，不展示原始敏感数据。", containerColor = MaterialTheme.colorScheme.primaryContainer) {
-        StatusLine("运行状态", state.agentStatus)
+        AgentStatusLine(status = state.agentStatus, working = state.isWorking)
         Spacer(Modifier.height(8.dp))
         StatusLine("最近事件", state.recentEvent)
         state.agentRunId?.let {
