@@ -1,7 +1,10 @@
 package com.xingmou
 
+import android.Manifest
 import android.app.Application
+import android.content.pm.PackageManager
 import android.net.Uri
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.xingmou.core.agent.AgentContextInput
@@ -51,10 +54,14 @@ import com.xingmou.core.model.CommunicationLevel
 import com.xingmou.core.model.Port
 import com.xingmou.core.model.SessionContext
 import com.xingmou.core.safety.SafeResponses
+import com.xingmou.core.perception.ActionGestureDetector
+import com.xingmou.core.perception.DetectSessionController
 import com.xingmou.core.perception.FeedbackController
 import com.xingmou.core.perception.PerceptionManager
 import com.xingmou.core.perception.PerceptionState
 import com.xingmou.core.perception.SessionRecorder
+import com.xingmou.core.perception.SpeechAnswerDetector
+import com.xingmou.core.perception.SpeechHit
 import com.xingmou.core.perception.StateAnalyzer
 import com.xingmou.data.db.PlanVersionEntity
 import com.xingmou.data.db.ChildEntity
@@ -72,12 +79,18 @@ import com.xingmou.data.db.AgentEventEntity
 import com.xingmou.data.db.OrganizationEntity
 import com.xingmou.data.db.LocalSessionEntity
 import com.xingmou.data.db.LocalUserEntity
+import com.xingmou.data.catalog.ExpectedAction
+import com.xingmou.data.catalog.ExpectedSpeech
 import com.xingmou.data.catalog.QuestionCatalog
+import com.xingmou.data.catalog.QuestionDefinition
 import com.xingmou.data.catalog.CurriculumCatalog
 import com.xingmou.data.catalog.CurriculumCatalog.GeneratedCurriculumLevel
 import com.xingmou.data.catalog.DomainCatalog
 import com.xingmou.data.catalog.AssessmentCatalog
+import com.xingmou.AutoDetectState
 import com.xingmou.BaselineUiState
+import com.xingmou.DetectMode
+import com.xingmou.DetectPhase
 import com.xingmou.ReportMetricUi
 import com.xingmou.ReportTrendPointUi
 import java.util.UUID
@@ -90,7 +103,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class XingmouViewModel(application: Application) : AndroidViewModel(application) {
     private val accessibilityPreferences = application.getSharedPreferences("xingmou_accessibility", 0)
@@ -165,6 +180,16 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
     private var lastMeltdown = false
     private var lastChildRestoreAttempted = false
 
+    // 观察题自动检测
+    private val detectController = DetectSessionController()
+    private var actionDetector: ActionGestureDetector? = null
+    private var speechDetector: SpeechAnswerDetector? = null
+    private var detectTickerJob: kotlinx.coroutines.Job? = null
+    private var guardPerception = false
+    private var questionCameraWanted = false
+    private var savedPreviewEnabled: Boolean? = null
+    private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
+
     init {
         viewModelScope.launch {
             loadLocalOrganization()
@@ -191,6 +216,19 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
             }
         }
         refreshProfessionalAnalysis()
+
+        detectController.onAutoAnswer = { questionId, matchedKeyword ->
+            autoAnswerDetected(questionId, matchedKeyword)
+        }
+        detectController.onEncourage = { isCamera ->
+            val msg = if (isCamera) "再来一次，让小星看到你的小手～" else "没关系，再大声说一次～"
+            _uiState.update { it.copy(child = it.child.copy(perceptionFeedback = msg)) }
+        }
+        viewModelScope.launch {
+            _uiState.collect { snapshot ->
+                syncDetectSession(snapshot)
+            }
+        }
     }
 
     private suspend fun loadLocalOrganization() {
@@ -282,40 +320,28 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
         perceptionManager?.detachPreviewView(previewView)
     }
 
+    private var guardInited = false
+
     private fun startPerception() {
-        if (perceptionManager != null) return
-        val app = getApplication<Application>()
-        feedbackController = FeedbackController { feedback ->
-            _uiState.update { it.copy(child = it.child.copy(perceptionFeedback = feedback.message)) }
-            if (feedback.level == FeedbackController.Feedback.Level.L3_PAUSE) {
-                _uiState.update { it.copy(child = it.child.copy(isPaused = true)) }
-            }
+        guardPerception = true
+        if (!guardInited) {
+            guardInited = true
+            initGuardFeedback()
         }
-        sessionRecorder = SessionRecorder(database.perceptionSessionDao(), childId)
-        perceptionManager = PerceptionManager(app) { frame ->
-            val state = StateAnalyzer.analyze(frame, lastMeltdown)
-            lastMeltdown = state.isMeltdown
-            sessionRecorder?.onState(state)
-            feedbackController?.onState(state)
-            _uiState.update {
-                it.copy(child = it.child.copy(
-                    perceptionEmotion = state.emotion.name,
-                    perceptionFocus = state.focusLevel.name
-                ))
-            }
-        }
-        perceptionManager?.start()
+        refreshPerception()
         _uiState.update { it.copy(child = it.child.copy(perceptionEnabled = true)) }
     }
 
     private fun stopPerception() {
-        perceptionManager?.stop()
-        perceptionManager = null
+        guardPerception = false
+        feedbackController?.reset()
+        refreshPerception()
+        // 守护开关关闭：结束并释放守护侧反馈/记录资源（动作题会话不持有它们）。
         sessionRecorder?.finish()
         sessionRecorder = null
-        feedbackController?.reset()
         feedbackController = null
         lastMeltdown = false
+        guardInited = false
         _uiState.update {
             it.copy(child = it.child.copy(
                 perceptionEnabled = false,
@@ -326,9 +352,246 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
+    private fun initGuardFeedback() {
+        feedbackController = FeedbackController { feedback ->
+            _uiState.update { it.copy(child = it.child.copy(perceptionFeedback = feedback.message)) }
+            if (feedback.level == FeedbackController.Feedback.Level.L3_PAUSE) {
+                _uiState.update { it.copy(child = it.child.copy(isPaused = true)) }
+            }
+        }
+        sessionRecorder = SessionRecorder(database.perceptionSessionDao(), childId)
+    }
+
+    /** 引用计数：守护开关或动作题任一方需要就启动，双方都不需要才停止。 */
+    private fun refreshPerception() {
+        val need = guardPerception || questionCameraWanted
+        val app = getApplication<Application>()
+        if (need && perceptionManager == null) {
+            val mgr = PerceptionManager(app) { frame ->
+                if (guardPerception) {
+                    val state = StateAnalyzer.analyze(frame, lastMeltdown)
+                    lastMeltdown = state.isMeltdown
+                    sessionRecorder?.onState(state)
+                    feedbackController?.onState(state)
+                    _uiState.update {
+                        it.copy(child = it.child.copy(
+                            perceptionEmotion = state.emotion.name,
+                            perceptionFocus = state.focusLevel.name
+                        ))
+                    }
+                }
+                if (questionCameraWanted) {
+                    val detector = actionDetector
+                    val qid = detectController.session?.questionId
+                    if (detector != null && qid != null) {
+                        val now = System.currentTimeMillis()
+                        val hit = runCatching { detector.onFrame(frame, now) }.getOrDefault(false)
+                        if (hit) mainHandler.post { detectController.onHit(null, now) }
+                    }
+                }
+            }
+            perceptionManager = mgr
+            mgr.start()
+        } else if (!need && perceptionManager != null) {
+            perceptionManager?.stop()
+            perceptionManager = null
+        }
+    }
+
     override fun onCleared() {
         super.onCleared()
         stopPerception()
+        endDetectSession()
+    }
+
+    // ---------- 观察题自动检测会话 ----------
+    private fun currentDetectQuestion(snapshot: XingmouUiState): QuestionDefinition? {
+        val baseline = snapshot.baseline
+        if (baseline.isOpen && baseline.status == com.xingmou.core.domain.BaselineStatus.IN_PROGRESS) {
+            baseline.question?.let { return it }
+        }
+        val child = snapshot.child
+        val player = child.curriculumPlayer
+        if (!child.isPaused && !child.isSafetyStopped && !player.finished && !player.isWorking) {
+            player.question?.let { return it }
+        }
+        return null
+    }
+
+    private fun syncDetectSession(snapshot: XingmouUiState) {
+        val q = currentDetectQuestion(snapshot)
+        val isDetectable = q != null && (q.expectedAction != null || q.expectedSpeech != null)
+        val activeId = detectController.session?.questionId
+        when {
+            !isDetectable -> {
+                if (activeId != null) endDetectSession()
+            }
+            q!!.id != activeId -> beginDetectSession(q)
+        }
+    }
+
+    private fun beginDetectSession(q: QuestionDefinition) {
+        endDetectSession(restorePreview = false)
+        val isCamera = q.expectedAction != null
+        actionDetector = q.expectedAction?.let { ActionGestureDetector(it) }
+        detectController.start(q.id, isCamera)
+        pushDetectState(q, DetectPhase.AWAIT_PERMISSION)
+
+        val permission = if (isCamera) Manifest.permission.CAMERA else Manifest.permission.RECORD_AUDIO
+        val granted = ContextCompat.checkSelfPermission(getApplication(), permission) ==
+            PackageManager.PERMISSION_GRANTED
+
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            val available = if (isCamera) {
+                granted
+            } else {
+                granted && SpeechAnswerDetector(getApplication(), {}, {}).isAvailable()
+            }
+            withContext(kotlinx.coroutines.Dispatchers.Main) {
+                if (detectController.session?.questionId != q.id) return@withContext
+                detectController.onPermissionReady(available)
+                if (available) startDetectionHardware(q) else pushDetectState(q, DetectPhase.MANUAL_FALLBACK)
+            }
+        }
+    }
+
+    private fun startDetectionHardware(q: QuestionDefinition) {
+        detectController.begin(System.currentTimeMillis())
+        startDetectTicker()
+        when {
+            q.expectedAction != null -> {
+                savedPreviewEnabled = savedPreviewEnabled ?: _uiState.value.child.perceptionPreview
+                _uiState.update { it.copy(child = it.child.copy(perceptionPreview = true)) }
+                questionCameraWanted = true
+                refreshPerception()
+                viewModelScope.launch {
+                    delay(1_500)
+                    if (perceptionManager?.liteMode == true &&
+                        detectController.session?.questionId == q.id) {
+                        forceManualFallback(q.id)
+                    }
+                }
+            }
+            q.expectedSpeech != null -> {
+                val expected = q.expectedSpeech
+                val detector = SpeechAnswerDetector(
+                    getApplication(),
+                    onSpeech = { text ->
+                        if (detectController.session?.questionId != q.id) return@SpeechAnswerDetector
+                        when (val hit = SpeechAnswerDetector.evaluate(text, expected)) {
+                            is SpeechHit.SPOKEN -> detectController.onHit(hit.matchedKeyword, System.currentTimeMillis())
+                            SpeechHit.NONE -> Unit
+                        }
+                    },
+                    onUnavailable = { mainHandler.post { forceManualFallback(q.id) } }
+                )
+                speechDetector = detector
+                detector.start()
+            }
+        }
+        pushDetectState(q, DetectPhase.DETECTING)
+    }
+
+    private fun forceManualFallback(questionId: String) {
+        if (detectController.session?.questionId != questionId) return
+        // 状态机迁移到 MANUAL_FALLBACK；停止硬件但保留会话（ticker 下次刷新会把新相位推给 UI）
+        detectController.forceManual()
+        questionCameraWanted = false
+        speechDetector?.stop(); speechDetector = null
+        refreshPerception()
+        val q = currentDetectQuestion(_uiState.value) ?: return
+        pushDetectState(q, DetectPhase.MANUAL_FALLBACK)
+    }
+
+    private fun startDetectTicker() {
+        detectTickerJob?.cancel()
+        detectTickerJob = viewModelScope.launch {
+            while (true) {
+                kotlinx.coroutines.delay(100)
+                detectController.tick(System.currentTimeMillis())
+                val s = detectController.session ?: break
+                _uiState.update { st ->
+                    st.copy(child = st.child.copy(autoDetect = st.child.autoDetect.copy(
+                        questionId = s.questionId,
+                        mode = if (s.isCamera) DetectMode.CAMERA else DetectMode.SPEECH,
+                        phase = DetectPhase.valueOf(s.phase.name),
+                        remainingMs = s.remainingMs,
+                        timeoutMs = s.timeoutMs
+                    )))
+                }
+            }
+        }
+    }
+
+    private fun autoAnswerDetected(questionId: String, matchedKeyword: String?) {
+        val q = currentDetectQuestion(_uiState.value) ?: return
+        if (q.id != questionId) return
+        questionCameraWanted = false
+        speechDetector?.stop(); speechDetector = null
+        refreshPerception()
+        detectTickerJob?.cancel()
+        if (matchedKeyword != null) {
+            _uiState.update { it.copy(child = it.child.copy(perceptionFeedback = "对啦，是$matchedKeyword！")) }
+        }
+        pushDetectState(q, DetectPhase.HIT)
+        // 路由到现有作答通道，等价于自动点「自己完成」(option 0)
+        val isBaseline = _uiState.value.baseline.question?.id == questionId
+        if (isBaseline) answerBaseline(0) else answerCurriculumActivity(0)
+    }
+
+    private fun pushDetectState(q: QuestionDefinition, phase: DetectPhase) {
+        val isCamera = q.expectedAction != null
+        val hint = when (phase) {
+            DetectPhase.AWAIT_PERMISSION -> if (isCamera) "小星想看看你的小手" else "小星想听听你的声音"
+            DetectPhase.DETECTING, DetectPhase.HIT ->
+                if (isCamera) "小星正在看你的小手～" else "小星在听哦，大声说出来～"
+            DetectPhase.RETRYING ->
+                if (isCamera) "再来一次，让小星看到你的小手～" else "没关系，再大声说一次～"
+            DetectPhase.MANUAL_FALLBACK -> "没关系，也可以点这里告诉我"
+            DetectPhase.IDLE -> ""
+        }
+        val permission = if (isCamera) Manifest.permission.CAMERA else Manifest.permission.RECORD_AUDIO
+        _uiState.update {
+            it.copy(child = it.child.copy(autoDetect = AutoDetectState(
+                questionId = q.id,
+                mode = if (isCamera) DetectMode.CAMERA else DetectMode.SPEECH,
+                phase = phase,
+                hint = hint,
+                remainingMs = detectController.session?.remainingMs ?: 0L,
+                permission = permission,
+                matchedKeyword = null
+            )))
+        }
+    }
+
+    private fun endDetectSession(restorePreview: Boolean = true) {
+        detectTickerJob?.cancel()
+        questionCameraWanted = false
+        actionDetector = null
+        speechDetector?.stop(); speechDetector = null
+        refreshPerception()
+        if (restorePreview) {
+            savedPreviewEnabled?.let { saved ->
+                _uiState.update { it.copy(child = it.child.copy(perceptionPreview = saved)) }
+            }
+        }
+        savedPreviewEnabled = null
+        detectController.stop()
+        _uiState.update { it.copy(child = it.child.copy(autoDetect = AutoDetectState())) }
+    }
+
+    // 供 UI 调用
+    fun onDetectPermissionResolved(granted: Boolean) {
+        val q = currentDetectQuestion(_uiState.value) ?: return
+        if (detectController.session?.questionId != q.id) return
+        detectController.onPermissionReady(granted)
+        if (granted) startDetectionHardware(q) else pushDetectState(q, DetectPhase.MANUAL_FALLBACK)
+    }
+
+    fun onDetectChooseManual() {
+        detectController.chooseManual()
+        val q = currentDetectQuestion(_uiState.value) ?: return
+        pushDetectState(q, DetectPhase.MANUAL_FALLBACK)
     }
 
     fun createLocalChild(alias: String, ageBand: String = "学龄期") {
