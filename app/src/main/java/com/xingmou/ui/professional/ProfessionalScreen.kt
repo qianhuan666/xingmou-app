@@ -32,6 +32,7 @@ import com.xingmou.HomeFeedbackUi
 import com.xingmou.data.catalog.AssessmentCatalog
 import com.xingmou.data.catalog.RehabilitationMethods
 import com.xingmou.core.domain.PlanStatus
+import com.xingmou.ui.components.AgentStatusLine
 import com.xingmou.ui.components.SectionSurface
 import com.xingmou.ui.components.StatusLine
 import com.xingmou.ui.theme.Success
@@ -439,7 +440,7 @@ private fun PlanPanel(
 private fun AgentPanel(state: ProfessionalUiState, onRefreshAudit: () -> Unit, onOpenAudit: (String) -> Unit, onAnnotateTrace: (String, String, String) -> Unit) {
     val timeFormat = remember { SimpleDateFormat("MM-dd HH:mm:ss", Locale.getDefault()) }
     SectionSurface(title = "Agent 运行", supporting = "本地可审计信息，不展示原始敏感数据。", containerColor = MaterialTheme.colorScheme.primaryContainer) {
-        StatusLine("运行状态", state.agentStatus)
+        AgentStatusLine(status = state.agentStatus, working = state.isWorking)
         Spacer(Modifier.height(8.dp))
         StatusLine("最近事件", state.recentEvent)
         state.agentRunId?.let {

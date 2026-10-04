@@ -72,6 +72,21 @@ fun normalizeSpeechRate(rate: Float): Float = rate.coerceIn(0.75f, 1.25f)
 
 fun normalizeSpeechVolume(volume: Float): Float = volume.coerceIn(0.5f, 1.0f)
 
+/** 把 Agent 运行状态机映射为面向家长/专业人员的友好进度文案。 */
+fun agentStateLabel(state: AgentRunState): String = when (state) {
+    AgentRunState.CREATED -> "准备中"
+    AgentRunState.ROUTING -> "正在识别风险与权限…"
+    AgentRunState.PLANNING -> "正在规划分析步骤…"
+    AgentRunState.EXECUTING_TOOL -> "正在检索已审核资料…"
+    AgentRunState.VALIDATING -> "正在校验结论与来源…"
+    AgentRunState.WAITING_APPROVAL -> "等待专业审核…"
+    AgentRunState.PAUSED -> "已暂停"
+    AgentRunState.SAFETY_STOP -> "已安全停止"
+    AgentRunState.COMPLETED -> "分析完成"
+    AgentRunState.FAILED -> "分析未完成，已转本地兜底"
+    AgentRunState.CANCELLED -> "已取消"
+}
+
 /** 交互模式聊天消息。 */
 data class ChatMessageUi(
     val id: String,

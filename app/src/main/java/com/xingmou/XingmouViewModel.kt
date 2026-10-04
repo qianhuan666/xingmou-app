@@ -10,6 +10,7 @@ import com.xingmou.core.agent.AgentEventProcessor
 import com.xingmou.core.agent.AgentOrchestrationRequest
 import com.xingmou.core.agent.AgentOrchestrationResult
 import com.xingmou.core.agent.AgentOrchestrator
+import com.xingmou.core.agent.AgentRunState
 import com.xingmou.core.agent.DecisionTraceFactory
 import com.xingmou.core.agent.DecisionEvidence
 import com.xingmou.core.agent.PolicyBackedModelGateway
@@ -1488,7 +1489,7 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
             _uiState.update { it.copy(parent = it.parent.copy(message = "请先写下一个具体观察。", riskLabel = "需要补充")) }
             return
         }
-        _uiState.update { it.copy(parent = it.parent.copy(isWorking = true, message = "正在读取本地已审核知识…")) }
+        _uiState.update { it.copy(parent = it.parent.copy(isWorking = true, message = "正在读取本地已审核知识…", agentStatus = agentStateLabel(AgentRunState.CREATED))) }
         viewModelScope.launch {
             runCatching {
                 val now = System.currentTimeMillis()
@@ -1511,7 +1512,9 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                         childId = scopedChildId,
                         input = AgentContextInput(Port.PARENT, sessionForChild(scopedChildId), query, knowledgeItems = knowledge, recentRecords = records)
                     )
-                )
+                ) { state ->
+                    _uiState.update { it.copy(parent = it.parent.copy(agentStatus = agentStateLabel(state))) }
+                }
                 recordAgentOutcome(orchestrationAgent, orchestration, now, scopedChildId)
                 val localMessage = when (retrieval.route) {
                     KnowledgeRoute.NORMAL -> retrieval.reason
@@ -1538,13 +1541,13 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                             riskLabel = retrieval.riskLevel,
                             isWorking = false,
                             agentRunId = runId,
-                            agentStatus = orchestration.route.name
+                            agentStatus = agentStateLabel(orchestration.state)
                         )
                     )
                 }
             }.onFailure { error ->
                 _uiState.update {
-                    it.copy(parent = it.parent.copy(isWorking = false, message = SafeResponses.INSUFFICIENT_DATA, agentStatus = "FAILED: ${error.javaClass.simpleName}"))
+                    it.copy(parent = it.parent.copy(isWorking = false, message = SafeResponses.INSUFFICIENT_DATA, agentStatus = agentStateLabel(AgentRunState.FAILED)))
                 }
             }
         }
@@ -1790,7 +1793,7 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
     fun createPlanDraft() {
         val professional = _uiState.value.professional
         if (!professional.dataSufficient || professional.isWorking) return
-        _uiState.update { it.copy(professional = it.professional.copy(isWorking = true, reviewMessage = "正在生成受控草案…")) }
+        _uiState.update { it.copy(professional = it.professional.copy(isWorking = true, reviewMessage = "正在生成受控草案…", agentStatus = agentStateLabel(AgentRunState.CREATED))) }
         viewModelScope.launch {
             runCatching {
                 check(planStateMachine.createDraft(PlanActor.MODEL).accepted)
@@ -1808,7 +1811,9 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                         childId = scopedChildId,
                         input = AgentContextInput(Port.PROFESSIONAL, sessionForChild(scopedChildId), "基于现有训练记录生成待审核草案", knowledgeItems = knowledge, recentRecords = records)
                     )
-                )
+                ) { state ->
+                    _uiState.update { it.copy(professional = it.professional.copy(agentStatus = agentStateLabel(state))) }
+                }
                 recordAgentOutcome(orchestrationAgent, orchestration, now, scopedChildId)
                 val modelGoal = orchestration.output?.get("plan")
                     ?.takeIf { it.isJsonObject }?.asJsonObject?.get("observable_goal")
@@ -1861,12 +1866,12 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                         reviewMessage = if (modelGoal != null) "AI 待审核目标已写入草案；请核对后确认、签署。" else "本地草案已生成，需先确认，再签署生效。",
                         isWorking = false,
                         agentRunId = runId,
-                        agentStatus = orchestration.route.name,
+                        agentStatus = agentStateLabel(orchestration.state),
                         recentEvent = "PLAN_DRAFT_CREATED"
                     ))
                 }
             }.onFailure { error ->
-                _uiState.update { it.copy(professional = it.professional.copy(isWorking = false, reviewMessage = "草案生成失败：${error.message ?: "未知错误"}")) }
+                _uiState.update { it.copy(professional = it.professional.copy(isWorking = false, reviewMessage = "草案生成失败：${error.message ?: "未知错误"}", agentStatus = agentStateLabel(AgentRunState.FAILED))) }
             }
         }
     }
@@ -1897,7 +1902,7 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                     reviewMessage = "新版本已创建，需确认后才能签署生效。",
                     isWorking = false,
                     agentRunId = runId,
-                    agentStatus = "PROFESSIONAL_EDIT",
+                    agentStatus = "已由专业人员编辑",
                     recentEvent = "PLAN_REVISION_CREATED"
                 )) }
             }.onFailure { error ->

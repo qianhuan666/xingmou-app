@@ -79,34 +79,41 @@ class AgentOrchestrator(
 ) {
     fun snapshot(runId: String): AgentRunSnapshot = runtime.get(runId)
 
-    suspend fun run(request: AgentOrchestrationRequest): AgentOrchestrationResult = withContext(Dispatchers.Default) {
+    suspend fun run(
+        request: AgentOrchestrationRequest,
+        onProgress: (AgentRunState) -> Unit = {}
+    ): AgentOrchestrationResult = withContext(Dispatchers.Default) {
         require(request.maxSteps in 1..12) { "maxSteps 必须在 1 到 12 之间。" }
+        fun advance(state: AgentRunState, reason: String? = null) {
+            runtime.transition(request.runId, state, reason = reason)
+            onProgress(state)
+        }
         runtime.create(request.runId, request.taskType, request.input.port, request.childId)
-        runtime.transition(request.runId, AgentRunState.ROUTING)
+        advance(AgentRunState.ROUTING)
         val context = contextAssembler.assemble(request.input)
         if (context.risk.level == RiskLevel.SAFETY_STOP) {
-            runtime.transition(request.runId, AgentRunState.SAFETY_STOP, reason = "规则引擎前置拦截")
+            advance(AgentRunState.SAFETY_STOP, reason = "规则引擎前置拦截")
             return@withContext AgentOrchestrationResult(request.runId, OrchestrationRoute.SAFETY_STOP, AgentRunState.SAFETY_STOP,
                 fallbackText = safeText(request.input.port))
         }
-        runtime.transition(request.runId, AgentRunState.PLANNING)
+        advance(AgentRunState.PLANNING)
         var modelMessage = context.userMessage
         var lastToolResult: AgentToolResult? = null
         val observations = mutableListOf<String>()
         repeat(request.maxSteps) { stepIndex ->
             val raw = model.complete(context.systemPrompt, modelMessage).getOrElse { error ->
-                runtime.transition(request.runId, AgentRunState.FAILED, reason = error.message)
+                advance(AgentRunState.FAILED, reason = error.message)
                 return@withContext AgentOrchestrationResult(request.runId, OrchestrationRoute.FALLBACK, AgentRunState.FAILED,
                     fallbackText = fallbackText(request.input.port), toolResult = lastToolResult, error = error.message)
             }
             val validated = JsonValidator.validate(request.input.port, raw).getOrElse { error ->
-                runtime.transition(request.runId, AgentRunState.FAILED, reason = error.message)
+                advance(AgentRunState.FAILED, reason = error.message)
                 return@withContext AgentOrchestrationResult(request.runId, OrchestrationRoute.FALLBACK, AgentRunState.FAILED,
                     fallbackText = fallbackText(request.input.port), toolResult = lastToolResult, error = error.message)
             }
             if (request.input.port != Port.CHILD) {
                 JsonValidator.validateSourceScope(validated, context.approvedSourceIds).getOrElse { error ->
-                    runtime.transition(request.runId, AgentRunState.FAILED, reason = error.message)
+                    advance(AgentRunState.FAILED, reason = error.message)
                     return@withContext AgentOrchestrationResult(request.runId, OrchestrationRoute.FALLBACK, AgentRunState.FAILED,
                         fallbackText = fallbackText(request.input.port), toolResult = lastToolResult, error = error.message)
                 }
@@ -114,9 +121,9 @@ class AgentOrchestrator(
             val action = parseAction(validated)
             if (action == null) {
                 if (runtime.get(request.runId).state == AgentRunState.PLANNING) {
-                    runtime.transition(request.runId, AgentRunState.VALIDATING)
+                    advance(AgentRunState.VALIDATING)
                 }
-                runtime.transition(request.runId, AgentRunState.COMPLETED, reason = "模型 JSON 和工具观察均已校验")
+                advance(AgentRunState.COMPLETED, reason = "模型 JSON 和工具观察均已校验")
                 return@withContext AgentOrchestrationResult(
                     request.runId, OrchestrationRoute.COMPLETED, AgentRunState.COMPLETED,
                     output = validated, toolResult = lastToolResult
@@ -129,14 +136,14 @@ class AgentOrchestrator(
             if (action.requiresReview) {
                 val authorization = registry.authorize(toolRequest)
                 if (authorization.status == ToolAuthorizationStatus.DENIED) {
-                    runtime.transition(request.runId, AgentRunState.FAILED, reason = authorization.reason)
+                    advance(AgentRunState.FAILED, reason = authorization.reason)
                     return@withContext AgentOrchestrationResult(request.runId, OrchestrationRoute.FALLBACK, AgentRunState.FAILED, validated,
                         fallbackText = SafeResponses.INSUFFICIENT_DATA, error = authorization.reason)
                 }
-                runtime.transition(request.runId, AgentRunState.WAITING_APPROVAL, reason = "模型动作声明需要人工审核")
+                advance(AgentRunState.WAITING_APPROVAL, reason = "模型动作声明需要人工审核")
                 return@withContext AgentOrchestrationResult(request.runId, OrchestrationRoute.WAITING_APPROVAL, AgentRunState.WAITING_APPROVAL, validated)
             }
-            runtime.transition(request.runId, AgentRunState.EXECUTING_TOOL)
+            advance(AgentRunState.EXECUTING_TOOL)
             val toolResult = runtime.executeTool(toolRequest)
             lastToolResult = toolResult
             if (toolResult.authorization.status == ToolAuthorizationStatus.SAFETY_STOP) {
@@ -156,7 +163,7 @@ class AgentOrchestrator(
                 append("\n请基于工具观察继续下一步；如无需工具，输出最终端口 JSON 且不含 action。")
             }
         }
-        runtime.transition(request.runId, AgentRunState.FAILED, reason = "超过最大 Agent 步数")
+        advance(AgentRunState.FAILED, reason = "超过最大 Agent 步数")
         AgentOrchestrationResult(
             request.runId, OrchestrationRoute.FALLBACK, AgentRunState.FAILED,
             fallbackText = fallbackText(request.input.port), toolResult = lastToolResult, error = "超过最大 Agent 步数"

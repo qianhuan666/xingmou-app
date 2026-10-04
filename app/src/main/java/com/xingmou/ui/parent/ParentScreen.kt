@@ -42,6 +42,7 @@ import com.xingmou.ParentDomainStatUi
 import com.xingmou.ParentUiState
 import com.xingmou.RainbowProfileUi
 import com.xingmou.core.safety.SafeResponses
+import com.xingmou.ui.components.AgentStatusLine
 import com.xingmou.ui.components.SectionSurface
 import com.xingmou.ui.components.StatusLine
 import com.xingmou.ui.components.domainBarColor
@@ -287,7 +288,7 @@ private fun ObservationPanel(state: ParentUiState, onQueryChange: (String) -> Un
         Spacer(Modifier.height(8.dp))
         StatusLine("风险路由", state.riskLabel, valueColor = if (state.riskLabel == "SAFETY_STOP") Warning else MaterialTheme.colorScheme.onSurface)
         Spacer(Modifier.height(8.dp))
-        StatusLine("Agent", state.agentStatus)
+        AgentStatusLine(status = state.agentStatus, working = state.isWorking)
     }
 }
 
