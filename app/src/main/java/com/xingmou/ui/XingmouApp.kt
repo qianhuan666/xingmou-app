@@ -70,6 +70,16 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.togetherWith
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.foundation.layout.offset
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
@@ -98,11 +108,11 @@ fun XingmouApp(viewModel: XingmouViewModel) {
                 targetState = state.isLoggedIn,
                 transitionSpec = {
                     if (targetState) {
-                        (fadeIn(tween(400)) + scaleIn(initialScale = 1.15f, animationSpec = tween(400)))
-                            .togetherWith(fadeOut(tween(300)) + scaleOut(targetScale = 0.92f, animationSpec = tween(300)))
+                        // 进入：头像已放大铺满全屏，这里只淡入，主界面平滑浮现
+                        fadeIn(tween(500)).togetherWith(fadeOut(tween(400)))
                     } else {
-                        (fadeIn(tween(300)) + scaleIn(initialScale = 0.92f, animationSpec = tween(300)))
-                            .togetherWith(fadeOut(tween(300)) + scaleOut(targetScale = 1.15f, animationSpec = tween(300)))
+                        (fadeIn(tween(300)) + scaleIn(initialScale = 0.95f, animationSpec = tween(300)))
+                            .togetherWith(fadeOut(tween(300)) + scaleOut(targetScale = 1.05f, animationSpec = tween(300)))
                     }
                 },
                 label = "loginTransition"
@@ -171,6 +181,14 @@ fun XingmouApp(viewModel: XingmouViewModel) {
     }
 }
 
+private data class ExpandingAvatar(
+    val childId: String,
+    val color: Color,
+    val centerX: Float,
+    val centerY: Float,
+    val sizePx: Float
+)
+
 @Composable
 private fun ChildEntryScreen(
     state: com.xingmou.XingmouUiState,
@@ -196,10 +214,25 @@ private fun ChildEntryScreen(
         targetValue = 1.06f,
         animationSpec = infiniteRepeatable(tween(1200), RepeatMode.Reverse)
     )
+    val screenSize = remember { androidx.compose.runtime.mutableStateOf(IntSize.Zero) }
+    val expandingAvatar = remember { androidx.compose.runtime.mutableStateOf<ExpandingAvatar?>(null) }
+    val avatarScale = remember { Animatable(1f) }
+    val density = LocalDensity.current
+    LaunchedEffect(expandingAvatar.value) {
+        val target = expandingAvatar.value ?: return@LaunchedEffect
+        val w = screenSize.value.width
+        val h = screenSize.value.height
+        val coverScale = if (w > 0 && h > 0) (kotlin.math.sqrt((w * w + h * h).toFloat()) * 1.15f) / target.sizePx else 16f
+        avatarScale.snapTo(1f)
+        avatarScale.animateTo(coverScale, animationSpec = tween(520, easing = FastOutSlowInEasing))
+        onEnterChild(target.childId)
+    }
     Box(
-        modifier = Modifier.fillMaxSize().background(
-            Brush.verticalGradient(listOf(Color(0xFFB3E5FC), Color(0xFFFFF3E0)))
-        )
+        modifier = Modifier.fillMaxSize()
+            .onSizeChanged { screenSize.value = it }
+            .background(
+                Brush.verticalGradient(listOf(Color(0xFFB3E5FC), Color(0xFFFFF3E0)))
+            )
     ) {
         Column(
             modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp, vertical = 32.dp),
@@ -221,7 +254,7 @@ private fun ChildEntryScreen(
                     horizontalArrangement = Arrangement.spacedBy(14.dp, Alignment.CenterHorizontally)
                 ) {
                     state.availableChildren.forEach { child ->
-                        ChildAvatarCard(child = child, onClick = { onEnterChild(child.childId) })
+                        ChildAvatarCard(child = child, onAvatarTap = { expandingAvatar.value = it })
                     }
                     AddChildCard(onClick = onOpenAdult)
                 }
@@ -238,22 +271,40 @@ private fun ChildEntryScreen(
                 .pointerInput(Unit) { detectTapGestures(onLongPress = { onOpenAdult() }) }
                 .padding(horizontal = 12.dp, vertical = 8.dp)
         )
+        val expanding = expandingAvatar.value
+        if (expanding != null) {
+            val baseDp = (expanding.sizePx / density.density).dp
+            Box(modifier = Modifier.fillMaxSize()) {
+                Box(
+                    modifier = Modifier
+                        .offset { IntOffset((expanding.centerX - expanding.sizePx / 2f).toInt(), (expanding.centerY - expanding.sizePx / 2f).toInt()) }
+                        .size(baseDp)
+                        .scale(avatarScale.value)
+                        .clip(CircleShape)
+                        .background(expanding.color)
+                )
+            }
+        }
     }
 }
 
 @Composable
-private fun ChildAvatarCard(child: com.xingmou.ChildSummaryUi, onClick: () -> Unit) {
+private fun ChildAvatarCard(child: com.xingmou.ChildSummaryUi, onAvatarTap: (ExpandingAvatar) -> Unit) {
     val colorKeys = listOf("coral", "sky", "amber", "violet", "mint", "blue")
     val avatarColor = domainBarColor(colorKeys[Math.floorMod(child.childId.hashCode(), colorKeys.size)])
     val archived = child.status == "archived"
+    val avatarRect = remember { androidx.compose.runtime.mutableStateOf(Rect.Zero) }
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(6.dp),
         modifier = Modifier.width(96.dp)
     ) {
         Surface(
-            onClick = onClick,
-            modifier = Modifier.size(88.dp),
+            onClick = { onAvatarTap(ExpandingAvatar(child.childId, avatarColor, avatarRect.value.center.x, avatarRect.value.center.y, avatarRect.value.width)) },
+            modifier = Modifier.size(88.dp).onGloballyPositioned {
+                val topLeft = it.localToRoot(Offset.Zero)
+                avatarRect.value = Rect(topLeft.x, topLeft.y, topLeft.x + it.size.width, topLeft.y + it.size.height)
+            },
             shape = CircleShape,
             color = if (archived) MaterialTheme.colorScheme.surfaceVariant else avatarColor,
             border = BorderStroke(2.dp, if (archived) MaterialTheme.colorScheme.outline else Color.White)
