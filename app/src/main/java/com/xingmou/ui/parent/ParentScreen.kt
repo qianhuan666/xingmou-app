@@ -1,20 +1,31 @@
 package com.xingmou.ui.parent
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -25,16 +36,24 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -277,60 +296,104 @@ private fun homeStatusLabel(status: String): String = when (status) {
     else -> "待完成"
 }
 
+private data class QuickObservation(val emoji: String, val label: String, val text: String)
+
+private val QUICK_OBSERVATIONS = listOf(
+    QuickObservation("😊", "配合不错", "孩子今天配合度不错，完成了任务"),
+    QuickObservation("😴", "容易分心", "孩子今天状态不太好，容易分心"),
+    QuickObservation("🧩", "遇到困难", "孩子在某个环节遇到了困难"),
+    QuickObservation("😣", "情绪波动", "孩子情绪有波动，需要安抚")
+)
+
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ObservationPanel(state: ParentUiState, onQueryChange: (String) -> Unit, onAsk: () -> Unit, onSubmitObservation: () -> Unit, onAskOnline: () -> Unit, modifier: Modifier) {
-    SectionSurface(title = "写下观察", supporting = "用简单的话描述孩子今天的表现，不用写很多。", modifier = modifier) {
-        // 快捷选项
-        Text("常用观察模板：", style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(bottom = 6.dp))
-        val quickOptions = listOf(
-            "孩子今天配合度不错，完成了任务",
-            "孩子今天状态不太好，容易分心",
-            "孩子在某个环节遇到了困难",
-            "孩子情绪有波动，需要安抚"
-        )
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
-            quickOptions.forEach { option ->
+    SectionSurface(title = "写下观察", supporting = "点一个模板快速开始，或直接用简单的话描述孩子今天的表现。", modifier = modifier) {
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            QUICK_OBSERVATIONS.forEach { option ->
                 Surface(
-                    onClick = { onQueryChange(option) },
-                    modifier = Modifier.weight(1f),
-                    shape = MaterialTheme.shapes.small,
+                    onClick = { onQueryChange(option.text) },
+                    shape = RoundedCornerShape(50),
                     color = MaterialTheme.colorScheme.secondaryContainer
                 ) {
-                    Text(option, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(vertical = 6.dp, horizontal = 4.dp), maxLines = 2)
+                    Text(
+                        "${option.emoji} ${option.label}",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                    )
                 }
             }
         }
-        Spacer(Modifier.height(10.dp))
-        OutlinedTextField(
+        Spacer(Modifier.height(12.dp))
+        TextField(
             value = state.query,
             onValueChange = onQueryChange,
             modifier = Modifier.fillMaxWidth(),
             minLines = 3,
             maxLines = 5,
-            label = { Text("具体观察（可选）") },
             placeholder = { Text("例如：做图片配对时选错两次，但很快调整好了。") },
-            supportingText = { Text("${state.query.length}/200") }
+            supportingText = { Text("${state.query.length}/200") },
+            shape = RoundedCornerShape(16.dp),
+            colors = TextFieldDefaults.colors(
+                focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                focusedIndicatorColor = Color.Transparent,
+                unfocusedIndicatorColor = Color.Transparent
+            )
         )
-        Spacer(Modifier.height(12.dp))
-        Button(onClick = onAsk, modifier = Modifier.fillMaxWidth().height(52.dp), enabled = !state.isWorking) {
-            Text(if (state.isWorking) "正在获取建议" else "获取育儿建议")
+        Spacer(Modifier.height(14.dp))
+        val canAct = !state.isWorking
+        Button(
+            onClick = onAskOnline,
+            enabled = canAct,
+            modifier = Modifier.fillMaxWidth().height(52.dp),
+            shape = RoundedCornerShape(16.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent, disabledContainerColor = Color.Transparent),
+            contentPadding = PaddingValues()
+        ) {
+            val buttonBrush = if (canAct) {
+                Brush.horizontalGradient(listOf(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.onPrimaryContainer))
+            } else {
+                Brush.horizontalGradient(listOf(MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.colorScheme.surfaceVariant))
+            }
+            Box(
+                modifier = Modifier.fillMaxSize().background(buttonBrush, RoundedCornerShape(16.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                if (state.isWorking) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("正在结合孩子数据分析…", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                } else {
+                    Text("✨ 获取智能建议", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = Color.White)
+                }
+            }
         }
-        OutlinedButton(onClick = onAskOnline, modifier = Modifier.fillMaxWidth().padding(top = 8.dp), enabled = !state.isWorking) {
-            Text("联网获取更详细建议")
-        }
-        OutlinedButton(onClick = onSubmitObservation, modifier = Modifier.fillMaxWidth().padding(top = 8.dp), enabled = !state.isWorking) {
-            Text("发给老师/康复师")
-        }
-        Text("先写观察 → 获取建议 → 需要时发给专业人员", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp))
-        if (state.isWorking) {
-            LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 12.dp))
-        }
-        Spacer(Modifier.height(16.dp))
-        StatusLine("本地训练记录", "${state.recordCount} 条")
+        OutlinedButton(
+            onClick = onAsk,
+            enabled = canAct,
+            modifier = Modifier.fillMaxWidth().padding(top = 10.dp).height(46.dp),
+            shape = RoundedCornerShape(14.dp)
+        ) { Text("本地快速建议（离线知识库）") }
+        TextButton(
+            onClick = onSubmitObservation,
+            enabled = canAct,
+            modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
+        ) { Text("发给老师/康复师", color = MaterialTheme.colorScheme.onSurfaceVariant) }
         Spacer(Modifier.height(8.dp))
-        StatusLine("安全状态", if (state.riskLabel == "SAFETY_STOP") "需要关注" else "正常", valueColor = if (state.riskLabel == "SAFETY_STOP") Warning else MaterialTheme.colorScheme.onSurface)
-        Spacer(Modifier.height(8.dp))
-        AgentStatusLine(status = state.agentStatus, working = state.isWorking)
+        CollapsibleSection("诊断信息") {
+            StatusLine("本地训练记录", "${state.recordCount} 条")
+            Spacer(Modifier.height(8.dp))
+            StatusLine("安全状态", if (state.riskLabel == "SAFETY_STOP") "需要关注" else "正常", valueColor = if (state.riskLabel == "SAFETY_STOP") Warning else MaterialTheme.colorScheme.onSurface)
+            Spacer(Modifier.height(8.dp))
+            AgentStatusLine(status = state.agentStatus, working = state.isWorking)
+        }
     }
 }
 
@@ -338,29 +401,76 @@ private fun ObservationPanel(state: ParentUiState, onQueryChange: (String) -> Un
 private fun ResultPanel(state: ParentUiState, modifier: Modifier) {
     SectionSurface(title = "支持建议", supporting = state.message, modifier = modifier) {
         if (state.suggestions.isEmpty()) {
-            Text("当前没有可展示的已审核建议。可补充更具体的观察后再次检索。", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Column(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+                Text("💡", style = MaterialTheme.typography.headlineMedium)
+                Text("写下一条观察，点击「获取智能建议」", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 8.dp))
+                Text("这里会生成结合孩子最近训练数据的个性化建议。", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp))
+            }
         } else {
+            val aiAdvice = state.sources.any { it.contains("AI") }
+            if (aiAdvice) {
+                Surface(shape = RoundedCornerShape(50), color = MaterialTheme.colorScheme.primaryContainer) {
+                    Text(
+                        "✨ AI 个性化 · 基于孩子训练数据",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                    )
+                }
+                Spacer(Modifier.height(12.dp))
+            }
             state.suggestions.forEachIndexed { index, suggestion ->
                 if (index > 0) HorizontalDivider(Modifier.padding(vertical = 12.dp))
                 Text(suggestion, style = MaterialTheme.typography.bodyLarge)
-                state.sources.getOrNull(index)?.let { source ->
-                    Text(source, modifier = Modifier.padding(top = 6.dp), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSecondaryContainer)
+                if (!aiAdvice) {
+                    state.sources.getOrNull(index)?.let { source ->
+                        Surface(
+                            shape = RoundedCornerShape(50),
+                            color = MaterialTheme.colorScheme.secondaryContainer,
+                            modifier = Modifier.padding(top = 8.dp)
+                        ) {
+                            Text(
+                                source,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                maxLines = 1,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                            )
+                        }
+                    }
                 }
             }
         }
         if (state.suggestions.isNotEmpty() || state.agentRunId != null) {
-            HorizontalDivider(Modifier.padding(vertical = 16.dp))
-            Text("回答依据", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
-            Spacer(Modifier.height(6.dp))
-            StatusLine("来源约束", "已审核资料 · 同一领域最多 2 条 · 总数最多 3 条")
-            Spacer(Modifier.height(6.dp))
-            StatusLine("风险筛查", parentRiskLabel(state.riskLabel), valueColor = if (state.riskLabel == "SAFETY_STOP") Warning else MaterialTheme.colorScheme.onSurface)
-            Spacer(Modifier.height(6.dp))
-            StatusLine("决策路由", parentRouteLabel(state.route))
+            HorizontalDivider(Modifier.padding(vertical = 8.dp))
+            CollapsibleSection("依据与运行记录") {
+                StatusLine("来源约束", "已审核资料 · 同一领域最多 2 条 · 总数最多 3 条")
+                Spacer(Modifier.height(6.dp))
+                StatusLine("风险筛查", parentRiskLabel(state.riskLabel), valueColor = if (state.riskLabel == "SAFETY_STOP") Warning else MaterialTheme.colorScheme.onSurface)
+                Spacer(Modifier.height(6.dp))
+                StatusLine("决策路由", parentRouteLabel(state.route))
+                state.agentRunId?.let { runId ->
+                    Spacer(Modifier.height(6.dp))
+                    StatusLine("运行记录", runId)
+                }
+            }
         }
-        state.agentRunId?.let { runId ->
-            HorizontalDivider(Modifier.padding(vertical = 16.dp))
-            Text("运行记录：$runId", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable
+private fun CollapsibleSection(label: String, content: @Composable () -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).clickable { expanded = !expanded }.padding(vertical = 8.dp, horizontal = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(label, modifier = Modifier.weight(1f), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(if (expanded) "▴" else "▾", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        AnimatedVisibility(visible = expanded) {
+            Column(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) { content() }
         }
     }
 }

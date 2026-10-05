@@ -792,6 +792,7 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
         3. 建议要结合孩子的实际能力水平，不要建议超出当前能力的任务
         4. 如果观察到危险信号（能力倒退、持续哭闹、回避所有任务），建议咨询专业人员
         5. 用温暖、鼓励的语气，像朋友一样交流，控制在 300 字以内
+        6. 不要使用任何 Markdown 符号（如 **、##、-），用自然的中文分段纯文本叙述
     """.trimIndent()
 
     fun askParentQuestionOnline() {
@@ -847,11 +848,13 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                 val result = chatGateway().chat(systemPrompt, emptyList(), query)
                 result.fold(
                     onSuccess = { answer ->
+                        // 纯文本展示：去掉模型可能残留的 Markdown 加粗/标题符号
+                        val cleaned = answer.replace("**", "").replace("##", "").trim()
                         _uiState.update {
                             it.copy(parent = it.parent.copy(
                                 isWorking = false,
                                 message = "已基于孩子数据获取个性化建议",
-                                suggestions = listOf(answer),
+                                suggestions = listOf(cleaned),
                                 sources = listOf("AI 个性化建议（${provider.label} · 基于孩子训练数据）"),
                                 agentStatus = agentStateLabel(AgentRunState.COMPLETED)
                             ))
