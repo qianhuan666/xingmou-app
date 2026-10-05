@@ -34,7 +34,9 @@ data class QuestionDefinition(
     /** 题库难度 1-5；旧题目默认按第 1 级兼容。 */
     val difficulty: Int = 1,
     /** 能力标签，供专业方案和报表做稳定映射。 */
-    val skillTag: String = ""
+    val skillTag: String = "",
+    /** 稳定的模块/难度变式组标识，便于抽题、复盘和后续替换素材。 */
+    val variantGroup: String = ""
 )
 
 private fun question(
@@ -160,7 +162,7 @@ object QuestionCatalog {
      * 将现有精编题按模块内变式顺序标注难度：第一题为基础，后续题逐步增加干扰。
      * 真实扩展题可在构造时显式提供 difficulty；这里仅为旧 Web 题补齐可用的等级元数据。
      */
-    val moduleQuestionBank: List<QuestionDefinition> = rawModuleQuestionBank
+    private val curatedModuleQuestionBank: List<QuestionDefinition> = rawModuleQuestionBank
         .groupBy { it.moduleId }
         .values
         .flatMap { moduleQuestions ->
@@ -177,7 +179,13 @@ object QuestionCatalog {
             }
         }
 
-    val firstCourseQuestions: List<QuestionDefinition> = moduleQuestionBank.filter { it.moduleId == "M02" }
+    /** Web 精编题 + 本地审核扩展变式。 */
+    val moduleQuestionBank: List<QuestionDefinition> = curatedModuleQuestionBank + ExpandedQuestionFactory.build()
+
+    /** 无专业方案时使用的首发题集，保持原有课程负担；方案训练再进入扩展变式。 */
+    val starterCourseQuestions: List<QuestionDefinition> = curatedModuleQuestionBank
+
+    val firstCourseQuestions: List<QuestionDefinition> = starterCourseQuestions.filter { it.moduleId == "M02" }
 
     val fullCourseQuestions: List<QuestionDefinition> = moduleQuestionBank
 }

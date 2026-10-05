@@ -1173,7 +1173,7 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
             planPolicy.planVersion == childSnapshot.coursePlanVersion
         val effectiveSupportLevel = if (samePlan) childSnapshot.supportLevel else planPolicy?.supportLevel ?: childSnapshot.supportLevel
         val plannedQuestions = PlanQuestionPolicy.selectQuestions(
-            QuestionCatalog.fullCourseQuestions,
+            if (planPolicy == null) QuestionCatalog.starterCourseQuestions else QuestionCatalog.fullCourseQuestions,
             planPolicy,
             effectiveDifficulty
         )
