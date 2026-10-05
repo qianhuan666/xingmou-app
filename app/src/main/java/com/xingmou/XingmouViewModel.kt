@@ -1954,19 +1954,15 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
         val existing = database.homeTaskDao().latestForChild(childId)
         val task = if (latestPlan != null && existing?.planId != latestPlan.planId) {
             createHomeTaskFromPlan(latestPlan).also { database.homeTaskDao().upsert(it) }
-        } else existing ?: HomeTaskEntity(
-            taskId = "home-$childId-matching",
-            childId = childId,
-            title = "五分钟图片配对陪练",
-            description = "准备两个熟悉的图片，先示范一次，再邀请孩子自己试试。出现疲劳或拒绝时暂停。",
-            status = "pending",
-            frequency = "每日 1–2 次",
-            durationMinutes = 5,
-            supportLevel = "L1",
-            stopConditions = "出现疲劳、拒绝或风险时暂停",
-            source = "LOCAL_TEMPLATE",
-            updatedAt = System.currentTimeMillis()
-        ).also { database.homeTaskDao().upsert(it) }
+        } else if (existing == null) {
+            defaultMatchingHomeTask(childId).also { database.homeTaskDao().upsert(it) }
+        } else if (existing.source == "LOCAL_TEMPLATE") {
+            // 本地模板文案升级：保留完成状态与示范进度
+            defaultMatchingHomeTask(childId).copy(
+                status = existing.status,
+                demoStep = existing.demoStep
+            ).also { database.homeTaskDao().upsert(it) }
+        } else existing
         val safetyStopped = database.safetyFlagDao().observeActive(childId).first().isNotEmpty()
         val weekStart = System.currentTimeMillis() - 7 * 24 * 60 * 60 * 1000L
         val weekTasks = database.homeTaskDao().allForChild(childId).filter { it.updatedAt >= weekStart }
@@ -2611,6 +2607,20 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
         loadHomeSupport(childId)
     }
 
+    private fun defaultMatchingHomeTask(childId: String) = HomeTaskEntity(
+        taskId = "home-$childId-matching",
+        childId = childId,
+        title = "相同图片配对练习（5 分钟）",
+        description = "准备 2～3 对完全相同的图片卡（孩子熟悉的日常物品照片）。先由家长示范：拿起一张，找到相同的放在一起，同时说出名称；再把卡片打乱摆开，请孩子找出相同的两张，配对成功立即肯定。熟练后再过渡到相似图片或相关事物配对（如牙刷和杯子）。出现疲劳或拒绝时暂停。",
+        status = "pending",
+        frequency = "每日 1–2 次",
+        durationMinutes = 5,
+        supportLevel = "L1",
+        stopConditions = "出现疲劳、拒绝或风险时暂停",
+        source = "LOCAL_TEMPLATE",
+        updatedAt = System.currentTimeMillis()
+    )
+
     private fun createHomeTaskFromPlan(plan: PlanVersionEntity): HomeTaskEntity {
         val payload = plan.payloadJson
         val task = jsonString(payload, "task") ?: "图片配对"
@@ -2802,7 +2812,7 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
     private fun toChildSummary(child: ChildEntity) = ChildSummaryUi(child.childId, child.alias, child.ageBand, child.status)
 }
 
-private val HOME_DEMO_STEPS = listOf("准备", "示范", "邀请", "回应", "结束")
+private val HOME_DEMO_STEPS = listOf("准备卡片", "家长示范", "孩子尝试", "及时肯定", "整理结束")
 
 private val CARE_STAGES = listOf(
     "intake" to "接案",

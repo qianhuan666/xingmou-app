@@ -251,7 +251,7 @@ private fun HomeTaskPanel(
 
 @Composable
 private fun DemoSteps(current: Int, disabled: Boolean) {
-    val steps = listOf("准备", "示范", "邀请", "回应", "结束")
+    val steps = listOf("准备卡片", "家长示范", "孩子尝试", "及时肯定", "整理结束")
     Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
         steps.forEachIndexed { index, step ->
             Text(
