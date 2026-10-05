@@ -296,13 +296,13 @@ private fun homeStatusLabel(status: String): String = when (status) {
     else -> "待完成"
 }
 
-private data class QuickObservation(val emoji: String, val label: String, val text: String)
+private data class QuickObservation(val label: String, val text: String)
 
 private val QUICK_OBSERVATIONS = listOf(
-    QuickObservation("😊", "配合不错", "孩子今天配合度不错，完成了任务"),
-    QuickObservation("😴", "容易分心", "孩子今天状态不太好，容易分心"),
-    QuickObservation("🧩", "遇到困难", "孩子在某个环节遇到了困难"),
-    QuickObservation("😣", "情绪波动", "孩子情绪有波动，需要安抚")
+    QuickObservation("配合不错", "孩子今天配合度不错，完成了任务"),
+    QuickObservation("容易分心", "孩子今天状态不太好，容易分心"),
+    QuickObservation("遇到困难", "孩子在某个环节遇到了困难"),
+    QuickObservation("情绪波动", "孩子情绪有波动，需要安抚")
 )
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -321,7 +321,7 @@ private fun ObservationPanel(state: ParentUiState, onQueryChange: (String) -> Un
                     color = MaterialTheme.colorScheme.secondaryContainer
                 ) {
                     Text(
-                        "${option.emoji} ${option.label}",
+                        option.label,
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSecondaryContainer,
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
@@ -371,7 +371,7 @@ private fun ObservationPanel(state: ParentUiState, onQueryChange: (String) -> Un
                         Text("正在结合孩子数据分析…", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 } else {
-                    Text("✨ 获取智能建议", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = Color.White)
+                    Text("获取智能建议", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = Color.White)
                 }
             }
         }
@@ -402,8 +402,7 @@ private fun ResultPanel(state: ParentUiState, modifier: Modifier) {
     SectionSurface(title = "支持建议", supporting = state.message, modifier = modifier) {
         if (state.suggestions.isEmpty()) {
             Column(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
-                Text("💡", style = MaterialTheme.typography.headlineMedium)
-                Text("写下一条观察，点击「获取智能建议」", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 8.dp))
+                Text("写下一条观察，点击「获取智能建议」", style = MaterialTheme.typography.titleMedium)
                 Text("这里会生成结合孩子最近训练数据的个性化建议。", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp))
             }
         } else {
@@ -411,7 +410,7 @@ private fun ResultPanel(state: ParentUiState, modifier: Modifier) {
             if (aiAdvice) {
                 Surface(shape = RoundedCornerShape(50), color = MaterialTheme.colorScheme.primaryContainer) {
                     Text(
-                        "✨ AI 个性化 · 基于孩子训练数据",
+                        "AI 个性化 · 基于孩子训练数据",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onPrimaryContainer,
                         modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
