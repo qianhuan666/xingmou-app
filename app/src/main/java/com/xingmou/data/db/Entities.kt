@@ -127,6 +127,8 @@ data class ModuleAdaptiveStateEntity(
     val childId: String,
     val moduleId: String,
     val baselineVersion: Int,
+    val planId: String? = null,
+    val planVersion: Int? = null,
     val currentDifficulty: Int,
     val currentSupportLevel: String,
     val correctStreak: Int,

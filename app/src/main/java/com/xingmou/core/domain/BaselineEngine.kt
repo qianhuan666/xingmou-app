@@ -29,7 +29,8 @@ class BaselineEngine(
 ) {
     private val gson = Gson()
 
-    fun newSession(now: Long): BaselineSession = BaselineSession(
+    fun newSession(now: Long, version: Int = 1): BaselineSession = BaselineSession(
+        version = version.coerceAtLeast(1),
         status = BaselineStatus.IN_PROGRESS,
         startedAt = now
     )

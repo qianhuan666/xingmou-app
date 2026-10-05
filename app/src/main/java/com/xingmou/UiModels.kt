@@ -289,6 +289,20 @@ data class ParentDomainStatUi(
     val count: Int
 )
 
+/** 家长端与专业端共用的模块自适应快照，来源于本地 Room。 */
+data class ModuleAdaptiveUi(
+    val moduleId: String,
+    val moduleName: String,
+    val difficulty: Int,
+    val supportLevel: String,
+    val correctStreak: Int,
+    val errorStreak: Int,
+    val lastQuestionId: String?,
+    val baselineVersion: Int,
+    val planVersion: Int?,
+    val updatedAt: Long
+)
+
 data class ParentUiState(
     val query: String = "",
     val route: KnowledgeRoute? = null,
@@ -299,6 +313,7 @@ data class ParentUiState(
     val riskLabel: String = "未评估",
     val profile: RainbowProfileUi = RainbowProfileUi(),
     val domainOverview: List<ParentDomainStatUi> = emptyList(),
+    val adaptiveOverview: List<ModuleAdaptiveUi> = emptyList(),
     val trendPoints: List<ReportTrendPointUi> = emptyList(),
     val recentTrainingDetails: List<TrainingDetailUi> = emptyList(),
     val isWorking: Boolean = false,
@@ -358,6 +373,7 @@ data class ProfessionalUiState(
     ),
     val reportTrend: List<ReportTrendPointUi> = emptyList(),
     val reportGroups: List<ReportGroupUi> = emptyList(),
+    val adaptiveOverview: List<ModuleAdaptiveUi> = emptyList(),
     val recentTrainingDetails: List<TrainingDetailUi> = emptyList(),
     val assessmentId: String = "GESELL",
     val assessmentName: String = "Gesell",

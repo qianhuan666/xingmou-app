@@ -29,15 +29,15 @@ class XingmouAssetUiInstrumentedTest {
                     ),
                     baseline = BaselineUiState(),
                     accessibility = AccessibilityUiState(speechEnabled = false),
-                    onChoice = {},
                     onStartBaseline = {},
                     onResumeBaseline = {},
                     onLeaveBaseline = {},
                     onRestartBaseline = {},
                     onBaselineAnswer = {},
-                    onStartCourse = {},
-                    onLeaveCourse = {},
-                    onResumeCourse = {},
+                    onOpenCurriculumLevel = {},
+                    onAnswerCurriculumActivity = {},
+                    onLeaveCurriculumLevel = {},
+                    onChooseCurriculumInterest = {},
                     onPause = {},
                     onResume = {},
                     onSpeechEnabledChange = {},
@@ -46,7 +46,16 @@ class XingmouAssetUiInstrumentedTest {
                     onLargeTextChange = {},
                     onHighContrastChange = {},
                     onSlowMotionChange = {},
-                    onInterestChange = {}
+                    onInterestChange = {},
+                    onSendChatMessage = {},
+                    onSelectChatProvider = {},
+                    onOpenApiKey = {},
+                    onTogglePerception = {},
+                    onTogglePerceptionPreview = {},
+                    onAttachPerceptionPreviewView = {},
+                    onDetachPerceptionPreviewView = {},
+                    onDetectPermissionResolved = {},
+                    onDetectChooseManual = {}
                 )
             }
         }

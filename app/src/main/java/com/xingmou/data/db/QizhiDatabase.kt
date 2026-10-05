@@ -38,7 +38,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         PerceptionSessionEntity::class,
         ModuleAdaptiveStateEntity::class
     ],
-    version = 15,
+    version = 16,
     exportSchema = false
 )
 abstract class QizhiDatabase : RoomDatabase() {
@@ -73,7 +73,7 @@ abstract class QizhiDatabase : RoomDatabase() {
                     context.applicationContext,
                     QizhiDatabase::class.java,
                     "qizhi_training.db"
-                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15).build().also {
+                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16).build().also {
                     INSTANCE = it
                     DatabaseSeeder.seedAsync(it)
                 }
@@ -325,6 +325,13 @@ abstract class QizhiDatabase : RoomDatabase() {
                 )
                 db.execSQL("CREATE INDEX IF NOT EXISTS `index_module_adaptive_states_childId` ON `module_adaptive_states` (`childId`)")
                 db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_module_adaptive_states_childId_moduleId` ON `module_adaptive_states` (`childId`, `moduleId`)")
+            }
+        }
+
+        val MIGRATION_15_16 = object : Migration(15, 16) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE module_adaptive_states ADD COLUMN planId TEXT")
+                db.execSQL("ALTER TABLE module_adaptive_states ADD COLUMN planVersion INTEGER")
             }
         }
     }
