@@ -43,7 +43,7 @@ import com.xingmou.ParentUiState
 import com.xingmou.RainbowProfileUi
 import com.xingmou.parentRiskLabel
 import com.xingmou.parentRouteLabel
-import com.xingmou.core.safety.SafeResponses
+
 import com.xingmou.ui.components.AgentStatusLine
 import com.xingmou.ui.components.SectionSurface
 import com.xingmou.ui.components.StatusLine
@@ -57,6 +57,7 @@ fun ParentScreen(
     state: ParentUiState,
     onQueryChange: (String) -> Unit,
     onAsk: () -> Unit,
+    onAskOnline: () -> Unit,
     onCompleteTask: () -> Unit,
     onSkipTask: () -> Unit,
     onPauseTask: () -> Unit,
@@ -75,19 +76,19 @@ fun ParentScreen(
                 selected = selectedSection.value == ParentSection.COMPANIONSHIP,
                 onClick = { selectedSection.value = ParentSection.COMPANIONSHIP },
                 icon = { Text("伴", style = MaterialTheme.typography.titleLarge) },
-                label = { Text("陪练") }
+                label = { Text("今日任务") }
             )
             NavigationRailItem(
                 selected = selectedSection.value == ParentSection.DATA,
                 onClick = { selectedSection.value = ParentSection.DATA },
                 icon = { Text("数", style = MaterialTheme.typography.titleLarge) },
-                label = { Text("数据") }
+                label = { Text("成长记录") }
             )
             NavigationRailItem(
                 selected = selectedSection.value == ParentSection.WORKBENCH,
                 onClick = { selectedSection.value = ParentSection.WORKBENCH },
                 icon = { Text("台", style = MaterialTheme.typography.titleLarge) },
-                label = { Text("工作台") }
+                label = { Text("求助建议") }
             )
         }
         Column(
@@ -96,20 +97,29 @@ fun ParentScreen(
         ) {
             Text(
                 when (selectedSection.value) {
-                    ParentSection.COMPANIONSHIP -> "家庭陪练"
-                    ParentSection.DATA -> "儿童数据"
-                    ParentSection.WORKBENCH -> "家长工作台"
+                    ParentSection.COMPANIONSHIP -> "今日任务"
+                    ParentSection.DATA -> "成长记录"
+                    ParentSection.WORKBENCH -> "求助建议"
                 },
                 style = MaterialTheme.typography.headlineMedium
             )
             Text(
                 when (selectedSection.value) {
-                    ParentSection.COMPANIONSHIP -> "按今天的节奏陪孩子完成一个小任务。"
-                    ParentSection.DATA -> "查看能力画像和最近一周的家庭训练变化。"
-                    ParentSection.WORKBENCH -> "记录观察，并从本地已审核知识中寻找可执行建议。"
+                    ParentSection.COMPANIONSHIP -> "陪孩子完成今天的练习任务，记录孩子的状态。"
+                    ParentSection.DATA -> "查看孩子的能力画像、训练进度和近期变化。"
+                    ParentSection.WORKBENCH -> "记录孩子的表现，获取专业建议，必要时发给老师。"
                 },
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+            // 底部免责声明（仅在工作台显示）
+            if (selectedSection.value == ParentSection.WORKBENCH) {
+                Text(
+                    "本应用不构成医学诊断或治疗建议。涉及诊疗判断时，请联系有资质的专业人员。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 24.dp)
+                )
+            }
             when (selectedSection.value) {
                 ParentSection.COMPANIONSHIP -> {
                     HomeTaskPanel(
@@ -133,19 +143,15 @@ fun ParentScreen(
                         val wide = maxWidth >= 860.dp
                         if (wide) {
                             Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                                ObservationPanel(state, onQueryChange, onAsk, onSubmitObservation, Modifier.weight(1.08f))
+                                ObservationPanel(state, onQueryChange, onAsk, onSubmitObservation, onAskOnline, Modifier.weight(1.08f))
                                 ResultPanel(state, Modifier.weight(0.92f))
                             }
                         } else {
                             Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                                ObservationPanel(state, onQueryChange, onAsk, onSubmitObservation, Modifier.fillMaxWidth())
+                                ObservationPanel(state, onQueryChange, onAsk, onSubmitObservation, onAskOnline, Modifier.fillMaxWidth())
                                 ResultPanel(state, Modifier.fillMaxWidth())
                             }
                         }
-                    }
-                    SectionSurface(title = "边界说明", containerColor = MaterialTheme.colorScheme.secondaryContainer) {
-                        Text(SafeResponses.DISCLAIMER)
-                        Text("涉及诊疗判断、持续加重或紧急风险时，请联系有资质的专业人员。", modifier = Modifier.padding(top = 8.dp))
                     }
                 }
             }
@@ -176,10 +182,16 @@ private fun HomeTaskPanel(
         }
         StatusLine("任务状态", homeStatusLabel(state.homeTaskStatus))
         Spacer(Modifier.height(10.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-            Button(onClick = onComplete, enabled = state.homeTaskStatus == "pending" && !state.homeTaskSafetyStopped, modifier = Modifier.weight(1f)) { Text("完成") }
-            OutlinedButton(onClick = onPause, enabled = state.homeTaskStatus == "pending" && !state.homeTaskSafetyStopped, modifier = Modifier.weight(1f)) { Text("暂停") }
-            TextButton(onClick = onSkip, enabled = state.homeTaskStatus == "pending" && !state.homeTaskSafetyStopped, modifier = Modifier.weight(1f)) { Text("跳过") }
+        if (state.homeTaskStatus == "completed") {
+            // 任务已完成，隐藏操作按钮
+            Text("✓ 今日任务已完成", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(vertical = 8.dp))
+            TextButton(onClick = onComplete, modifier = Modifier.fillMaxWidth()) { Text("重新做一次") }
+        } else {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                Button(onClick = onComplete, enabled = state.homeTaskStatus == "pending" && !state.homeTaskSafetyStopped, modifier = Modifier.weight(1f)) { Text("完成") }
+                OutlinedButton(onClick = onPause, enabled = state.homeTaskStatus == "pending" && !state.homeTaskSafetyStopped, modifier = Modifier.weight(1f)) { Text("暂停") }
+                TextButton(onClick = onSkip, enabled = state.homeTaskStatus == "pending" && !state.homeTaskSafetyStopped, modifier = Modifier.weight(1f)) { Text("跳过") }
+            }
         }
         HorizontalDivider(Modifier.padding(vertical = 14.dp))
         Text("5 分钟陪练示范", style = MaterialTheme.typography.titleMedium)
@@ -193,6 +205,9 @@ private fun HomeTaskPanel(
         HorizontalDivider(Modifier.padding(vertical = 14.dp))
         Text("今天的状态（点一下即记录）", style = MaterialTheme.typography.titleMedium)
         MoodQuickRow(selected = state.feedbackMood, onQuickRecord = onQuickRecordMood)
+        if (state.feedbackMood.isNotEmpty()) {
+            Text("✓ 已记录：${state.feedbackMood}", modifier = Modifier.padding(top = 6.dp), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelMedium)
+        }
         OutlinedTextField(
             value = state.feedbackNote,
             onValueChange = onNoteChange,
@@ -263,32 +278,57 @@ private fun homeStatusLabel(status: String): String = when (status) {
 }
 
 @Composable
-private fun ObservationPanel(state: ParentUiState, onQueryChange: (String) -> Unit, onAsk: () -> Unit, onSubmitObservation: () -> Unit, modifier: Modifier) {
-    SectionSurface(title = "写下观察", supporting = "建议包含发生场景、持续时间和孩子当时的状态。", modifier = modifier) {
+private fun ObservationPanel(state: ParentUiState, onQueryChange: (String) -> Unit, onAsk: () -> Unit, onSubmitObservation: () -> Unit, onAskOnline: () -> Unit, modifier: Modifier) {
+    SectionSurface(title = "写下观察", supporting = "用简单的话描述孩子今天的表现，不用写很多。", modifier = modifier) {
+        // 快捷选项
+        Text("常用观察模板：", style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(bottom = 6.dp))
+        val quickOptions = listOf(
+            "孩子今天配合度不错，完成了任务",
+            "孩子今天状态不太好，容易分心",
+            "孩子在某个环节遇到了困难",
+            "孩子情绪有波动，需要安抚"
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
+            quickOptions.forEach { option ->
+                Surface(
+                    onClick = { onQueryChange(option) },
+                    modifier = Modifier.weight(1f),
+                    shape = MaterialTheme.shapes.small,
+                    color = MaterialTheme.colorScheme.secondaryContainer
+                ) {
+                    Text(option, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(vertical = 6.dp, horizontal = 4.dp), maxLines = 2)
+                }
+            }
+        }
+        Spacer(Modifier.height(10.dp))
         OutlinedTextField(
             value = state.query,
             onValueChange = onQueryChange,
             modifier = Modifier.fillMaxWidth(),
-            minLines = 4,
-            maxLines = 7,
-            label = { Text("具体观察") },
-            placeholder = { Text("例如：今天做图片配对时，连续两次选错后开始捂耳朵。") },
-            supportingText = { Text("${state.query.length}/240") }
+            minLines = 3,
+            maxLines = 5,
+            label = { Text("具体观察（可选）") },
+            placeholder = { Text("例如：做图片配对时选错两次，但很快调整好了。") },
+            supportingText = { Text("${state.query.length}/200") }
         )
         Spacer(Modifier.height(12.dp))
         Button(onClick = onAsk, modifier = Modifier.fillMaxWidth().height(52.dp), enabled = !state.isWorking) {
-            Text(if (state.isWorking) "正在检索" else "检索支持建议")
+            Text(if (state.isWorking) "正在获取建议" else "获取育儿建议")
+        }
+        OutlinedButton(onClick = onAskOnline, modifier = Modifier.fillMaxWidth().padding(top = 8.dp), enabled = !state.isWorking) {
+            Text("联网获取更详细建议")
         }
         OutlinedButton(onClick = onSubmitObservation, modifier = Modifier.fillMaxWidth().padding(top = 8.dp), enabled = !state.isWorking) {
-            Text("提交家庭观察给专业人员")
+            Text("发给老师/康复师")
         }
+        Text("先写观察 → 获取建议 → 需要时发给专业人员", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp))
         if (state.isWorking) {
             LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 12.dp))
         }
         Spacer(Modifier.height(16.dp))
         StatusLine("本地训练记录", "${state.recordCount} 条")
         Spacer(Modifier.height(8.dp))
-        StatusLine("风险路由", state.riskLabel, valueColor = if (state.riskLabel == "SAFETY_STOP") Warning else MaterialTheme.colorScheme.onSurface)
+        StatusLine("安全状态", if (state.riskLabel == "SAFETY_STOP") "需要关注" else "正常", valueColor = if (state.riskLabel == "SAFETY_STOP") Warning else MaterialTheme.colorScheme.onSurface)
         Spacer(Modifier.height(8.dp))
         AgentStatusLine(status = state.agentStatus, working = state.isWorking)
     }
@@ -328,8 +368,10 @@ private fun ResultPanel(state: ParentUiState, modifier: Modifier) {
 @Composable
 private fun ParentProfileCard(profile: RainbowProfileUi) {
     if (!profile.present) {
-        SectionSurface(title = "平台初始能力画像", supporting = "儿童完成六题起点小测后自动生成。") {
-            Text("尚无画像记录。可先在儿童端完成起点小测。", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        SectionSurface(title = "平台初始能力画像", supporting = "儿童完成基线测试后自动生成。") {
+            Text("孩子还没有完成基线测试。", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(vertical = 4.dp))
+            Text("基线测试有 26 道简单题目，大约 5-8 分钟完成。完成后这里会显示孩子的能力画像和个性化训练建议。", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp, bottom = 4.dp))
+            Text("💡 点击下方'今日任务'，陪孩子开始第一次练习。", color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 4.dp))
         }
         return
     }
@@ -421,7 +463,9 @@ private fun DomainRadarChart(domains: List<ParentDomainStatUi>) {
 private fun ParentTrainingStatsCard(state: ParentUiState) {
     SectionSurface(title = "六域训练概览", supporting = "来自当前儿童的本地训练记录，展示练习量与正确率。") {
         if (state.domainOverview.isEmpty()) {
-            Text("暂无六域训练记录。", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("孩子还没有开始训练。", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(vertical = 4.dp))
+            Text("完成基线测试后，会解锁适合孩子的训练课程。训练记录会在这里以图表形式展示，帮助您了解孩子在各个能力域的进步。", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp, bottom = 4.dp))
+            Text("💡 先在儿童端完成基线测试，解锁专属训练计划。", color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 4.dp))
         } else {
             DomainRadarChart(state.domainOverview)
             HorizontalDivider(Modifier.padding(vertical = 10.dp))

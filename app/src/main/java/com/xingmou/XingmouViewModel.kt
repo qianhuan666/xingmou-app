@@ -132,6 +132,7 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
      */
     private fun isProviderReady(provider: ChatLlmProvider): Boolean =
         if (provider == ChatLlmProvider.DOUBAO) BuildConfig.ARK_API_KEY.isNotBlank() || apiKeyStore.isConfigured(provider)
+        else if (provider == ChatLlmProvider.DEEPSEEK) BuildConfig.DEEPSEEK_API_KEY.isNotBlank() || apiKeyStore.isConfigured(provider)
         else apiKeyStore.isConfigured(provider)
     private var activeChildId: String? = null
     private var pendingImport: com.xingmou.core.consent.AuthorizedChildExport? = null
@@ -469,7 +470,8 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                 questionCameraWanted = true
                 refreshPerception()
                 viewModelScope.launch {
-                    delay(1_500)
+                    // 模拟器调试：liteMode 下 30 秒后才降级，方便观察检测面板 UI
+                    delay(30_000)
                     if (perceptionManager?.liteMode == true &&
                         detectController.session?.questionId == q.id) {
                         forceManualFallback(q.id)
@@ -710,7 +712,13 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
         val provider = _uiState.value.child.chatProvider
         return ChatLlmGateway(
             provider = provider,
-            keyProvider = { apiKeyStore.get(provider) },
+            keyProvider = {
+                when (provider) {
+                    ChatLlmProvider.DEEPSEEK -> BuildConfig.DEEPSEEK_API_KEY.takeIf { it.isNotBlank() } ?: apiKeyStore.get(provider)
+                    ChatLlmProvider.DOUBAO -> BuildConfig.ARK_API_KEY.takeIf { it.isNotBlank() } ?: apiKeyStore.get(provider)
+                    else -> apiKeyStore.get(provider)
+                }
+            },
             modelOrEndpoint = apiKeyStore.modelEndpoint(provider)
         )
     }
@@ -766,6 +774,107 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                     }
                 }
             )
+        }
+    }
+
+    private fun buildParentOnlineSystemPrompt(childContext: String): String = """
+        你是一位专业的儿童言语治疗师和家庭教育指导师。你正在为一个有特殊需要的孩子的家长提供建议。
+
+        【孩子背景信息】
+        $childContext
+
+        【家长当前观察】
+        家长描述了以下情况，请结合孩子的背景给出个性化建议。
+
+        要求：
+        1. 先分析孩子当前状态与背景的关联（如：孩子在语言域较弱，家长观察到的困难可能与这个相关）
+        2. 给出 3-5 条具体建议，每条包含：做什么、怎么做、什么时候做
+        3. 建议要结合孩子的实际能力水平，不要建议超出当前能力的任务
+        4. 如果观察到危险信号（能力倒退、持续哭闹、回避所有任务），建议咨询专业人员
+        5. 用温暖、鼓励的语气，像朋友一样交流，控制在 300 字以内
+    """.trimIndent()
+
+    fun askParentQuestionOnline() {
+        val query = _uiState.value.parent.query.trim()
+        if (query.isBlank()) {
+            _uiState.update { it.copy(parent = it.parent.copy(message = "请先写下一个具体观察。", riskLabel = "需要补充")) }
+            return
+        }
+        val provider = _uiState.value.child.chatProvider
+        if (!isProviderReady(provider)) {
+            _uiState.update { it.copy(parent = it.parent.copy(message = "请先在设置中配置 ${provider.label} 的 API Key，或使用本地知识库。", riskLabel = "未配置")) }
+            return
+        }
+        _uiState.update { it.copy(parent = it.parent.copy(isWorking = true, message = "正在分析孩子数据并获取建议…", agentStatus = agentStateLabel(AgentRunState.CREATED))) }
+        viewModelScope.launch {
+            runCatching {
+                // 获取孩子训练数据
+                val records = database.trainingRecordDao().recentForChild(childId)
+                val profile = database.abilityProfileDao().latestForChild(childId)
+                val recentFeedback = database.homeFeedbackDao().recentForChild(childId, 7)
+
+                // 构建孩子上下文
+                val childContext = buildString {
+                    appendLine("- 训练记录：最近完成 ${records.size} 次训练")
+                    if (records.isNotEmpty()) {
+                        val correct = records.count { it.correct }
+                        val accuracy = correct * 100 / records.size
+                        appendLine("- 正确率：$accuracy%（${correct}/${records.size}）")
+                        val domains = records.groupBy { it.domain }.map { (d, r) ->
+                            val c = r.count { it.correct }
+                            "$d 域 ${c * 100 / r.size}% (${c}/${r.size})"
+                        }
+                        appendLine("- 各域表现：${domains.joinToString(", ")}")
+                    }
+                    if (profile != null) {
+                        val scores = parseProfileScores(profile.scoresJson)
+                        val weakDomains = scores.filter { it.value < 50 }.map { DomainCatalog.find(it.key)?.name ?: it.key }
+                        if (weakDomains.isNotEmpty()) {
+                            appendLine("- 需要加强的域：${weakDomains.joinToString("、")}")
+                        }
+                        val strongDomains = scores.filter { it.value >= 70 }.map { DomainCatalog.find(it.key)?.name ?: it.key }
+                        if (strongDomains.isNotEmpty()) {
+                            appendLine("- 优势域：${strongDomains.joinToString("、")}")
+                        }
+                    }
+                    if (recentFeedback.isNotEmpty()) {
+                        val latest = recentFeedback.first()
+                        appendLine("- 最近状态：${latest.mood}（${java.text.SimpleDateFormat("MM-dd").format(java.util.Date(latest.createdAt))}）")
+                    }
+                }
+
+                val systemPrompt = buildParentOnlineSystemPrompt(childContext)
+                val result = chatGateway().chat(systemPrompt, emptyList(), query)
+                result.fold(
+                    onSuccess = { answer ->
+                        _uiState.update {
+                            it.copy(parent = it.parent.copy(
+                                isWorking = false,
+                                message = "已基于孩子数据获取个性化建议",
+                                suggestions = listOf(answer),
+                                sources = listOf("AI 个性化建议（${provider.label} · 基于孩子训练数据）"),
+                                agentStatus = agentStateLabel(AgentRunState.COMPLETED)
+                            ))
+                        }
+                    },
+                    onFailure = { err ->
+                        val reason = when (err.message) {
+                            "api_key_missing" -> "请先在设置中配置 ${provider.label} 的 API Key"
+                            "network_error" -> "网络连接失败，请检查网络后重试"
+                            "http_429" -> "请求太频繁，请稍后再试"
+                            "http_401", "http_403" -> "API Key 无效，请检查配置"
+                            else -> "获取在线建议失败，请稍后重试"
+                        }
+                        _uiState.update {
+                            it.copy(parent = it.parent.copy(
+                                isWorking = false,
+                                message = reason,
+                                agentStatus = agentStateLabel(AgentRunState.FAILED)
+                            ))
+                        }
+                    }
+                )
+            }
         }
     }
 

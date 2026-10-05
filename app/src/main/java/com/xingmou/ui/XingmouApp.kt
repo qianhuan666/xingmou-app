@@ -260,17 +260,12 @@ private fun ChildEntryScreen(
                 }
             }
         }
-        Text(
-            text = "⚙ 家长 / 老师 · 长按进入",
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(12.dp)
-                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.7f), RoundedCornerShape(10.dp))
-                .pointerInput(Unit) { detectTapGestures(onLongPress = { onOpenAdult() }) }
-                .padding(horizontal = 12.dp, vertical = 8.dp)
-        )
+        TextButton(
+            onClick = { onOpenAdult() },
+            modifier = Modifier.align(Alignment.BottomEnd).padding(bottom = 80.dp, end = 12.dp)
+        ) {
+            Text("⚙ 家长 / 老师 · 点击进入")
+        }
         val expanding = expandingAvatar.value
         if (expanding != null) {
             val baseDp = (expanding.sizePx / density.density).dp
@@ -779,6 +774,7 @@ private fun PortContent(
             onFeedbackNoteChange = viewModel::updateFeedbackNote,
             onSubmitFeedback = viewModel::submitHomeFeedback,
             onSubmitObservation = viewModel::submitParentObservation,
+            onAskOnline = viewModel::askParentQuestionOnline,
             modifier = modifier
         )
         Port.PROFESSIONAL -> ProfessionalScreen(
