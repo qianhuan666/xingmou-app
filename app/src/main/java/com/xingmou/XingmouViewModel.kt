@@ -132,6 +132,7 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
      */
     private fun isProviderReady(provider: ChatLlmProvider): Boolean =
         if (provider == ChatLlmProvider.DOUBAO) BuildConfig.ARK_API_KEY.isNotBlank() || apiKeyStore.isConfigured(provider)
+        else if (provider == ChatLlmProvider.DEEPSEEK) BuildConfig.DEEPSEEK_API_KEY.isNotBlank() || apiKeyStore.isConfigured(provider)
         else apiKeyStore.isConfigured(provider)
     private var activeChildId: String? = null
     private var pendingImport: com.xingmou.core.consent.AuthorizedChildExport? = null
@@ -469,7 +470,8 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                 questionCameraWanted = true
                 refreshPerception()
                 viewModelScope.launch {
-                    delay(1_500)
+                    // 模拟器调试：liteMode 下 30 秒后才降级，方便观察检测面板 UI
+                    delay(30_000)
                     if (perceptionManager?.liteMode == true &&
                         detectController.session?.questionId == q.id) {
                         forceManualFallback(q.id)
@@ -710,7 +712,13 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
         val provider = _uiState.value.child.chatProvider
         return ChatLlmGateway(
             provider = provider,
-            keyProvider = { apiKeyStore.get(provider) },
+            keyProvider = {
+                when (provider) {
+                    ChatLlmProvider.DEEPSEEK -> BuildConfig.DEEPSEEK_API_KEY.takeIf { it.isNotBlank() } ?: apiKeyStore.get(provider)
+                    ChatLlmProvider.DOUBAO -> BuildConfig.ARK_API_KEY.takeIf { it.isNotBlank() } ?: apiKeyStore.get(provider)
+                    else -> apiKeyStore.get(provider)
+                }
+            },
             modelOrEndpoint = apiKeyStore.modelEndpoint(provider)
         )
     }
@@ -766,6 +774,110 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                     }
                 }
             )
+        }
+    }
+
+    private fun buildParentOnlineSystemPrompt(childContext: String): String = """
+        你是一位专业的儿童言语治疗师和家庭教育指导师。你正在为一个有特殊需要的孩子的家长提供建议。
+
+        【孩子背景信息】
+        $childContext
+
+        【家长当前观察】
+        家长描述了以下情况，请结合孩子的背景给出个性化建议。
+
+        要求：
+        1. 先分析孩子当前状态与背景的关联（如：孩子在语言域较弱，家长观察到的困难可能与这个相关）
+        2. 给出 3-5 条具体建议，每条包含：做什么、怎么做、什么时候做
+        3. 建议要结合孩子的实际能力水平，不要建议超出当前能力的任务
+        4. 如果观察到危险信号（能力倒退、持续哭闹、回避所有任务），建议咨询专业人员
+        5. 用温暖、鼓励的语气，像朋友一样交流，控制在 300 字以内
+        6. 不要使用任何 Markdown 符号（如 **、##、-），用自然的中文分段纯文本叙述
+    """.trimIndent()
+
+    fun askParentQuestionOnline() {
+        val query = _uiState.value.parent.query.trim()
+        if (query.isBlank()) {
+            _uiState.update { it.copy(parent = it.parent.copy(message = "请先写下一个具体观察。", riskLabel = "需要补充")) }
+            return
+        }
+        val provider = _uiState.value.child.chatProvider
+        if (!isProviderReady(provider)) {
+            _uiState.update { it.copy(parent = it.parent.copy(message = "请先在设置中配置 ${provider.label} 的 API Key，或使用本地知识库。", riskLabel = "未配置")) }
+            return
+        }
+        _uiState.update { it.copy(parent = it.parent.copy(isWorking = true, message = "正在分析孩子数据并获取建议…", agentStatus = agentStateLabel(AgentRunState.CREATED))) }
+        viewModelScope.launch {
+            runCatching {
+                // 获取孩子训练数据
+                val records = database.trainingRecordDao().recentForChild(childId)
+                val profile = database.abilityProfileDao().latestForChild(childId)
+                val recentFeedback = database.homeFeedbackDao().recentForChild(childId, 7)
+
+                // 构建孩子上下文
+                val childContext = buildString {
+                    appendLine("- 训练记录：最近完成 ${records.size} 次训练")
+                    if (records.isNotEmpty()) {
+                        val correct = records.count { it.correct }
+                        val accuracy = correct * 100 / records.size
+                        appendLine("- 正确率：$accuracy%（${correct}/${records.size}）")
+                        val domains = records.groupBy { it.domain }.map { (d, r) ->
+                            val c = r.count { it.correct }
+                            "$d 域 ${c * 100 / r.size}% (${c}/${r.size})"
+                        }
+                        appendLine("- 各域表现：${domains.joinToString(", ")}")
+                    }
+                    if (profile != null) {
+                        val scores = parseProfileScores(profile.scoresJson)
+                        val weakDomains = scores.filter { it.value < 50 }.map { DomainCatalog.find(it.key)?.name ?: it.key }
+                        if (weakDomains.isNotEmpty()) {
+                            appendLine("- 需要加强的域：${weakDomains.joinToString("、")}")
+                        }
+                        val strongDomains = scores.filter { it.value >= 70 }.map { DomainCatalog.find(it.key)?.name ?: it.key }
+                        if (strongDomains.isNotEmpty()) {
+                            appendLine("- 优势域：${strongDomains.joinToString("、")}")
+                        }
+                    }
+                    if (recentFeedback.isNotEmpty()) {
+                        val latest = recentFeedback.first()
+                        appendLine("- 最近状态：${latest.mood}（${java.text.SimpleDateFormat("MM-dd").format(java.util.Date(latest.createdAt))}）")
+                    }
+                }
+
+                val systemPrompt = buildParentOnlineSystemPrompt(childContext)
+                val result = chatGateway().chat(systemPrompt, emptyList(), query)
+                result.fold(
+                    onSuccess = { answer ->
+                        // 纯文本展示：去掉模型可能残留的 Markdown 加粗/标题符号
+                        val cleaned = answer.replace("**", "").replace("##", "").trim()
+                        _uiState.update {
+                            it.copy(parent = it.parent.copy(
+                                isWorking = false,
+                                message = "已基于孩子数据获取个性化建议",
+                                suggestions = listOf(cleaned),
+                                sources = listOf("AI 个性化建议（${provider.label} · 基于孩子训练数据）"),
+                                agentStatus = agentStateLabel(AgentRunState.COMPLETED)
+                            ))
+                        }
+                    },
+                    onFailure = { err ->
+                        val reason = when (err.message) {
+                            "api_key_missing" -> "请先在设置中配置 ${provider.label} 的 API Key"
+                            "network_error" -> "网络连接失败，请检查网络后重试"
+                            "http_429" -> "请求太频繁，请稍后再试"
+                            "http_401", "http_403" -> "API Key 无效，请检查配置"
+                            else -> "获取在线建议失败，请稍后重试"
+                        }
+                        _uiState.update {
+                            it.copy(parent = it.parent.copy(
+                                isWorking = false,
+                                message = reason,
+                                agentStatus = agentStateLabel(AgentRunState.FAILED)
+                            ))
+                        }
+                    }
+                )
+            }
         }
     }
 
@@ -1842,19 +1954,15 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
         val existing = database.homeTaskDao().latestForChild(childId)
         val task = if (latestPlan != null && existing?.planId != latestPlan.planId) {
             createHomeTaskFromPlan(latestPlan).also { database.homeTaskDao().upsert(it) }
-        } else existing ?: HomeTaskEntity(
-            taskId = "home-$childId-matching",
-            childId = childId,
-            title = "五分钟图片配对陪练",
-            description = "准备两个熟悉的图片，先示范一次，再邀请孩子自己试试。出现疲劳或拒绝时暂停。",
-            status = "pending",
-            frequency = "每日 1–2 次",
-            durationMinutes = 5,
-            supportLevel = "L1",
-            stopConditions = "出现疲劳、拒绝或风险时暂停",
-            source = "LOCAL_TEMPLATE",
-            updatedAt = System.currentTimeMillis()
-        ).also { database.homeTaskDao().upsert(it) }
+        } else if (existing == null) {
+            defaultMatchingHomeTask(childId).also { database.homeTaskDao().upsert(it) }
+        } else if (existing.source == "LOCAL_TEMPLATE") {
+            // 本地模板文案升级：保留完成状态与示范进度
+            defaultMatchingHomeTask(childId).copy(
+                status = existing.status,
+                demoStep = existing.demoStep
+            ).also { database.homeTaskDao().upsert(it) }
+        } else existing
         val safetyStopped = database.safetyFlagDao().observeActive(childId).first().isNotEmpty()
         val weekStart = System.currentTimeMillis() - 7 * 24 * 60 * 60 * 1000L
         val weekTasks = database.homeTaskDao().allForChild(childId).filter { it.updatedAt >= weekStart }
@@ -2499,6 +2607,20 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
         loadHomeSupport(childId)
     }
 
+    private fun defaultMatchingHomeTask(childId: String) = HomeTaskEntity(
+        taskId = "home-$childId-matching",
+        childId = childId,
+        title = "相同图片配对练习（5 分钟）",
+        description = "准备 2～3 对完全相同的图片卡（孩子熟悉的日常物品照片）。先由家长示范：拿起一张，找到相同的放在一起，同时说出名称；再把卡片打乱摆开，请孩子找出相同的两张，配对成功立即肯定。熟练后再过渡到相似图片或相关事物配对（如牙刷和杯子）。出现疲劳或拒绝时暂停。",
+        status = "pending",
+        frequency = "每日 1–2 次",
+        durationMinutes = 5,
+        supportLevel = "L1",
+        stopConditions = "出现疲劳、拒绝或风险时暂停",
+        source = "LOCAL_TEMPLATE",
+        updatedAt = System.currentTimeMillis()
+    )
+
     private fun createHomeTaskFromPlan(plan: PlanVersionEntity): HomeTaskEntity {
         val payload = plan.payloadJson
         val task = jsonString(payload, "task") ?: "图片配对"
@@ -2690,7 +2812,7 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
     private fun toChildSummary(child: ChildEntity) = ChildSummaryUi(child.childId, child.alias, child.ageBand, child.status)
 }
 
-private val HOME_DEMO_STEPS = listOf("准备", "示范", "邀请", "回应", "结束")
+private val HOME_DEMO_STEPS = listOf("准备卡片", "家长示范", "孩子尝试", "及时肯定", "整理结束")
 
 private val CARE_STAGES = listOf(
     "intake" to "接案",

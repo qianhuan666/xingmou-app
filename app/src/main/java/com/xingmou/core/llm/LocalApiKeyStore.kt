@@ -46,8 +46,8 @@ class LocalApiKeyStore(context: Context, preferencesName: String = "xingmou_inst
 
     // ---- 供应商选择与模型端点 ----
 
-    // 默认豆包：走 veFaaS 反代，开箱即用，最终用户无需自配 Key。
-    private val defaultProvider = ChatLlmProvider.DOUBAO
+    // 默认 DeepSeek：用户自配 Key，灵活性高。
+    private val defaultProvider = ChatLlmProvider.DEEPSEEK
 
     fun selectedProvider(): ChatLlmProvider = runCatching {
         ChatLlmProvider.valueOf(preferences.getString("chat_provider", defaultProvider.name) ?: defaultProvider.name)
