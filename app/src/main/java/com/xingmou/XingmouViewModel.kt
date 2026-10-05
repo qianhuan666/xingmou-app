@@ -49,7 +49,13 @@ import com.xingmou.core.domain.PlanActor
 import com.xingmou.core.domain.PlanStateMachine
 import com.xingmou.core.domain.PlanStatus
 import com.xingmou.core.domain.QuestionEvaluator
+import com.xingmou.core.domain.PlanQuestionPolicy
 import com.xingmou.core.domain.TrainingResult
+import com.xingmou.core.domain.AdaptiveDifficultyEngine
+import com.xingmou.core.domain.AdaptiveOutcome
+import com.xingmou.core.domain.BaselineDifficultyPolicy
+import com.xingmou.core.domain.ModuleQuestionSelectionRequest
+import com.xingmou.core.domain.ModuleQuestionSelector
 import com.xingmou.core.model.CommunicationLevel
 import com.xingmou.core.model.Port
 import com.xingmou.core.model.SessionContext
@@ -64,6 +70,7 @@ import com.xingmou.core.perception.SpeechAnswerDetector
 import com.xingmou.core.perception.SpeechHit
 import com.xingmou.core.perception.StateAnalyzer
 import com.xingmou.data.db.PlanVersionEntity
+import com.xingmou.data.db.ModuleAdaptiveStateEntity
 import com.xingmou.data.db.ChildEntity
 import com.xingmou.data.db.QizhiDatabase
 import com.xingmou.data.db.ReviewRequestEntity
@@ -86,6 +93,7 @@ import com.xingmou.data.catalog.QuestionDefinition
 import com.xingmou.data.catalog.CurriculumCatalog
 import com.xingmou.data.catalog.CurriculumCatalog.GeneratedCurriculumLevel
 import com.xingmou.data.catalog.DomainCatalog
+import com.xingmou.data.catalog.TaskCatalog
 import com.xingmou.data.catalog.AssessmentCatalog
 import com.xingmou.AutoDetectState
 import com.xingmou.BaselineUiState
@@ -119,7 +127,6 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
     private val knowledgeRetriever = KnowledgeRetriever()
     private val analysisEngine = AnalysisEngine()
     private val baselineEngine = BaselineEngine()
-    private val courseProgressEngine = CourseProgressEngine(QuestionCatalog.fullCourseQuestions)
     private val planStateMachine = PlanStateMachine()
     private val dataRightsManager = DataRightsManager()
     private val importManager = AuthorizedImportManager()
@@ -132,7 +139,6 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
      */
     private fun isProviderReady(provider: ChatLlmProvider): Boolean =
         if (provider == ChatLlmProvider.DOUBAO) BuildConfig.ARK_API_KEY.isNotBlank() || apiKeyStore.isConfigured(provider)
-        else if (provider == ChatLlmProvider.DEEPSEEK) BuildConfig.DEEPSEEK_API_KEY.isNotBlank() || apiKeyStore.isConfigured(provider)
         else apiKeyStore.isConfigured(provider)
     private var activeChildId: String? = null
     private var pendingImport: com.xingmou.core.consent.AuthorizedChildExport? = null
@@ -714,7 +720,7 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
             provider = provider,
             keyProvider = {
                 when (provider) {
-                    ChatLlmProvider.DEEPSEEK -> BuildConfig.DEEPSEEK_API_KEY.takeIf { it.isNotBlank() } ?: apiKeyStore.get(provider)
+                    ChatLlmProvider.DEEPSEEK -> apiKeyStore.get(provider)
                     ChatLlmProvider.DOUBAO -> BuildConfig.ARK_API_KEY.takeIf { it.isNotBlank() } ?: apiKeyStore.get(provider)
                     else -> apiKeyStore.get(provider)
                 }
@@ -1037,7 +1043,10 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
 
     fun startBaseline() {
         if (_uiState.value.baseline.status != BaselineStatus.IN_PROGRESS) {
-            baselineSession = baselineEngine.newSession(System.currentTimeMillis())
+            baselineSession = baselineEngine.newSession(
+                System.currentTimeMillis(),
+                nextBaselineVersion()
+            )
             persistBaseline()
         }
         publishBaseline(isOpen = true)
@@ -1066,9 +1075,17 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
     }
 
     private fun resetBaselineSession() {
-        baselineSession = baselineEngine.newSession(System.currentTimeMillis())
+        baselineSession = baselineEngine.newSession(
+            System.currentTimeMillis(),
+            nextBaselineVersion()
+        )
         publishBaseline(isOpen = false)
         persistBaseline()
+    }
+
+    private fun nextBaselineVersion(): Int = when (baselineSession.status) {
+        BaselineStatus.COMPLETED, BaselineStatus.NEEDS_RETEST -> baselineSession.version + 1
+        else -> baselineSession.version
     }
 
     fun restartBaseline() {
@@ -1105,6 +1122,7 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                         createdAt = now
                     )
                 )
+                initializeAdaptiveStates(scores, baselineSession.version, now)
             }
             publishBaseline(isOpen = true)
             loadCourseProgress(childId)
@@ -1160,12 +1178,56 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
     }
 
     private suspend fun loadCourseProgress(childId: String) {
-        val fullCourseIds = QuestionCatalog.fullCourseQuestions.map { it.id }.toSet()
-        val records = database.trainingRecordDao().recentForChild(childId, 200)
-            .filter { it.taskId in fullCourseIds || it.taskId == "图片配对" }
-        val progress = courseProgressEngine.summarize(records)
-        val encouragement = courseProgressEngine.encouragement(progress, records)
-        val completedLevels = progress.completedCount / 5
+        val activePlan = database.planDao().latestActive(childId)
+        val planPolicy = PlanQuestionPolicy.from(activePlan)
+        val childSnapshot = _uiState.value.child
+        val allRecords = database.trainingRecordDao().recentForChild(childId, 400)
+        val domainScores = if (baselineSession.status == BaselineStatus.COMPLETED) baselineEngine.scores(baselineSession) else emptyMap()
+        val moduleQueue = planPolicy?.moduleId?.let { listOf(it) }
+            ?: BaselineDifficultyPolicy.priorityModules(domainScores)
+                .ifEmpty { TaskCatalog.all.map { it.id } }
+        val stateByModule = database.moduleAdaptiveStateDao().allForChild(childId).associateBy { it.moduleId }
+        val completedIds = allRecords.filter { it.correct }.map { it.taskId }.toSet()
+        val currentModuleId = moduleQueue.firstOrNull { moduleId ->
+            val bank = if (planPolicy == null) QuestionCatalog.starterCourseQuestions else QuestionCatalog.fullCourseQuestions
+            bank.any { it.moduleId == moduleId && it.id !in completedIds }
+        }
+        val currentState = currentModuleId?.let { stateByModule[it] }?.takeIf { state ->
+            state.baselineVersion == baselineSession.version &&
+                if (planPolicy == null) {
+                    state.planId == null && state.planVersion == null
+                } else {
+                    state.planId == planPolicy.planId && state.planVersion == planPolicy.planVersion
+                }
+        }
+        val initialDifficulty = planPolicy?.difficulty
+            ?: currentModuleId?.let { BaselineDifficultyPolicy.initialDifficulty(it, domainScores) }
+            ?: childSnapshot.difficulty
+        val effectiveDifficulty = currentState?.currentDifficulty?.coerceIn(1, 5) ?: initialDifficulty.coerceIn(1, 5)
+        val samePlan = planPolicy != null && planPolicy.planId == childSnapshot.coursePlanId && planPolicy.planVersion == childSnapshot.coursePlanVersion
+        val effectiveSupportLevel = if (samePlan) childSnapshot.supportLevel else planPolicy?.supportLevel ?: currentState?.currentSupportLevel
+            ?.let { runCatching { com.xingmou.core.model.SupportLevel.valueOf(it) }.getOrNull() }
+            ?: childSnapshot.supportLevel
+        val bank = if (planPolicy == null) QuestionCatalog.starterCourseQuestions else QuestionCatalog.fullCourseQuestions
+        val moduleQuestions = currentModuleId?.let { id -> bank.filter { it.moduleId == id } }.orEmpty()
+        val records = allRecords.filter { it.taskId in moduleQuestions.map { question -> question.id }.toSet() }
+        val progressEngine = CourseProgressEngine(moduleQuestions)
+        val progress = progressEngine.summarize(records)
+        val encouragement = progressEngine.encouragement(progress, records)
+        val currentModuleName = currentModuleId?.let { TaskCatalog.find(it)?.name ?: it }
+        val nextQuestion = currentModuleId?.let { moduleId ->
+            ModuleQuestionSelector.select(
+                bank,
+                ModuleQuestionSelectionRequest(
+                    moduleId = moduleId,
+                    difficulty = effectiveDifficulty,
+                    sessionId = "course-$childId-$moduleId",
+                    completedQuestionIds = completedIds,
+                    limit = 1
+                )
+            ).firstOrNull()
+        }
+        val completedLevels = moduleQueue.indexOf(currentModuleId).coerceAtLeast(0)
         val courseMap = V08_COURSE_LEVELS.mapIndexed { index, level ->
             val status = when {
                 baselineSession.status != BaselineStatus.COMPLETED && index == 0 -> "完成基线后解锁"
@@ -1175,24 +1237,29 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
             }
             level.copy(status = status)
         }
-        val question = progress.nextQuestion
-        val currentLevel = (progress.completedCount / 5 + 1).coerceIn(1, V08_COURSE_LEVELS.size)
+        val currentLevel = (completedLevels + 1).coerceIn(1, V08_COURSE_LEVELS.size)
         _uiState.update {
             it.copy(child = it.child.copy(
-                instruction = question?.prompt ?: "课程完成了，可以休息一下",
-                options = question?.options ?: it.child.options,
+                instruction = nextQuestion?.prompt ?: if (currentModuleId == null) "课程完成了，可以休息一下" else "当前模块已完成，可以继续下一题",
+                options = nextQuestion?.options ?: it.child.options,
                 courseProgress = progress.completedCount,
-                courseTotal = progress.total,
+                courseTotal = moduleQuestions.size,
                 currentCourseLevel = currentLevel,
-                courseTitle = question?.let { q -> V08_COURSE_LEVELS.getOrNull(currentLevel - 1)?.title ?: q.moduleId } ?: "课程完成",
-                courseQuestionId = question?.id,
-                courseQuestionType = question?.type ?: com.xingmou.data.catalog.QuestionType.CHOICE,
-                courseStimulus = question?.stimulus.orEmpty(),
-                coursePreviewMs = question?.previewMs ?: 3_000L,
-                assetKey = question?.assetKey ?: it.child.assetKey,
+                courseTitle = currentModuleName ?: "课程完成",
+                courseQuestionId = nextQuestion?.id,
+                courseQuestionType = nextQuestion?.type ?: com.xingmou.data.catalog.QuestionType.CHOICE,
+                courseStimulus = nextQuestion?.stimulus.orEmpty(),
+                coursePreviewMs = nextQuestion?.previewMs ?: 3_000L,
+                assetKey = nextQuestion?.assetKey ?: it.child.assetKey,
+                coursePlanId = planPolicy?.planId,
+                coursePlanVersion = planPolicy?.planVersion,
+                coursePlanModuleId = planPolicy?.moduleId,
+                coursePlanGoal = planPolicy?.observableGoal.orEmpty(),
+                difficulty = effectiveDifficulty,
+                supportLevel = effectiveSupportLevel,
                 courseUnlocked = baselineSession.status == BaselineStatus.COMPLETED,
                 courseOpen = true,
-                courseSummary = progress.summary,
+                courseSummary = if (currentModuleId == null) "22 个训练模块已完成" else "$currentModuleName · ${progress.completedCount}/${moduleQuestions.size} 题",
                 coursePoints = encouragement.points,
                 completedRounds = encouragement.completedRounds,
                 encouragementTrend = encouragement.trendLabel,
@@ -1203,6 +1270,74 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
         loadCurriculumState(childId)
         loadRainbowProfile(childId)
         refreshCurriculumMap()
+    }
+
+    private suspend fun initializeAdaptiveStates(scores: Map<String, Int>, baselineVersion: Int, now: Long) {
+        BaselineDifficultyPolicy.moduleSeeds(scores).forEach { seed ->
+            val existing = database.moduleAdaptiveStateDao().find(childId, seed.moduleId)
+            if (existing?.baselineVersion == baselineVersion) return@forEach
+            database.moduleAdaptiveStateDao().upsert(
+                ModuleAdaptiveStateEntity(
+                    stateId = "adaptive-$childId-${seed.moduleId}",
+                    childId = childId,
+                    moduleId = seed.moduleId,
+                    baselineVersion = baselineVersion,
+                    planId = null,
+                    planVersion = null,
+                    currentDifficulty = seed.initialDifficulty,
+                    currentSupportLevel = "L1",
+                    correctStreak = 0,
+                    errorStreak = 0,
+                    lastQuestionId = null,
+                    updatedAt = now
+                )
+            )
+        }
+    }
+
+    private suspend fun persistAdaptiveState(
+        question: QuestionDefinition,
+        result: TrainingResult,
+        nextDifficulty: Int,
+        nextSupportLevel: String?,
+        planId: String? = null,
+        planVersion: Int? = null,
+        now: Long
+    ) {
+        val previous = database.moduleAdaptiveStateDao().find(childId, question.moduleId)?.takeIf { state ->
+            state.baselineVersion == baselineSession.version &&
+                state.planId == planId && state.planVersion == planVersion
+        }
+        val outcome = AdaptiveDifficultyEngine.outcomeOf(result)
+        val positive = outcome == AdaptiveOutcome.CORRECT_INDEPENDENT || outcome == AdaptiveOutcome.OBSERVED_INDEPENDENT
+        val negative = outcome == AdaptiveOutcome.INCORRECT || outcome == AdaptiveOutcome.OBSERVED_NOT_COMPLETED
+        database.moduleAdaptiveStateDao().upsert(
+            ModuleAdaptiveStateEntity(
+                stateId = previous?.stateId ?: "adaptive-$childId-${question.moduleId}",
+                childId = childId,
+                moduleId = question.moduleId,
+                baselineVersion = baselineSession.version,
+                planId = planId,
+                planVersion = planVersion,
+                currentDifficulty = nextDifficulty.coerceIn(1, 5),
+                currentSupportLevel = nextSupportLevel ?: previous?.currentSupportLevel ?: "L1",
+                correctStreak = if (positive) (previous?.correctStreak ?: 0) + 1 else 0,
+                errorStreak = if (negative) (previous?.errorStreak ?: 0) + 1 else 0,
+                lastQuestionId = question.id,
+                updatedAt = now
+            )
+        )
+    }
+
+    private fun adaptiveOutcome(question: QuestionDefinition, selectedOption: Int, evaluation: com.xingmou.core.domain.QuestionEvaluation): AdaptiveOutcome {
+        if (question.type == com.xingmou.data.catalog.QuestionType.OBSERVED) {
+            return when (selectedOption) {
+                0 -> AdaptiveOutcome.OBSERVED_INDEPENDENT
+                1 -> AdaptiveOutcome.OBSERVED_SUPPORTED
+                else -> AdaptiveOutcome.OBSERVED_NOT_COMPLETED
+            }
+        }
+        return if (evaluation.correct == true) AdaptiveOutcome.CORRECT_INDEPENDENT else AdaptiveOutcome.INCORRECT
     }
 
     private fun domainEmoji(id: String): String = when (id) {
@@ -1571,23 +1706,36 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
 
     fun openCurriculumLevel(order: Int) {
         if (order !in curriculumPassedOrders && !isLevelAvailable(order)) return
-        val level = ensureCurriculum().firstOrNull { it.order == order } ?: return
-        val activities = level.activities
-        if (activities.isEmpty()) return
-        val first = activities.first()
-        val question = CurriculumCatalog.resolveQuestion(first)
-        _uiState.update { it.copy(child = it.child.copy(curriculumPlayer = CurriculumPlayerUi(
-            levelOrder = order,
-            levelTitle = level.title,
-            activityIndex = 0,
-            activityTotal = activities.size,
-            activityLabel = first.label,
-            question = question,
-            runCompleted = 0, runCorrect = 0, runTotal = 0,
-            isWorking = false,
-            message = "",
-            finished = false, passed = false
-        ))) }
+        viewModelScope.launch {
+            val level = ensureCurriculum().firstOrNull { it.order == order } ?: return@launch
+            val activities = level.activities
+            if (activities.isEmpty()) return@launch
+            val policy = PlanQuestionPolicy.from(database.planDao().latestActive(childId))
+            val first = activities.first()
+            val question = CurriculumCatalog.resolveQuestion(first)?.let { base ->
+                if (policy == null) base else PlanQuestionPolicy.run { base.forDifficulty(policy.difficulty) }
+            }
+            _uiState.update { it.copy(child = it.child.copy(
+                difficulty = policy?.difficulty ?: it.child.difficulty,
+                supportLevel = policy?.supportLevel ?: it.child.supportLevel,
+                coursePlanId = policy?.planId,
+                coursePlanVersion = policy?.planVersion,
+                coursePlanModuleId = policy?.moduleId,
+                coursePlanGoal = policy?.observableGoal.orEmpty(),
+                curriculumPlayer = CurriculumPlayerUi(
+                    levelOrder = order,
+                    levelTitle = level.title,
+                    activityIndex = 0,
+                    activityTotal = activities.size,
+                    activityLabel = first.label,
+                    question = question,
+                    runCompleted = 0, runCorrect = 0, runTotal = 0,
+                    isWorking = false,
+                    message = "",
+                    finished = false, passed = false
+                )
+            )) }
+        }
     }
 
     fun leaveCurriculumLevel() {
@@ -1622,7 +1770,8 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                     firstCorrect = correct,
                     reactionMs = 1_500L,
                     errorType = if (correct) null else "choice_mismatch",
-                    promptLevel = snapshot.supportLevel.ordinal
+                    promptLevel = if (question.type == com.xingmou.data.catalog.QuestionType.OBSERVED) snapshot.supportLevel.ordinal else 0,
+                    adaptiveOutcome = adaptiveOutcome(question, option, evaluation)
                 )
                 // 作答结果经事件协调器落库（training_records），并做难度/支持/安全调整。
                 val decision = eventCoordinator.handle(
@@ -1638,6 +1787,15 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                         recentResults = snapshot.recentResults
                     )
                 )
+                persistAdaptiveState(
+                    question = question,
+                    result = result,
+                    nextDifficulty = decision.nextDifficulty ?: snapshot.difficulty,
+                    nextSupportLevel = decision.nextSupportLevel,
+                    planId = snapshot.coursePlanId,
+                    planVersion = snapshot.coursePlanVersion,
+                    now = now
+                )
                 val level = ensureCurriculum().firstOrNull { it.order == player.levelOrder }
                 val activities = level?.activities.orEmpty()
                 val nextIndex = player.activityIndex + 1
@@ -1649,7 +1807,11 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                 if (passed) level?.let { curriculumPassedOrders.add(it.order) }
                 persistCurriculumState()
                 val nextActivity = if (!finished) activities.getOrNull(nextIndex) else null
-                val nextQuestion = nextActivity?.let { CurriculumCatalog.resolveQuestion(it) }
+                val nextQuestion = nextActivity?.let { activity ->
+                    CurriculumCatalog.resolveQuestion(activity)?.let { base ->
+                        PlanQuestionPolicy.run { base.forDifficulty(decision.nextDifficulty ?: snapshot.difficulty) }
+                    }
+                }
                 val updatedChild = snapshot.apply(decision).copy(
                     recentResults = (snapshot.recentResults + result).takeLast(3),
                     consecutiveFailures = if (correct) 0 else snapshot.consecutiveFailures + 1,
@@ -1685,7 +1847,9 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
     fun completeChildTask(selectedOption: Int) {
         val snapshot = _uiState.value.child
         if (snapshot.isWorking || snapshot.isSafetyStopped || !snapshot.courseUnlocked || !snapshot.courseOpen || snapshot.courseQuestionId == null || snapshot.courseProgress >= snapshot.courseTotal) return
-        val question = QuestionCatalog.fullCourseQuestions.firstOrNull { it.id == snapshot.courseQuestionId }
+        val question = QuestionCatalog.fullCourseQuestions
+            .firstOrNull { it.id == snapshot.courseQuestionId }
+            ?.let { PlanQuestionPolicy.run { it.forDifficulty(snapshot.difficulty) } }
         if (question == null) {
             _uiState.update { it.copy(child = it.child.copy(message = "当前题目不存在，请先返回关卡地图。", lastEvent = "QUESTION_NOT_FOUND")) }
             return
@@ -1706,7 +1870,8 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                     firstCorrect = correct,
                     reactionMs = 1_500L,
                     errorType = if (correct) null else "choice_mismatch",
-                    promptLevel = snapshot.supportLevel.ordinal
+                    promptLevel = if (question.type == com.xingmou.data.catalog.QuestionType.OBSERVED) snapshot.supportLevel.ordinal else 0,
+                    adaptiveOutcome = adaptiveOutcome(question, selectedOption, evaluation)
                 )
                 val decision = eventCoordinator.handle(
                     TrainingCompletedEvent(
@@ -1718,8 +1883,18 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                         currentDifficulty = snapshot.difficulty,
                         currentSupportLevel = snapshot.supportLevel,
                         result = result,
-                        recentResults = snapshot.recentResults
+                        recentResults = snapshot.recentResults,
+                        observationText = "question_version=${question.version};plan_id=${snapshot.coursePlanId ?: "none"};plan_version=${snapshot.coursePlanVersion ?: 0};module_id=${question.moduleId}"
                     )
+                )
+                persistAdaptiveState(
+                    question = question,
+                    result = result,
+                    nextDifficulty = decision.nextDifficulty ?: snapshot.difficulty,
+                    nextSupportLevel = decision.nextSupportLevel,
+                    planId = snapshot.coursePlanId,
+                    planVersion = snapshot.coursePlanVersion,
+                    now = now
                 )
                 val failures = if (correct) 0 else snapshot.consecutiveFailures + 1
                 val updated = snapshot.apply(decision).copy(
@@ -1950,7 +2125,7 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
     }
 
     private suspend fun loadHomeSupport(childId: String) {
-        val latestPlan = database.planDao().latest(childId)?.takeIf { it.status == "active" }
+        val latestPlan = database.planDao().latestActive(childId)
         val existing = database.homeTaskDao().latestForChild(childId)
         val task = if (latestPlan != null && existing?.planId != latestPlan.planId) {
             createHomeTaskFromPlan(latestPlan).also { database.homeTaskDao().upsert(it) }
@@ -2331,6 +2506,8 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                 decision.updatedReview?.let { activeReview = it }
                 if (activate && decision.updatedPlan?.status == "active") {
                     publishActivePlanToHomeTask(decision.updatedPlan)
+                    // 方案签署后立即刷新儿童端，避免仍显示旧的全量题库。
+                    if (childId == _uiState.value.activeChildId) loadCourseProgress(childId)
                 }
                 _uiState.update {
                     it.copy(professional = it.professional.copy(
@@ -2380,6 +2557,21 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
         viewModelScope.launch {
             runCatching {
                 val records = database.trainingRecordDao().recentForChild(childId)
+                val adaptiveStates = database.moduleAdaptiveStateDao().allForChild(childId)
+                    .map { state ->
+                        ModuleAdaptiveUi(
+                            moduleId = state.moduleId,
+                            moduleName = TaskCatalog.find(state.moduleId)?.name ?: state.moduleId,
+                            difficulty = state.currentDifficulty,
+                            supportLevel = state.currentSupportLevel,
+                            correctStreak = state.correctStreak,
+                            errorStreak = state.errorStreak,
+                            lastQuestionId = state.lastQuestionId,
+                            baselineVersion = state.baselineVersion,
+                            planVersion = state.planVersion,
+                            updatedAt = state.updatedAt
+                        )
+                    }
                 val analysis = analysisEngine.analyze(records)
                 val latestPlan = database.planDao().latest(childId)
                 val planVersions = database.planDao().observeVersions(childId).first()
@@ -2461,6 +2653,7 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                         parent = it.parent.copy(
                             recordCount = records.size,
                             domainOverview = domainOverview,
+                            adaptiveOverview = adaptiveStates,
                             trendPoints = trendPoints,
                             recentTrainingDetails = trainingDetails
                         ),
@@ -2477,6 +2670,7 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                                 ReportMetricUi("趋势", analysis.trend.label(), "按训练记录前后半段比较")
                             ),
                             reportGroups = reportGroups,
+                            adaptiveOverview = adaptiveStates,
                             reportTrend = trendPoints,
                             recentTrainingDetails = trainingDetails,
                             recentAssessments = assessments.map { item ->

@@ -119,6 +119,25 @@ data class TrainingRecordEntity(
 )
 
 @Entity(
+    tableName = "module_adaptive_states",
+    indices = [Index("childId"), Index(value = ["childId", "moduleId"], unique = true)]
+)
+data class ModuleAdaptiveStateEntity(
+    @androidx.room.PrimaryKey val stateId: String,
+    val childId: String,
+    val moduleId: String,
+    val baselineVersion: Int,
+    val planId: String? = null,
+    val planVersion: Int? = null,
+    val currentDifficulty: Int,
+    val currentSupportLevel: String,
+    val correctStreak: Int,
+    val errorStreak: Int,
+    val lastQuestionId: String?,
+    val updatedAt: Long
+)
+
+@Entity(
     tableName = "ability_profiles",
     indices = [Index("childId"), Index(value = ["childId", "status"])]
 )

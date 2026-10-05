@@ -147,6 +147,7 @@ fun ProfessionalScreen(
                     AnalysisPanel(state, onRefresh)
                     ReportPanel(state)
                     GroupReportPanel(state)
+                    AdaptiveOverviewPanel(state)
                     TrainingDetailsPanel(state)
                 }
                 ProfessionalSection.PLAN -> {
@@ -162,6 +163,29 @@ fun ProfessionalScreen(
                 }
                 ProfessionalSection.AGENT -> {
                     AgentPanel(state, onRefreshAgentAudit, onOpenAgentAudit, onAnnotateAgentTrace)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AdaptiveOverviewPanel(state: ProfessionalUiState) {
+    SectionSurface(title = "模块自适应回放", supporting = "来自 Room 的当前难度、支持等级、连续表现和版本关联。") {
+        if (state.adaptiveOverview.isEmpty()) {
+            Text("暂无模块自适应状态。完成起点小测或一次训练后刷新。", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        } else {
+            state.adaptiveOverview.forEach { item ->
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text("${item.moduleId} · ${item.moduleName}", style = MaterialTheme.typography.titleSmall)
+                        Text("基线 V${item.baselineVersion} · 方案 ${item.planVersion?.let { "V$it" } ?: "无"} · 最近题目 ${item.lastQuestionId ?: "—"}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Text("L${item.difficulty} · ${item.supportLevel}", style = MaterialTheme.typography.labelLarge)
                 }
             }
         }

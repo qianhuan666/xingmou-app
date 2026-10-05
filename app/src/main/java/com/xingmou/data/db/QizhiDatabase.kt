@@ -35,9 +35,10 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         MemoryItemEntity::class,
         ReviewRequestEntity::class,
         DecisionTraceEntity::class,
-        PerceptionSessionEntity::class
+        PerceptionSessionEntity::class,
+        ModuleAdaptiveStateEntity::class
     ],
-    version = 14,
+    version = 16,
     exportSchema = false
 )
 abstract class QizhiDatabase : RoomDatabase() {
@@ -60,6 +61,7 @@ abstract class QizhiDatabase : RoomDatabase() {
     abstract fun dataRightsDao(): DataRightsDao
     abstract fun agentDao(): AgentDao
     abstract fun perceptionSessionDao(): PerceptionSessionDao
+    abstract fun moduleAdaptiveStateDao(): ModuleAdaptiveStateDao
 
     companion object {
         @Volatile
@@ -71,7 +73,7 @@ abstract class QizhiDatabase : RoomDatabase() {
                     context.applicationContext,
                     QizhiDatabase::class.java,
                     "qizhi_training.db"
-                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14).build().also {
+                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16).build().also {
                     INSTANCE = it
                     DatabaseSeeder.seedAsync(it)
                 }
@@ -301,6 +303,35 @@ abstract class QizhiDatabase : RoomDatabase() {
                 )
                 db.execSQL("CREATE INDEX IF NOT EXISTS `index_perception_sessions_childId` ON `perception_sessions` (`childId`)")
                 db.execSQL("CREATE INDEX IF NOT EXISTS `index_perception_sessions_childId_startedAt` ON `perception_sessions` (`childId`, `startedAt`)")
+            }
+        }
+
+        val MIGRATION_14_15 = object : Migration(14, 15) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """CREATE TABLE IF NOT EXISTS `module_adaptive_states` (
+                        `stateId` TEXT NOT NULL,
+                        `childId` TEXT NOT NULL,
+                        `moduleId` TEXT NOT NULL,
+                        `baselineVersion` INTEGER NOT NULL,
+                        `currentDifficulty` INTEGER NOT NULL,
+                        `currentSupportLevel` TEXT NOT NULL,
+                        `correctStreak` INTEGER NOT NULL,
+                        `errorStreak` INTEGER NOT NULL,
+                        `lastQuestionId` TEXT,
+                        `updatedAt` INTEGER NOT NULL,
+                        PRIMARY KEY(`stateId`)
+                    )""".trimIndent()
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_module_adaptive_states_childId` ON `module_adaptive_states` (`childId`)")
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_module_adaptive_states_childId_moduleId` ON `module_adaptive_states` (`childId`, `moduleId`)")
+            }
+        }
+
+        val MIGRATION_15_16 = object : Migration(15, 16) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE module_adaptive_states ADD COLUMN planId TEXT")
+                db.execSQL("ALTER TABLE module_adaptive_states ADD COLUMN planVersion INTEGER")
             }
         }
     }

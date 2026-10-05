@@ -26,8 +26,6 @@ android {
         // 注意：release APK 可被反编译提取 Key，仅适合试点/内部使用，正式上线应改回后端代理。
         buildConfigField("String", "ARK_API_KEY", "\"\"")
         buildConfigField("String", "ARK_ENDPOINT", "\"\"")
-        // DeepSeek 内置凭证：用户无需配置即可联网获取建议。
-        buildConfigField("String", "DEEPSEEK_API_KEY", "\"sk-97d24e82b2b1479f8d7c600cb2259a8e\"")
     }
 
     buildTypes {

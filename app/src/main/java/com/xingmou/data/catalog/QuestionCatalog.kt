@@ -30,7 +30,13 @@ data class QuestionDefinition(
     val stimulus: String = "",
     val previewMs: Long = 3_000L,
     val expectedAction: ExpectedAction? = null,
-    val expectedSpeech: ExpectedSpeech? = null
+    val expectedSpeech: ExpectedSpeech? = null,
+    /** 题库难度 1-5；旧题目默认按第 1 级兼容。 */
+    val difficulty: Int = 1,
+    /** 能力标签，供专业方案和报表做稳定映射。 */
+    val skillTag: String = "",
+    /** 稳定的模块/难度变式组标识，便于抽题、复盘和后续替换素材。 */
+    val variantGroup: String = ""
 )
 
 private fun question(
@@ -80,7 +86,7 @@ object QuestionCatalog {
         question("BL-F-06", "baseline", "F", QuestionType.OBSERVED, "请竖起大拇指", listOf("自己完成", "帮助后完成", "还没完成"), null, stimulus = "👍", expectedAction = ExpectedAction.THUMB_UP)
     )
 
-    val moduleQuestionBank: List<QuestionDefinition> = listOf(
+    private val rawModuleQuestionBank: List<QuestionDefinition> = listOf(
         question("P01-01", "P01", "A", QuestionType.CHOICE, "点红色", listOf("🔴", "🟡", "🔵", "🟢"), 0, stimulus = "", previewMs = 0L),
         question("P01-02", "P01", "A", QuestionType.CHOICE, "点蓝色", listOf("🟠", "🟢", "🔵", "🟣"), 2, stimulus = "", previewMs = 0L),
         question("P01-03", "P01", "A", QuestionType.CHOICE, "点黄色", listOf("🟡", "🔴", "🟢", "🔵"), 0, stimulus = "", previewMs = 0L),
@@ -152,7 +158,34 @@ object QuestionCatalog {
         question("D03-06", "D03", "F", QuestionType.OBSERVED, "张开小手掌", listOf("自己完成", "帮助后完成", "还没完成"), null, stimulus = "🖐️", expectedAction = ExpectedAction.OPEN_PALM)
     )
 
-    val firstCourseQuestions: List<QuestionDefinition> = moduleQuestionBank.filter { it.moduleId == "M02" }
+    /**
+     * 将现有精编题按模块内变式顺序标注难度：第一题为基础，后续题逐步增加干扰。
+     * 真实扩展题可在构造时显式提供 difficulty；这里仅为旧 Web 题补齐可用的等级元数据。
+     */
+    private val curatedModuleQuestionBank: List<QuestionDefinition> = rawModuleQuestionBank
+        .groupBy { it.moduleId }
+        .values
+        .flatMap { moduleQuestions ->
+            moduleQuestions.mapIndexed { index, question ->
+                question.copy(
+                    difficulty = when {
+                        moduleQuestions.size <= 1 -> 1
+                        index == 0 -> 1
+                        index == 1 -> 2
+                        else -> 3
+                    },
+                    skillTag = question.moduleId
+                )
+            }
+        }
+
+    /** Web 精编题 + 本地审核扩展变式。 */
+    val moduleQuestionBank: List<QuestionDefinition> = curatedModuleQuestionBank + ExpandedQuestionFactory.build()
+
+    /** 无专业方案时使用的首发题集，保持原有课程负担；方案训练再进入扩展变式。 */
+    val starterCourseQuestions: List<QuestionDefinition> = curatedModuleQuestionBank
+
+    val firstCourseQuestions: List<QuestionDefinition> = starterCourseQuestions.filter { it.moduleId == "M02" }
 
     val fullCourseQuestions: List<QuestionDefinition> = moduleQuestionBank
 }

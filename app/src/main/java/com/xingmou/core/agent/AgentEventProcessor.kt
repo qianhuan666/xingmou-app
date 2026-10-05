@@ -136,7 +136,7 @@ class AgentEventProcessor(
 
     private fun summary(event: AgentEvent): String = when (event) {
         is UserMessageEvent -> event.text
-        is TrainingCompletedEvent -> "${event.domain}/${event.result.taskId}/correct=${event.result.correct}"
+        is TrainingCompletedEvent -> "${event.domain}/${event.result.taskId}/correct=${event.result.correct};${event.observationText.take(240)}"
         is ConsecutiveFailuresEvent -> "count=${event.count}"
         is RiskDetectedEvent -> event.text
         is RecordsThresholdReachedEvent -> "recordCount=${event.recordCount}"

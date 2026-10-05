@@ -21,13 +21,13 @@ class CatalogTest {
         assertTrue(RehabilitationMethods.all.any { it.id == "FAMILY" })
     }
 
-    @Test fun webQuestionBankContainsNinetyFiveQuestionsAcrossTwentyTwoModules() {
+    @Test fun questionBankContainsCuratedAndExpandedQuestionsAcrossTwentyTwoModules() {
         assertEquals(26, QuestionCatalog.baselineQuestions.size)
-        assertEquals(69, QuestionCatalog.moduleQuestionBank.size)
-        assertEquals(69, QuestionCatalog.fullCourseQuestions.size)
+        assertEquals(399, QuestionCatalog.moduleQuestionBank.size)
+        assertEquals(399, QuestionCatalog.fullCourseQuestions.size)
         assertEquals(22, QuestionCatalog.moduleQuestionBank.map { it.moduleId }.toSet().size)
-        assertEquals(95, QuestionCatalog.baselineQuestions.size + QuestionCatalog.moduleQuestionBank.size)
-        assertTrue(QuestionCatalog.moduleQuestionBank.all { it.version == 1 && it.sourceRef == "WEB_BANK_V1" })
+        assertEquals(425, QuestionCatalog.baselineQuestions.size + QuestionCatalog.moduleQuestionBank.size)
+        assertTrue(QuestionCatalog.moduleQuestionBank.all { it.version == 1 && it.sourceRef in setOf("WEB_BANK_V1", "EXPANDED_BANK_V1") })
         assertTrue(QuestionCatalog.baselineQuestions.all { it.version == 1 && it.sourceRef == "WEB_BANK_V1" })
     }
 
@@ -37,9 +37,16 @@ class CatalogTest {
             QuestionCatalog.baselineQuestions.groupingBy { it.domain }.eachCount()
         )
         val moduleCounts = QuestionCatalog.moduleQuestionBank.groupingBy { it.moduleId }.eachCount()
-        // D03「跟着做」模块扩充了手势题（D03-04/05/06），其余模块仍保持每模块 3 题
-        assertEquals(6, moduleCounts["D03"])
-        assertTrue(moduleCounts.filterKeys { it != "D03" }.values.all { it == 3 })
+        assertTrue(moduleCounts.values.all { it >= 15 })
+        assertTrue(QuestionCatalog.moduleQuestionBank.groupBy { it.moduleId }
+            .values.all { questions -> (1..5).all { level -> questions.count { it.difficulty == level } >= 3 } })
+    }
+
+    @Test fun expandedQuestionsHaveStableVariantGroups() {
+        val expanded = QuestionCatalog.moduleQuestionBank.filter { it.sourceRef == "EXPANDED_BANK_V1" }
+        assertEquals(330, expanded.size)
+        assertEquals(22 * 5, expanded.map { it.variantGroup }.toSet().size)
+        assertTrue(expanded.all { it.id == "${it.moduleId}-L${it.difficulty}-V${it.id.substringAfterLast("-V")}" })
     }
 
     @Test fun firstBaselineQuestionIncludesItsWebTargetCue() {
