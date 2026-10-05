@@ -259,30 +259,27 @@ private fun DemoSteps(current: Int, disabled: Boolean) {
     }
 }
 
-private data class MoodOption(val emoji: String, val label: String)
-
-private val MOOD_OPTIONS = listOf(
-    MoodOption("😊", "状态平稳"),
-    MoodOption("😴", "睡眠不足"),
-    MoodOption("😣", "情绪波动"),
-    MoodOption("🤝", "配合度较高")
-)
+private val MOOD_OPTIONS = listOf("状态平稳", "睡眠不足", "情绪波动", "配合度较高")
 
 @Composable
 private fun MoodQuickRow(selected: String, onQuickRecord: (String) -> Unit) {
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
-        MOOD_OPTIONS.forEach { option ->
-            val isSelected = option.label == selected
+        MOOD_OPTIONS.forEach { label ->
+            val isSelected = label == selected
             Surface(
-                onClick = { onQuickRecord(option.label) },
+                onClick = { onQuickRecord(label) },
                 modifier = Modifier.weight(1f),
-                shape = MaterialTheme.shapes.medium,
+                shape = RoundedCornerShape(50),
                 color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
                 border = if (isSelected) BorderStroke(1.dp, MaterialTheme.colorScheme.primary) else null
             ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(vertical = 10.dp)) {
-                    Text(option.emoji, style = MaterialTheme.typography.titleLarge)
-                    Text(option.label, style = MaterialTheme.typography.labelSmall, maxLines = 1)
+                Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(vertical = 10.dp, horizontal = 4.dp)) {
+                    Text(
+                        label,
+                        style = MaterialTheme.typography.labelMedium,
+                        maxLines = 1,
+                        color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
         }
@@ -480,7 +477,7 @@ private fun ParentProfileCard(profile: RainbowProfileUi) {
         SectionSurface(title = "平台初始能力画像", supporting = "儿童完成基线测试后自动生成。") {
             Text("孩子还没有完成基线测试。", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(vertical = 4.dp))
             Text("基线测试有 26 道简单题目，大约 5-8 分钟完成。完成后这里会显示孩子的能力画像和个性化训练建议。", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp, bottom = 4.dp))
-            Text("💡 点击下方'今日任务'，陪孩子开始第一次练习。", color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 4.dp))
+            Text("点击下方「今日任务」，陪孩子开始第一次练习。", color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 4.dp))
         }
         return
     }
@@ -488,8 +485,7 @@ private fun ParentProfileCard(profile: RainbowProfileUi) {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
             profile.domainBars.forEach { bar ->
                 Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-                    Text(bar.emoji, style = MaterialTheme.typography.headlineSmall)
-                    Column(Modifier.weight(1f)) {
+                        Column(Modifier.weight(1f)) {
                         Text(bar.name, style = MaterialTheme.typography.titleMedium)
                         LinearProgressIndicator(
                             progress = { bar.score / 100f },
@@ -502,10 +498,7 @@ private fun ParentProfileCard(profile: RainbowProfileUi) {
             }
         }
         Spacer(Modifier.height(14.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = androidx.compose.ui.Alignment.Top) {
-            Text("🤖")
-            Text(profile.narrative, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
-        }
+        Text(profile.narrative, style = MaterialTheme.typography.bodyLarge)
         Spacer(Modifier.height(10.dp))
         Text("平台原创训练起点画像，不等同于标准化量表或医学诊断。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
@@ -557,7 +550,7 @@ private fun DomainRadarChart(domains: List<ParentDomainStatUi>) {
             val p = pointAt(i, radius)
             drawCircle(domainBarColor(domain.colorKey), radius = 5.dp.toPx(), center = p)
             val labelPoint = pointAt(i, maxRadius + 20.dp.toPx())
-            val label = "${domain.emoji}${domain.name}"
+            val label = domain.name
             val measured = textMeasurer.measure(label, style = labelStyle)
             drawText(
                 textMeasurer, label,
@@ -574,7 +567,7 @@ private fun ParentTrainingStatsCard(state: ParentUiState) {
         if (state.domainOverview.isEmpty()) {
             Text("孩子还没有开始训练。", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(vertical = 4.dp))
             Text("完成基线测试后，会解锁适合孩子的训练课程。训练记录会在这里以图表形式展示，帮助您了解孩子在各个能力域的进步。", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp, bottom = 4.dp))
-            Text("💡 先在儿童端完成基线测试，解锁专属训练计划。", color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 4.dp))
+            Text("先在儿童端完成基线测试，解锁专属训练计划。", color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 4.dp))
         } else {
             DomainRadarChart(state.domainOverview)
             HorizontalDivider(Modifier.padding(vertical = 10.dp))
@@ -582,8 +575,7 @@ private fun ParentTrainingStatsCard(state: ParentUiState) {
                 Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
                     row.forEach { domain ->
                         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                            Text(domain.emoji, style = MaterialTheme.typography.bodyLarge)
-                            Column(Modifier.padding(start = 8.dp)) {
+                            Column {
                                 Text(domain.name, style = MaterialTheme.typography.labelMedium)
                                 Text(if (domain.count == 0) "暂无记录" else "正确率 ${domain.accuracy}% · ${domain.count} 次", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
