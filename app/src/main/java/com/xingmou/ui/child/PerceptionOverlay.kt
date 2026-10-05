@@ -152,7 +152,9 @@ fun PerceptionHomePreview(
     modifier: Modifier = Modifier,
     size: androidx.compose.ui.unit.Dp = 180.dp
 ) {
-    if (!state.perceptionEnabled || !state.perceptionPreview) return
+    if (!state.perceptionPreview) return
+    val detectActive = state.autoDetect.phase != com.xingmou.DetectPhase.IDLE
+    if (!state.perceptionEnabled && !detectActive) return
 
     // 纯圆形窗口，无卡片背景、无文字
     val previewRef = remember { arrayOfNulls<PreviewView>(1) }

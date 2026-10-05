@@ -115,6 +115,21 @@ data class ChatMessageUi(
     val isError: Boolean = false
 )
 
+enum class DetectMode { NONE, CAMERA, SPEECH }
+enum class DetectPhase { IDLE, AWAIT_PERMISSION, DETECTING, RETRYING, MANUAL_FALLBACK, HIT }
+
+/** 观察题自动检测的界面状态；NONE 时题目走普通选项渲染。 */
+data class AutoDetectState(
+    val questionId: String = "",
+    val mode: DetectMode = DetectMode.NONE,
+    val phase: DetectPhase = DetectPhase.IDLE,
+    val hint: String = "",
+    val remainingMs: Long = 0L,
+    val timeoutMs: Long = 10_000L,
+    val permission: String = "",
+    val matchedKeyword: String? = null
+)
+
 data class ChildUiState(
     val instruction: String = "找到目标图形",
     val options: List<String> = listOf("●", "▲"),
@@ -168,9 +183,13 @@ data class ChildUiState(
     /** 感知系统状态：实时情感/专注度/反馈 */
     val perceptionEnabled: Boolean = false,
     val perceptionPreview: Boolean = false,
+    val autoDetect: AutoDetectState = AutoDetectState(),
     val perceptionEmotion: String = "",
     val perceptionFocus: String = "",
-    val perceptionFeedback: String = ""
+    val perceptionFeedback: String = "",
+    /** 最近一次作答结果，驱动答题音效；null = 不计分的观察题，lastAnswerAt 每次作答都变化 */
+    val lastAnswerCorrect: Boolean? = null,
+    val lastAnswerAt: Long = 0L
 )
 
 data class CourseLevelUi(
