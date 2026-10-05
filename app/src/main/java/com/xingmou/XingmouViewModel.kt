@@ -132,7 +132,6 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
      */
     private fun isProviderReady(provider: ChatLlmProvider): Boolean =
         if (provider == ChatLlmProvider.DOUBAO) BuildConfig.ARK_API_KEY.isNotBlank() || apiKeyStore.isConfigured(provider)
-        else if (provider == ChatLlmProvider.DEEPSEEK) BuildConfig.DEEPSEEK_API_KEY.isNotBlank() || apiKeyStore.isConfigured(provider)
         else apiKeyStore.isConfigured(provider)
     private var activeChildId: String? = null
     private var pendingImport: com.xingmou.core.consent.AuthorizedChildExport? = null
@@ -714,7 +713,7 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
             provider = provider,
             keyProvider = {
                 when (provider) {
-                    ChatLlmProvider.DEEPSEEK -> BuildConfig.DEEPSEEK_API_KEY.takeIf { it.isNotBlank() } ?: apiKeyStore.get(provider)
+                    ChatLlmProvider.DEEPSEEK -> apiKeyStore.get(provider)
                     ChatLlmProvider.DOUBAO -> BuildConfig.ARK_API_KEY.takeIf { it.isNotBlank() } ?: apiKeyStore.get(provider)
                     else -> apiKeyStore.get(provider)
                 }
