@@ -198,6 +198,10 @@ interface PlanDao {
     @Query("SELECT * FROM plan_versions WHERE childId = :childId ORDER BY version DESC LIMIT 1")
     suspend fun latest(childId: String): PlanVersionEntity?
 
+    /** 草案或退回版本不能影响儿童端；只有已签署的方案可下发训练策略。 */
+    @Query("SELECT * FROM plan_versions WHERE childId = :childId AND status = 'active' ORDER BY version DESC LIMIT 1")
+    suspend fun latestActive(childId: String): PlanVersionEntity?
+
     @Query("SELECT * FROM plan_versions WHERE childId = :childId ORDER BY version DESC")
     suspend fun allForChild(childId: String): List<PlanVersionEntity>
 

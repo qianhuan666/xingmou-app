@@ -49,6 +49,7 @@ import com.xingmou.core.domain.PlanActor
 import com.xingmou.core.domain.PlanStateMachine
 import com.xingmou.core.domain.PlanStatus
 import com.xingmou.core.domain.QuestionEvaluator
+import com.xingmou.core.domain.PlanQuestionPolicy
 import com.xingmou.core.domain.TrainingResult
 import com.xingmou.core.model.CommunicationLevel
 import com.xingmou.core.model.Port
@@ -119,7 +120,6 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
     private val knowledgeRetriever = KnowledgeRetriever()
     private val analysisEngine = AnalysisEngine()
     private val baselineEngine = BaselineEngine()
-    private val courseProgressEngine = CourseProgressEngine(QuestionCatalog.fullCourseQuestions)
     private val planStateMachine = PlanStateMachine()
     private val dataRightsManager = DataRightsManager()
     private val importManager = AuthorizedImportManager()
@@ -1159,11 +1159,30 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
     }
 
     private suspend fun loadCourseProgress(childId: String) {
-        val fullCourseIds = QuestionCatalog.fullCourseQuestions.map { it.id }.toSet()
+        val activePlan = database.planDao().latestActive(childId)
+        val planPolicy = PlanQuestionPolicy.from(activePlan)
+        val childSnapshot = _uiState.value.child
+        val effectiveDifficulty = PlanQuestionPolicy.effectiveDifficulty(
+            policy = planPolicy,
+            currentPlanId = childSnapshot.coursePlanId,
+            currentPlanVersion = childSnapshot.coursePlanVersion,
+            currentDifficulty = childSnapshot.difficulty
+        )
+        val samePlan = planPolicy != null &&
+            planPolicy.planId == childSnapshot.coursePlanId &&
+            planPolicy.planVersion == childSnapshot.coursePlanVersion
+        val effectiveSupportLevel = if (samePlan) childSnapshot.supportLevel else planPolicy?.supportLevel ?: childSnapshot.supportLevel
+        val plannedQuestions = PlanQuestionPolicy.selectQuestions(
+            QuestionCatalog.fullCourseQuestions,
+            planPolicy,
+            effectiveDifficulty
+        )
+        val fullCourseIds = plannedQuestions.map { it.id }.toSet()
         val records = database.trainingRecordDao().recentForChild(childId, 200)
             .filter { it.taskId in fullCourseIds || it.taskId == "图片配对" }
-        val progress = courseProgressEngine.summarize(records)
-        val encouragement = courseProgressEngine.encouragement(progress, records)
+        val progressEngine = CourseProgressEngine(plannedQuestions)
+        val progress = progressEngine.summarize(records)
+        val encouragement = progressEngine.encouragement(progress, records)
         val completedLevels = progress.completedCount / 5
         val courseMap = V08_COURSE_LEVELS.mapIndexed { index, level ->
             val status = when {
@@ -1189,6 +1208,12 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                 courseStimulus = question?.stimulus.orEmpty(),
                 coursePreviewMs = question?.previewMs ?: 3_000L,
                 assetKey = question?.assetKey ?: it.child.assetKey,
+                coursePlanId = planPolicy?.planId,
+                coursePlanVersion = planPolicy?.planVersion,
+                coursePlanModuleId = planPolicy?.moduleId,
+                coursePlanGoal = planPolicy?.observableGoal.orEmpty(),
+                difficulty = effectiveDifficulty,
+                supportLevel = effectiveSupportLevel,
                 courseUnlocked = baselineSession.status == BaselineStatus.COMPLETED,
                 courseOpen = true,
                 courseSummary = progress.summary,
@@ -1570,23 +1595,36 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
 
     fun openCurriculumLevel(order: Int) {
         if (order !in curriculumPassedOrders && !isLevelAvailable(order)) return
-        val level = ensureCurriculum().firstOrNull { it.order == order } ?: return
-        val activities = level.activities
-        if (activities.isEmpty()) return
-        val first = activities.first()
-        val question = CurriculumCatalog.resolveQuestion(first)
-        _uiState.update { it.copy(child = it.child.copy(curriculumPlayer = CurriculumPlayerUi(
-            levelOrder = order,
-            levelTitle = level.title,
-            activityIndex = 0,
-            activityTotal = activities.size,
-            activityLabel = first.label,
-            question = question,
-            runCompleted = 0, runCorrect = 0, runTotal = 0,
-            isWorking = false,
-            message = "",
-            finished = false, passed = false
-        ))) }
+        viewModelScope.launch {
+            val level = ensureCurriculum().firstOrNull { it.order == order } ?: return@launch
+            val activities = level.activities
+            if (activities.isEmpty()) return@launch
+            val policy = PlanQuestionPolicy.from(database.planDao().latestActive(childId))
+            val first = activities.first()
+            val question = CurriculumCatalog.resolveQuestion(first)?.let { base ->
+                if (policy == null) base else PlanQuestionPolicy.run { base.forDifficulty(policy.difficulty) }
+            }
+            _uiState.update { it.copy(child = it.child.copy(
+                difficulty = policy?.difficulty ?: it.child.difficulty,
+                supportLevel = policy?.supportLevel ?: it.child.supportLevel,
+                coursePlanId = policy?.planId,
+                coursePlanVersion = policy?.planVersion,
+                coursePlanModuleId = policy?.moduleId,
+                coursePlanGoal = policy?.observableGoal.orEmpty(),
+                curriculumPlayer = CurriculumPlayerUi(
+                    levelOrder = order,
+                    levelTitle = level.title,
+                    activityIndex = 0,
+                    activityTotal = activities.size,
+                    activityLabel = first.label,
+                    question = question,
+                    runCompleted = 0, runCorrect = 0, runTotal = 0,
+                    isWorking = false,
+                    message = "",
+                    finished = false, passed = false
+                )
+            )) }
+        }
     }
 
     fun leaveCurriculumLevel() {
@@ -1648,7 +1686,11 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                 if (passed) level?.let { curriculumPassedOrders.add(it.order) }
                 persistCurriculumState()
                 val nextActivity = if (!finished) activities.getOrNull(nextIndex) else null
-                val nextQuestion = nextActivity?.let { CurriculumCatalog.resolveQuestion(it) }
+                val nextQuestion = nextActivity?.let { activity ->
+                    CurriculumCatalog.resolveQuestion(activity)?.let { base ->
+                        PlanQuestionPolicy.run { base.forDifficulty(decision.nextDifficulty ?: snapshot.difficulty) }
+                    }
+                }
                 val updatedChild = snapshot.apply(decision).copy(
                     recentResults = (snapshot.recentResults + result).takeLast(3),
                     consecutiveFailures = if (correct) 0 else snapshot.consecutiveFailures + 1,
@@ -1684,7 +1726,9 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
     fun completeChildTask(selectedOption: Int) {
         val snapshot = _uiState.value.child
         if (snapshot.isWorking || snapshot.isSafetyStopped || !snapshot.courseUnlocked || !snapshot.courseOpen || snapshot.courseQuestionId == null || snapshot.courseProgress >= snapshot.courseTotal) return
-        val question = QuestionCatalog.fullCourseQuestions.firstOrNull { it.id == snapshot.courseQuestionId }
+        val question = QuestionCatalog.fullCourseQuestions
+            .firstOrNull { it.id == snapshot.courseQuestionId }
+            ?.let { PlanQuestionPolicy.run { it.forDifficulty(snapshot.difficulty) } }
         if (question == null) {
             _uiState.update { it.copy(child = it.child.copy(message = "当前题目不存在，请先返回关卡地图。", lastEvent = "QUESTION_NOT_FOUND")) }
             return
@@ -1717,7 +1761,8 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                         currentDifficulty = snapshot.difficulty,
                         currentSupportLevel = snapshot.supportLevel,
                         result = result,
-                        recentResults = snapshot.recentResults
+                        recentResults = snapshot.recentResults,
+                        observationText = "question_version=${question.version};plan_id=${snapshot.coursePlanId ?: "none"};plan_version=${snapshot.coursePlanVersion ?: 0};module_id=${question.moduleId}"
                     )
                 )
                 val failures = if (correct) 0 else snapshot.consecutiveFailures + 1
@@ -1949,7 +1994,7 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
     }
 
     private suspend fun loadHomeSupport(childId: String) {
-        val latestPlan = database.planDao().latest(childId)?.takeIf { it.status == "active" }
+        val latestPlan = database.planDao().latestActive(childId)
         val existing = database.homeTaskDao().latestForChild(childId)
         val task = if (latestPlan != null && existing?.planId != latestPlan.planId) {
             createHomeTaskFromPlan(latestPlan).also { database.homeTaskDao().upsert(it) }
@@ -2330,6 +2375,8 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                 decision.updatedReview?.let { activeReview = it }
                 if (activate && decision.updatedPlan?.status == "active") {
                     publishActivePlanToHomeTask(decision.updatedPlan)
+                    // 方案签署后立即刷新儿童端，避免仍显示旧的全量题库。
+                    if (childId == _uiState.value.activeChildId) loadCourseProgress(childId)
                 }
                 _uiState.update {
                     it.copy(professional = it.professional.copy(

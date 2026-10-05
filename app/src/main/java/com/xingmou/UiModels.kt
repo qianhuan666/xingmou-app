@@ -141,6 +141,11 @@ data class ChildUiState(
     val courseQuestionType: QuestionType = QuestionType.CHOICE,
     val courseStimulus: String = "",
     val coursePreviewMs: Long = 3_000L,
+    /** 正式训练使用的专业方案快照；基线和无方案训练为空。 */
+    val coursePlanId: String? = null,
+    val coursePlanVersion: Int? = null,
+    val coursePlanModuleId: String? = null,
+    val coursePlanGoal: String = "",
     val assetKey: String = "training_star",
     val courseUnlocked: Boolean = false,
     val courseOpen: Boolean = true,
