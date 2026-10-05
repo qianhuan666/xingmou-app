@@ -170,6 +170,21 @@ interface TrainingRecordDao {
 }
 
 @Dao
+interface ModuleAdaptiveStateDao {
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(state: ModuleAdaptiveStateEntity)
+
+    @Query("SELECT * FROM module_adaptive_states WHERE childId = :childId AND moduleId = :moduleId LIMIT 1")
+    suspend fun find(childId: String, moduleId: String): ModuleAdaptiveStateEntity?
+
+    @Query("SELECT * FROM module_adaptive_states WHERE childId = :childId ORDER BY moduleId")
+    suspend fun allForChild(childId: String): List<ModuleAdaptiveStateEntity>
+
+    @Query("DELETE FROM module_adaptive_states WHERE childId = :childId")
+    suspend fun deleteForChild(childId: String)
+}
+
+@Dao
 interface KnowledgeDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(items: List<KnowledgeItemEntity>)

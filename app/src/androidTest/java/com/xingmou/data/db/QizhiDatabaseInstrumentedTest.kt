@@ -60,6 +60,28 @@ class QizhiDatabaseInstrumentedTest {
     }
 
     @Test
+    fun moduleAdaptiveStateRoundTripIsChildAndModuleScoped() = runBlocking {
+        database.moduleAdaptiveStateDao().upsert(
+            ModuleAdaptiveStateEntity(
+                stateId = "adaptive-child-m02",
+                childId = "child-instrumented",
+                moduleId = "M02",
+                baselineVersion = 2,
+                currentDifficulty = 3,
+                currentSupportLevel = "L1",
+                correctStreak = 1,
+                errorStreak = 0,
+                lastQuestionId = "M02-L3-V1",
+                updatedAt = 10L
+            )
+        )
+        val state = database.moduleAdaptiveStateDao().find("child-instrumented", "M02")
+        assertEquals(3, state?.currentDifficulty)
+        assertEquals("M02-L3-V1", state?.lastQuestionId)
+        assertEquals(1, database.moduleAdaptiveStateDao().allForChild("child-instrumented").size)
+    }
+
+    @Test
     fun agentEventIsStoredWithSafetyFlagTransaction() = runBlocking {
         val coordinator = AgentEventCoordinator(AgentEventProcessor(), RoomAgentEventStore(database))
         val decision = coordinator.handle(
