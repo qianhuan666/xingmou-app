@@ -148,6 +148,7 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
     private val curriculumPassedOrders = mutableSetOf<Int>()
     private val curriculumLevelStars = mutableMapOf<Int, Int>()
     private var curriculumInterestChosen = false
+    private var curriculumInterest = ""
     private val localUserId = SeedData.DEMO_USER_ID
     private val childId: String
         get() = activeChildId ?: SeedData.defaultChild.childId
@@ -1629,6 +1630,9 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun selectInterest(value: String) {
+        // 与地图的主题选择共享同一份持久化，重启后保持
+        curriculumInterest = value
+        if (value.isNotBlank()) persistCurriculumState()
         _uiState.update { it.copy(child = it.child.copy(interest = value)) }
     }
 
@@ -1652,6 +1656,10 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
             }
         }
         curriculumInterestChosen = curriculumPrefs.getBoolean("interest_chosen_$scopedChildId", false)
+        curriculumInterest = curriculumPrefs.getString("interest_value_$scopedChildId", null).orEmpty()
+        if (curriculumInterest.isNotBlank()) {
+            _uiState.update { it.copy(child = it.child.copy(interest = curriculumInterest)) }
+        }
     }
 
     /** 把通关顺序、星级与兴趣门槛写回 SharedPreferences，进程重启后解锁链不归零。 */
@@ -1660,6 +1668,7 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
             .putString("passed_orders_$childId", curriculumPassedOrders.sorted().joinToString(","))
             .putString("level_stars_$childId", curriculumLevelStars.entries.sortedBy { it.key }.joinToString(",") { "${it.key}:${it.value}" })
             .putBoolean("interest_chosen_$childId", curriculumInterestChosen)
+            .putString("interest_value_$childId", curriculumInterest)
             .apply()
     }
 
@@ -1729,9 +1738,10 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
         _uiState.update { it.copy(child = it.child.copy(curriculumMap = buildCurriculumMap())) }
     }
 
-    /** 兴趣门槛：选好主题后才开放第一关。 */
+    /** 兴趣门槛/随时换主题：选好或更换主题后持久化，第一关据此开放。 */
     fun chooseCurriculumInterest(value: String) {
         curriculumInterestChosen = true
+        curriculumInterest = value
         persistCurriculumState()
         _uiState.update { it.copy(child = it.child.copy(interest = value)) }
         refreshCurriculumMap()
@@ -1755,10 +1765,12 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
         curriculumPassedOrders.clear()
         curriculumLevelStars.clear()
         curriculumInterestChosen = false
+        curriculumInterest = ""
         curriculumPrefs.edit()
             .remove("passed_orders_$currentId")
             .remove("level_stars_$currentId")
             .remove("interest_chosen_$currentId")
+            .remove("interest_value_$currentId")
             .apply()
         publishBaseline(isOpen = false)
         _uiState.update { it.copy(child = it.child.copy(courseOpen = false, interest = "")) }

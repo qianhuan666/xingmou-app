@@ -627,6 +627,8 @@ private fun CurriculumMapDialog(
     onOpenLevel: (Int) -> Unit
 ) {
     val showResetConfirm = remember { mutableStateOf(false) }
+    // 随时更换兴趣主题的浮层
+    val showInterestSheet = remember { mutableStateOf(false) }
     androidx.compose.ui.window.Dialog(
         onDismissRequest = onBack,
         properties = androidx.compose.ui.window.DialogProperties(
@@ -695,6 +697,26 @@ private fun CurriculumMapDialog(
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = com.xingmou.ui.theme.Ink.copy(alpha = 0.7f)
                             )
+                        }
+                        // 随时更换兴趣主题：显示当前主题，点击重选
+                        androidx.compose.material3.Surface(
+                            onClick = { showInterestSheet.value = true },
+                            shape = RoundedCornerShape(28.dp),
+                            color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.85f),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, com.xingmou.ui.theme.Rule)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Text("🎨", style = MaterialTheme.typography.titleMedium)
+                                Text(
+                                    map.interest.ifBlank { "选主题" },
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = com.xingmou.ui.theme.Ink
+                                )
+                            }
                         }
                         // 家长重置入口：低调的圆形小按钮，点击需二次确认
                         androidx.compose.material3.Surface(
@@ -780,6 +802,72 @@ private fun CurriculumMapDialog(
                                     containerColor = com.xingmou.ui.theme.Coral
                                 )
                             ) { Text("开始小测", modifier = Modifier.padding(horizontal = 8.dp)) }
+                        }
+                    }
+                }
+            }
+
+            // 随时更换兴趣主题：浮层中当前主题高亮，点选即换并关闭
+            if (showInterestSheet.value) {
+                Box(
+                    Modifier.fillMaxSize()
+                        .background(androidx.compose.ui.graphics.Color(0x66000000))
+                        .clickable(
+                            interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                            indication = null,
+                            onClick = { showInterestSheet.value = false }
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    androidx.compose.material3.Surface(
+                        shape = RoundedCornerShape(28.dp),
+                        color = androidx.compose.ui.graphics.Color.White,
+                        shadowElevation = 8.dp,
+                        modifier = Modifier
+                            .fillMaxWidth(0.82f)
+                            .padding(24.dp)
+                            .clickable(
+                                interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                                indication = null,
+                                onClick = {}
+                            )
+                    ) {
+                        Column(Modifier.padding(28.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Text("换一个喜欢的主题", style = MaterialTheme.typography.titleLarge, color = com.xingmou.ui.theme.Ink)
+                            Text(
+                                "小星会用新主题陪你玩，关卡进度不会受影响。",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = com.xingmou.ui.theme.Ink.copy(alpha = 0.7f)
+                            )
+                            map.interestOptions.forEach { option ->
+                                val selected = option == map.interest
+                                androidx.compose.material3.Surface(
+                                    onClick = {
+                                        onChooseInterest(option)
+                                        showInterestSheet.value = false
+                                    },
+                                    shape = RoundedCornerShape(18.dp),
+                                    color = if (selected) com.xingmou.ui.theme.CoralSoft else androidx.compose.ui.graphics.Color.White,
+                                    border = androidx.compose.foundation.BorderStroke(
+                                        1.dp,
+                                        if (selected) com.xingmou.ui.theme.Coral else com.xingmou.ui.theme.Rule
+                                    ),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 14.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Text(
+                                            option,
+                                            style = MaterialTheme.typography.titleMedium,
+                                            color = if (selected) com.xingmou.ui.theme.CoralDark else com.xingmou.ui.theme.Ink
+                                        )
+                                        if (selected) Text("✓", style = MaterialTheme.typography.titleMedium, color = com.xingmou.ui.theme.CoralDark)
+                                    }
+                                }
+                            }
                         }
                     }
                 }
