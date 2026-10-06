@@ -1737,6 +1737,34 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
         refreshCurriculumMap()
     }
 
+    /**
+     * 家长重置：清空基线结果、20 关节点亮/星级与兴趣门槛，回到首次进入地图的状态
+     * （第 1 关锁定、底部提示先做起点小测）。基线 JSON 置空、profileVersion 归零。
+     */
+    fun resetCurriculumAndBaseline() {
+        baselineSession = BaselineSession()
+        val currentId = childId
+        viewModelScope.launch {
+            baselinePersistMutex.withLock {
+                val current = database.childDao().findById(currentId)
+                if (current != null) {
+                    database.childDao().updateBaseline(currentId, "", 0, System.currentTimeMillis())
+                }
+            }
+        }
+        curriculumPassedOrders.clear()
+        curriculumLevelStars.clear()
+        curriculumInterestChosen = false
+        curriculumPrefs.edit()
+            .remove("passed_orders_$currentId")
+            .remove("level_stars_$currentId")
+            .remove("interest_chosen_$currentId")
+            .apply()
+        publishBaseline(isOpen = false)
+        _uiState.update { it.copy(child = it.child.copy(courseOpen = false, interest = "")) }
+        refreshCurriculumMap()
+    }
+
     fun openCurriculumLevel(order: Int) {
         if (order !in curriculumPassedOrders && !isLevelAvailable(order)) return
         viewModelScope.launch {

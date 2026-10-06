@@ -741,6 +741,7 @@ private fun PortContent(
             onAnswerCurriculumActivity = viewModel::answerCurriculumActivity,
             onLeaveCurriculumLevel = viewModel::leaveCurriculumLevel,
             onChooseCurriculumInterest = viewModel::chooseCurriculumInterest,
+            onResetCurriculum = viewModel::resetCurriculumAndBaseline,
             onPause = viewModel::pauseChildTraining,
             onResume = viewModel::resumeChildTraining,
             onSpeechEnabledChange = viewModel::setSpeechEnabled,

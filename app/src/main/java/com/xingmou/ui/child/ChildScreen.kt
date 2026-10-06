@@ -102,6 +102,7 @@ fun ChildScreen(
     onAnswerCurriculumActivity: (Int) -> Unit,
     onLeaveCurriculumLevel: () -> Unit,
     onChooseCurriculumInterest: (String) -> Unit,
+    onResetCurriculum: () -> Unit,
     onPause: () -> Unit,
     onResume: () -> Unit,
     onSpeechEnabledChange: (Boolean) -> Unit,
@@ -553,6 +554,10 @@ fun ChildScreen(
               onBack = exitMap,
               onStartBaseline = onStartBaseline,
               onChooseInterest = onChooseCurriculumInterest,
+              onReset = {
+                  selectedCourseLevel.value = null
+                  onResetCurriculum()
+              },
               onOpenLevel = { level ->
                   selectedCourseLevel.value = level
                   onOpenCurriculumLevel(level)
@@ -618,8 +623,10 @@ private fun CurriculumMapDialog(
     onBack: () -> Unit,
     onStartBaseline: () -> Unit,
     onChooseInterest: (String) -> Unit,
+    onReset: () -> Unit,
     onOpenLevel: (Int) -> Unit
 ) {
+    val showResetConfirm = remember { mutableStateOf(false) }
     androidx.compose.ui.window.Dialog(
         onDismissRequest = onBack,
         properties = androidx.compose.ui.window.DialogProperties(
@@ -680,13 +687,30 @@ private fun CurriculumMapDialog(
                             modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp)
                         )
                     }
-                    Column(horizontalAlignment = Alignment.End) {
-                        Text("我的彩虹冒险", style = MaterialTheme.typography.titleLarge, color = com.xingmou.ui.theme.Ink)
-                        Text(
-                            "已点亮 ${map.completedLevels} / ${map.totalLevels} 关",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = com.xingmou.ui.theme.Ink.copy(alpha = 0.7f)
-                        )
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Column(horizontalAlignment = Alignment.End) {
+                            Text("我的彩虹冒险", style = MaterialTheme.typography.titleLarge, color = com.xingmou.ui.theme.Ink)
+                            Text(
+                                "已点亮 ${map.completedLevels} / ${map.totalLevels} 关",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = com.xingmou.ui.theme.Ink.copy(alpha = 0.7f)
+                            )
+                        }
+                        // 家长重置入口：低调的圆形小按钮，点击需二次确认
+                        androidx.compose.material3.Surface(
+                            onClick = { showResetConfirm.value = true },
+                            shape = CircleShape,
+                            color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.85f),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, com.xingmou.ui.theme.Rule)
+                        ) {
+                            Text(
+                                "↺",
+                                style = MaterialTheme.typography.titleLarge,
+                                color = com.xingmou.ui.theme.Ink.copy(alpha = 0.6f),
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                                    .semantics { contentDescription = "重新开始：清空小测和全部关卡进度" }
+                            )
+                        }
                     }
                 }
 
@@ -759,6 +783,31 @@ private fun CurriculumMapDialog(
                         }
                     }
                 }
+            }
+
+            // 重置二次确认（防误触）：清空后需重新做起点小测
+            if (showResetConfirm.value) {
+                androidx.compose.material3.AlertDialog(
+                    onDismissRequest = { showResetConfirm.value = false },
+                    title = { Text("重新开始？") },
+                    text = { Text("会清空起点小测结果、已点亮的关卡和星星，第 1 关会重新锁上，需要再做一次小测。这个操作不能撤销。") },
+                    confirmButton = {
+                        androidx.compose.material3.TextButton(
+                            onClick = {
+                                showResetConfirm.value = false
+                                onReset()
+                            },
+                            colors = androidx.compose.material3.ButtonDefaults.textButtonColors(
+                                contentColor = com.xingmou.ui.theme.CoralDark
+                            )
+                        ) { Text("全部清空，重新开始") }
+                    },
+                    dismissButton = {
+                        androidx.compose.material3.TextButton(onClick = { showResetConfirm.value = false }) {
+                            Text("再想想")
+                        }
+                    }
+                )
             }
         }
     }
