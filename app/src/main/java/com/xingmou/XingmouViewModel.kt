@@ -110,6 +110,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -182,6 +184,8 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
     private var activePlan: PlanVersionEntity? = null
     private var activeReview: ReviewRequestEntity? = null
     private var baselineSession = BaselineSession()
+    // 保证基线落库严格按作答顺序串行，避免旧题快照在 IO 线程乱序覆盖完成状态
+    private val baselinePersistMutex = Mutex()
     private var perceptionManager: PerceptionManager? = null
     private var feedbackController: FeedbackController? = null
     private var sessionRecorder: SessionRecorder? = null
@@ -1475,12 +1479,17 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    private fun persistBaseline() {
-        val currentId = activeChildId ?: return
+    private fun persistBaseline(snapshot: BaselineSession = baselineSession) {
+        // 默认参数在调用线程同步求值，立即捕获此刻的会话；协程内禁止再读共享字段 baselineSession——
+        // Room 观察流会在落库回调中用旧 JSON 覆盖该字段，延迟读取会把刚完成的 COMPLETED 写回旧快照。
+        // 儿童体验模式下 activeChildId 为 null，需用带默认档案兜底的 childId。
+        val currentId = childId
         viewModelScope.launch {
-            val current = database.childDao().findById(currentId) ?: return@launch
-            val nextVersion = if (baselineSession.status == BaselineStatus.COMPLETED) current.profileVersion + 1 else current.profileVersion
-            database.childDao().updateBaseline(currentId, baselineEngine.toJson(baselineSession), nextVersion, System.currentTimeMillis())
+            baselinePersistMutex.withLock {
+                val current = database.childDao().findById(currentId) ?: return@withLock
+                val nextVersion = if (snapshot.status == BaselineStatus.COMPLETED) current.profileVersion + 1 else current.profileVersion
+                database.childDao().updateBaseline(currentId, baselineEngine.toJson(snapshot), nextVersion, System.currentTimeMillis())
+            }
         }
     }
 

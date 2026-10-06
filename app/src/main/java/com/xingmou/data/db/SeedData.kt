@@ -192,7 +192,11 @@ object DatabaseSeeder {
     suspend fun seed(database: QizhiDatabase) {
         database.organizationDao().upsert(SeedData.defaultOrganization)
         SeedData.demoRoleUsers.forEach { database.localUserDao().upsert(it) }
-        database.childDao().upsert(SeedData.defaultChild)
+        // 默认儿童行承载可变数据（基线 JSON、profileVersion 等），绝不能每次启动 REPLACE 覆盖；
+        // 仅在首次播种、档案不存在时插入。
+        if (database.childDao().findById(SeedData.defaultChild.childId) == null) {
+            database.childDao().upsert(SeedData.defaultChild)
+        }
         database.childBindingDao().upsert(SeedData.defaultBinding)
         database.knowledgeDao().insertAll(SeedData.knowledgeItems + SeedData.taskItems)
     }
