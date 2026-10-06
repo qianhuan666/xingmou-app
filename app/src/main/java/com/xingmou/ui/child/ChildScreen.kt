@@ -1271,14 +1271,24 @@ private fun ChatCard(
                 }
             }
 
-            // 消息列表：占满剩余高度，输入区始终固定底部
+            // 新消息到达时自动滚动到底部
+            LaunchedEffect(messages.size) {
+                if (messages.isNotEmpty()) scrollState.animateScrollTo(scrollState.maxValue)
+            }
+
+            // 消息列表：占满剩余高度、消息不足一屏时贴底（贴近输入区），输入区始终固定底部
             Column(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()
                     .verticalScroll(scrollState)
                     .padding(horizontal = 4.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                // 问候状态贴顶展示，进入真实对话后消息贴底靠近输入区
+                verticalArrangement = if (messages.isEmpty() && !greetingChoiceMade.value) {
+                    Arrangement.spacedBy(10.dp)
+                } else {
+                    Arrangement.spacedBy(10.dp, alignment = Alignment.Bottom)
+                }
             ) {
                 if (messages.isEmpty() && !greetingChoiceMade.value) {
                     // 开场问候：小星主动给出「聊天 / 做游戏」两个大按钮选择
@@ -1386,8 +1396,9 @@ private fun ChatCard(
                     border = androidx.compose.foundation.BorderStroke(1.dp, com.xingmou.ui.theme.Rule)
                 ) {
                     Text(
-                        if (micListening.value) "🎧 听着呢" else "🎤",
+                        if (micListening.value) "🎧 听着呢" else "🎤 语音",
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                        color = if (micListening.value) androidx.compose.ui.graphics.Color.White else com.xingmou.ui.theme.Ink,
                         style = MaterialTheme.typography.titleMedium
                     )
                 }
@@ -1482,7 +1493,7 @@ private fun ChatBubble(msg: com.xingmou.ChatMessageUi) {
         androidx.compose.foundation.BorderStroke(1.dp, com.xingmou.ui.theme.Rule)
     }
     val bubbleText = when {
-        msg.isError -> MaterialTheme.colorScheme.error
+        msg.isError -> com.xingmou.ui.theme.CoralDark
         isUser -> androidx.compose.ui.graphics.Color.White
         else -> com.xingmou.ui.theme.Ink
     }
