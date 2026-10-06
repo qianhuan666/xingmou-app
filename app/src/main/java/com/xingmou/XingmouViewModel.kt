@@ -92,6 +92,7 @@ import com.xingmou.data.catalog.QuestionCatalog
 import com.xingmou.data.catalog.QuestionDefinition
 import com.xingmou.data.catalog.CurriculumCatalog
 import com.xingmou.data.catalog.CurriculumCatalog.GeneratedCurriculumLevel
+import com.xingmou.data.catalog.InterestThemeSkins
 import com.xingmou.data.catalog.DomainCatalog
 import com.xingmou.data.catalog.TaskCatalog
 import com.xingmou.data.catalog.AssessmentCatalog
@@ -1786,7 +1787,8 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
             val policy = PlanQuestionPolicy.from(database.planDao().latestActive(childId))
             val first = activities.first()
             val question = CurriculumCatalog.resolveQuestion(first)?.let { base ->
-                if (policy == null) base else PlanQuestionPolicy.run { base.forDifficulty(policy.difficulty) }
+                val leveled = if (policy == null) base else PlanQuestionPolicy.run { base.forDifficulty(policy.difficulty) }
+                InterestThemeSkins.apply(leveled, curriculumInterest)
             }
             _uiState.update { it.copy(child = it.child.copy(
                 difficulty = policy?.difficulty ?: it.child.difficulty,
@@ -1888,7 +1890,8 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                 val nextActivity = if (!finished) activities.getOrNull(nextIndex) else null
                 val nextQuestion = nextActivity?.let { activity ->
                     CurriculumCatalog.resolveQuestion(activity)?.let { base ->
-                        PlanQuestionPolicy.run { base.forDifficulty(decision.nextDifficulty ?: snapshot.difficulty) }
+                        val leveled = PlanQuestionPolicy.run { base.forDifficulty(decision.nextDifficulty ?: snapshot.difficulty) }
+                        InterestThemeSkins.apply(leveled, curriculumInterest)
                     }
                 }
                 val updatedChild = snapshot.apply(decision).copy(
