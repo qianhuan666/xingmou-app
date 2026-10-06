@@ -1638,38 +1638,74 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
 
     // ---- 20 关彩虹冒险：地图 + 播放器（作答落库 + 进度持久化）----
 
-    /** 从 SharedPreferences 恢复当前儿童的通关顺序、星级与兴趣门槛（键按 childId 隔离）。 */
-    private fun loadCurriculumState(scopedChildId: String) {
+    /** 通关/星级按「孩子 + 兴趣」分桶：不同兴趣各有一条独立冒险进度。 */
+    private fun passedOrdersKey(scopedChildId: String, interest: String) = "passed_orders_${scopedChildId}_$interest"
+    private fun levelStarsKey(scopedChildId: String, interest: String) = "level_stars_${scopedChildId}_$interest"
+
+    private fun parsePassedOrders(raw: String?) {
         curriculumPassedOrders.clear()
-        val saved = curriculumPrefs.getString("passed_orders_$scopedChildId", null)
-        if (!saved.isNullOrBlank()) {
-            curriculumPassedOrders.addAll(saved.split(',').mapNotNull { it.trim().toIntOrNull() })
+        if (!raw.isNullOrBlank()) {
+            curriculumPassedOrders.addAll(raw.split(',').mapNotNull { it.trim().toIntOrNull() })
         }
+    }
+
+    private fun parseLevelStars(raw: String?) {
         curriculumLevelStars.clear()
-        val savedStars = curriculumPrefs.getString("level_stars_$scopedChildId", null)
-        if (!savedStars.isNullOrBlank()) {
-            savedStars.split(',').forEach { pair ->
+        if (!raw.isNullOrBlank()) {
+            raw.split(',').forEach { pair ->
                 val parts = pair.trim().split(':')
                 val order = parts.getOrNull(0)?.toIntOrNull()
                 val stars = parts.getOrNull(1)?.toIntOrNull()
                 if (order != null && stars != null && stars in 1..3) curriculumLevelStars[order] = stars
             }
         }
-        curriculumInterestChosen = curriculumPrefs.getBoolean("interest_chosen_$scopedChildId", false)
-        curriculumInterest = curriculumPrefs.getString("interest_value_$scopedChildId", null).orEmpty()
-        if (curriculumInterest.isNotBlank()) {
-            _uiState.update { it.copy(child = it.child.copy(interest = curriculumInterest)) }
-        }
     }
 
-    /** 把通关顺序、星级与兴趣门槛写回 SharedPreferences，进程重启后解锁链不归零。 */
+    /** 从 SharedPreferences 恢复当前儿童的兴趣门槛与「当前兴趣」的通关进度（键按 childId+兴趣隔离）。 */
+    private fun loadCurriculumState(scopedChildId: String) {
+        curriculumInterestChosen = curriculumPrefs.getBoolean("interest_chosen_$scopedChildId", false)
+        curriculumInterest = curriculumPrefs.getString("interest_value_$scopedChildId", null).orEmpty()
+
+        curriculumPassedOrders.clear()
+        curriculumLevelStars.clear()
+        if (curriculumInterest.isBlank()) {
+            // 尚未选过兴趣，不存在通关数据（第 1 关本就锁定）；旧数据会在选出兴趣后的迁移分支接管
+            return
+        }
+
+        val bucketKey = passedOrdersKey(scopedChildId, curriculumInterest)
+        val bucketStarsKey = levelStarsKey(scopedChildId, curriculumInterest)
+        if (curriculumPrefs.contains(bucketKey) || curriculumPrefs.contains(bucketStarsKey)) {
+            parsePassedOrders(curriculumPrefs.getString(bucketKey, null))
+            parseLevelStars(curriculumPrefs.getString(bucketStarsKey, null))
+        } else {
+            // 首次升级到兴趣分桶：旧版无后缀数据归属到当时保存的兴趣
+            val legacyPassed = curriculumPrefs.getString("passed_orders_$scopedChildId", null)
+            val legacyStars = curriculumPrefs.getString("level_stars_$scopedChildId", null)
+            parsePassedOrders(legacyPassed)
+            parseLevelStars(legacyStars)
+            if (!legacyPassed.isNullOrBlank() || !legacyStars.isNullOrBlank()) {
+                persistCurriculumState()
+                curriculumPrefs.edit()
+                    .remove("passed_orders_$scopedChildId")
+                    .remove("level_stars_$scopedChildId")
+                    .apply()
+            }
+        }
+        _uiState.update { it.copy(child = it.child.copy(interest = curriculumInterest)) }
+    }
+
+    /** 把当前兴趣的通关顺序、星级与兴趣门槛写回 SharedPreferences，进程重启后解锁链不归零。 */
     private fun persistCurriculumState() {
-        curriculumPrefs.edit()
-            .putString("passed_orders_$childId", curriculumPassedOrders.sorted().joinToString(","))
-            .putString("level_stars_$childId", curriculumLevelStars.entries.sortedBy { it.key }.joinToString(",") { "${it.key}:${it.value}" })
+        val editor = curriculumPrefs.edit()
             .putBoolean("interest_chosen_$childId", curriculumInterestChosen)
             .putString("interest_value_$childId", curriculumInterest)
-            .apply()
+        if (curriculumInterest.isNotBlank()) {
+            editor
+                .putString(passedOrdersKey(childId, curriculumInterest), curriculumPassedOrders.sorted().joinToString(","))
+                .putString(levelStarsKey(childId, curriculumInterest), curriculumLevelStars.entries.sortedBy { it.key }.joinToString(",") { "${it.key}:${it.value}" })
+        }
+        editor.apply()
     }
 
     /** 通关正确率映射星级：≥90% 三星、≥75% 两星、通过即至少一星（与 isPassed 的 60% 门槛对齐）。 */
@@ -1738,17 +1774,29 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
         _uiState.update { it.copy(child = it.child.copy(curriculumMap = buildCurriculumMap())) }
     }
 
-    /** 兴趣门槛/随时换主题：选好或更换主题后持久化，第一关据此开放。 */
+    /**
+     * 兴趣门槛/随时换主题：选好或更换主题后，把旧兴趣的进度桶落盘，再载入新兴趣自己的
+     * 通关/星级（各兴趣进度相互独立），第一关对已选兴趣均开放（门槛只表示“选过主题”）。
+     */
     fun chooseCurriculumInterest(value: String) {
+        if (value == curriculumInterest && curriculumInterestChosen) {
+            refreshCurriculumMap()
+            return
+        }
+        // 先把当前（旧）兴趣的进度确保落盘
+        if (curriculumInterest.isNotBlank()) persistCurriculumState()
         curriculumInterestChosen = true
         curriculumInterest = value
+        // 内存切换为新兴趣的桶：有存档就读，没有就是一条全新冒险线
+        parsePassedOrders(curriculumPrefs.getString(passedOrdersKey(childId, value), null))
+        parseLevelStars(curriculumPrefs.getString(levelStarsKey(childId, value), null))
         persistCurriculumState()
         _uiState.update { it.copy(child = it.child.copy(interest = value)) }
         refreshCurriculumMap()
     }
 
     /**
-     * 家长重置：清空基线结果、20 关节点亮/星级与兴趣门槛，回到首次进入地图的状态
+     * 家长重置：清空基线结果、所有兴趣各自的关卡点亮/星级与兴趣门槛，回到首次进入地图的状态
      * （第 1 关锁定、底部提示先做起点小测）。基线 JSON 置空、profileVersion 归零。
      */
     fun resetCurriculumAndBaseline() {
@@ -1766,9 +1814,16 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
         curriculumLevelStars.clear()
         curriculumInterestChosen = false
         curriculumInterest = ""
-        curriculumPrefs.edit()
-            .remove("passed_orders_$currentId")
-            .remove("level_stars_$currentId")
+        // 删除该孩子全部兴趣分桶（passed_orders_<id>_<兴趣> / level_stars_<id>_<兴趣>），
+        // 以及旧版无后缀键；用「精确或下划线分隔」匹配，避免误伤 id 前缀相同的其他孩子
+        val editor = curriculumPrefs.edit()
+        curriculumPrefs.all.keys
+            .filter { key ->
+                key == "passed_orders_$currentId" || key.startsWith("passed_orders_${currentId}_") ||
+                    key == "level_stars_$currentId" || key.startsWith("level_stars_${currentId}_")
+            }
+            .forEach { editor.remove(it) }
+        editor
             .remove("interest_chosen_$currentId")
             .remove("interest_value_$currentId")
             .apply()
