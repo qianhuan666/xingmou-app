@@ -1495,20 +1495,26 @@ private fun AccessibilityCard(
         Slider(
             value = accessibility.speechRate,
             onValueChange = onSpeechRateChange,
-            onValueChangeFinished = { if (accessibility.speechEnabled) speechController.speak("小星会用这个速度说话。") },
+            enabled = accessibility.speechEnabled,
+            onValueChangeFinished = { speechController.speak("小星会用这个速度说话。") },
             valueRange = 0.75f..1.25f,
             steps = 4,
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth().semantics { contentDescription = "朗读音语速调节，需先开启小星朗读" }
         )
         Text("音量：${(accessibility.speechVolume * 100).toInt()}%", style = MaterialTheme.typography.bodyMedium)
         Slider(
             value = accessibility.speechVolume,
             onValueChange = onSpeechVolumeChange,
-            onValueChangeFinished = { if (accessibility.speechEnabled) speechController.speak("这是现在的朗读音量。") },
+            enabled = accessibility.speechEnabled,
+            onValueChangeFinished = { speechController.speak("这是现在的朗读音量。") },
             valueRange = 0.5f..1.0f,
             steps = 4,
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth().semantics { contentDescription = "朗读音量调节，需先开启小星朗读" }
         )
+        if (!accessibility.speechEnabled) {
+            Text("开启「小星朗读」后可以调整语速和音量。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.height(4.dp))
+        }
         SettingRow("大字体", "增加界面文字大小", accessibility.largeText) { onLargeTextChange(it) }
         Spacer(Modifier.height(8.dp))
         SettingRow("高对比", "提高文字与表面的对比度", accessibility.highContrast) { onHighContrastChange(it) }
