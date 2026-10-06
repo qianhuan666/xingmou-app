@@ -241,8 +241,11 @@ fun ChildScreen(
         }
         }
 
+        // 交互模式不滚动：消息列表占满剩余高度、输入区固定底部（聊天应用标准布局）
         Column(
-            modifier = Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()).padding(24.dp),
+            modifier = Modifier.weight(1f).fillMaxHeight()
+                .then(if (selectedSection.value == ChildSection.CHAT) Modifier else Modifier.verticalScroll(rememberScrollState()))
+                .padding(24.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -307,19 +310,21 @@ fun ChildScreen(
                     Text("小星正在准备这一关…", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             } else if (selectedSection.value == ChildSection.CHAT) {
-                ChatCard(
-                    state = state,
-                    greetingChoiceMade = greetingChoiceMade,
-                    onPlayGame = { selectedSection.value = ChildSection.TRAINING },
-                    onChoiceBegin = { color, cx, cy, sizePx, onDone ->
-                        if (choiceExpand.value == null) {
-                            choiceExpand.value = ChoiceExpand(color, cx, cy, sizePx, onDone)
-                        }
-                    },
-                    onSend = onSendChatMessage,
-                    onSelectProvider = onSelectChatProvider,
-                    onOpenApiKey = onOpenApiKey
-                )
+                Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                    ChatCard(
+                        state = state,
+                        greetingChoiceMade = greetingChoiceMade,
+                        onPlayGame = { selectedSection.value = ChildSection.TRAINING },
+                        onChoiceBegin = { color, cx, cy, sizePx, onDone ->
+                            if (choiceExpand.value == null) {
+                                choiceExpand.value = ChoiceExpand(color, cx, cy, sizePx, onDone)
+                            }
+                        },
+                        onSend = onSendChatMessage,
+                        onSelectProvider = onSelectChatProvider,
+                        onOpenApiKey = onOpenApiKey
+                    )
+                }
             } else if (selectedSection.value == ChildSection.PROFILE) {
                 RainbowProfileCard(state.rainbowProfile)
             } else {
@@ -1239,11 +1244,7 @@ private fun ChatCard(
         }
     }
 
-    androidx.compose.foundation.layout.Box(modifier = Modifier.fillMaxWidth().heightIn(min = 320.dp)) {
-        Column(
-            modifier = Modifier.fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
+    androidx.compose.foundation.layout.Column(modifier = Modifier.fillMaxSize()) {
             // 儿童端模型已锁定 DeepSeek，不向孩子暴露供应商等工程信息
 
             // 未配置提示：柔和暖色引导家长去设置 API Key
@@ -1270,11 +1271,11 @@ private fun ChatCard(
                 }
             }
 
-            // 消息列表
+            // 消息列表：占满剩余高度，输入区始终固定底部
             Column(
                 modifier = Modifier
+                    .weight(1f)
                     .fillMaxWidth()
-                    .heightIn(min = 200.dp, max = 420.dp)
                     .verticalScroll(scrollState)
                     .padding(horizontal = 4.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
@@ -1418,7 +1419,6 @@ private fun ChatCard(
                     )
                 ) { Text("发送") }
             }
-        }
     }
 }
 
