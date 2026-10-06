@@ -584,18 +584,19 @@ private fun SkyDecorations() {
         // 太阳光晕 + 太阳（右上）
         drawCircle(androidx.compose.ui.graphics.Color(0xFFFFF3C4), radius = 150f, center = androidx.compose.ui.geometry.Offset(w - 170f, 170f))
         drawCircle(androidx.compose.ui.graphics.Color(0xFFFFE082), radius = 85f, center = androidx.compose.ui.geometry.Offset(w - 170f, 170f))
-        // 云朵（白色半透明，圆叠加成云形）
-        val cloudColor = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.75f)
-        fun cloud(cx: Float, cy: Float, s: Float) {
-            drawCircle(cloudColor, radius = 46f * s, center = androidx.compose.ui.geometry.Offset(cx - 42f * s, cy + 10f * s))
-            drawCircle(cloudColor, radius = 62f * s, center = androidx.compose.ui.geometry.Offset(cx, cy - 12f * s))
-            drawCircle(cloudColor, radius = 44f * s, center = androidx.compose.ui.geometry.Offset(cx + 46f * s, cy + 12f * s))
-            drawCircle(cloudColor, radius = 52f * s, center = androidx.compose.ui.geometry.Offset(cx + 8f * s, cy + 18f * s))
-        }
         cloud(w * 0.16f, 220f, 1.1f)
         cloud(w * 0.52f, 130f, 0.8f)
         cloud(w * 0.8f, 420f, 0.9f)
     }
+}
+
+/** 云朵（白色半透明，圆叠加成云形），供天空装饰与闯关地图复用。 */
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.cloud(cx: Float, cy: Float, s: Float) {
+    val cloudColor = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.75f)
+    drawCircle(cloudColor, radius = 46f * s, center = androidx.compose.ui.geometry.Offset(cx - 42f * s, cy + 10f * s))
+    drawCircle(cloudColor, radius = 62f * s, center = androidx.compose.ui.geometry.Offset(cx, cy - 12f * s))
+    drawCircle(cloudColor, radius = 44f * s, center = androidx.compose.ui.geometry.Offset(cx + 46f * s, cy + 12f * s))
+    drawCircle(cloudColor, radius = 52f * s, center = androidx.compose.ui.geometry.Offset(cx + 8f * s, cy + 18f * s))
 }
 
 @Composable
@@ -778,7 +779,7 @@ private fun InterestGateway(options: List<String>, onChooseInterest: (String) ->
 /** 已通关节点的薄荷青底色。 */
 private val TrailDone = androidx.compose.ui.graphics.Color(0xFF4FB8A8)
 
-/** 消消乐式蜿蜒闯关地图：S 形波浪路径上的圆形关卡节点，第 1 关在底部向上闯关。 */
+/** 消消乐式蜿蜒闯关地图：天空渐变背景上，糖果珠链串起 S 形路径的圆形关卡节点，第 1 关在底部向上闯关。 */
 @Composable
 private fun CurriculumTrailMap(
     levels: List<CurriculumLevelUi>,
@@ -793,33 +794,64 @@ private fun CurriculumTrailMap(
         animationSpec = infiniteRepeatable(tween(900), RepeatMode.Reverse),
         label = "trailPulse"
     ).value
-    BoxWithConstraints(Modifier.fillMaxWidth().height(gap * (levels.size + 1))) {
+    BoxWithConstraints(
+        Modifier
+            .fillMaxWidth()
+            .height(gap * (levels.size + 1))
+            .clip(RoundedCornerShape(16.dp))
+            .background(
+                androidx.compose.ui.graphics.Brush.verticalGradient(
+                    listOf(
+                        androidx.compose.ui.graphics.Color(0xFF9ED8FF),
+                        androidx.compose.ui.graphics.Color(0xFFCDEFF0),
+                        androidx.compose.ui.graphics.Color(0xFFFFF2C4)
+                    )
+                )
+            )
+    ) {
+        SkyDecorations()
         val w = maxWidth
         val xOf = { i: Int -> (w.value * swing[i % swing.size]).dp }
         val yOf = { i: Int -> gap * (levels.size - i) }
 
-        // 节点之间的连线：两端都通关为珊瑚实线，其余灰色虚线
+        // 沿途零散云朵，让长地图不空
+        Canvas(Modifier.fillMaxSize()) {
+            val h = size.height
+            cloud(size.width * 0.2f, h * 0.22f, 1.0f)
+            cloud(size.width * 0.75f, h * 0.38f, 0.75f)
+            cloud(size.width * 0.3f, h * 0.55f, 0.9f)
+            cloud(size.width * 0.68f, h * 0.72f, 0.8f)
+            cloud(size.width * 0.25f, h * 0.9f, 1.05f)
+        }
+
+        // 节点之间的糖果珠链：两端都通关为珊瑚珠，其余为云灰珠
         Canvas(Modifier.fillMaxSize()) {
             levels.forEachIndexed { i, level ->
                 if (i == levels.lastIndex) return@forEachIndexed
                 val a = androidx.compose.ui.geometry.Offset(size.width * swing[i % swing.size], yOf(i).toPx())
                 val b = androidx.compose.ui.geometry.Offset(size.width * swing[(i + 1) % swing.size], yOf(i + 1).toPx())
                 val mid = androidx.compose.ui.geometry.Offset((a.x + b.x) / 2f, (a.y + b.y) / 2f)
-                val path = androidx.compose.ui.graphics.Path().apply {
-                    moveTo(a.x, a.y)
-                    quadraticBezierTo(mid.x, mid.y, b.x, b.y)
-                }
                 val solid = level.status == CurriculumLevelStatus.COMPLETED &&
                     levels[i + 1].status == CurriculumLevelStatus.COMPLETED
-                drawPath(
-                    path,
-                    color = if (solid) com.xingmou.ui.theme.Coral else com.xingmou.ui.theme.Rule,
-                    style = androidx.compose.ui.graphics.drawscope.Stroke(
-                        width = 5.dp.toPx(),
-                        pathEffect = if (solid) null
-                        else androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(22f, 18f))
+                val coreColor = if (solid) com.xingmou.ui.theme.Coral else androidx.compose.ui.graphics.Color(0xFFB8C4D4)
+                val steps = 18
+                for (t in 0..steps) {
+                    if (t % 2 == 0) continue
+                    val tt = t / steps.toFloat()
+                    val omt = 1f - tt
+                    val x = omt * omt * a.x + 2f * omt * tt * mid.x + tt * tt * b.x
+                    val y = omt * omt * a.y + 2f * omt * tt * mid.y + tt * tt * b.y
+                    drawCircle(
+                        androidx.compose.ui.graphics.Color.White,
+                        radius = 10f,
+                        center = androidx.compose.ui.geometry.Offset(x, y)
                     )
-                )
+                    drawCircle(
+                        coreColor,
+                        radius = 6f,
+                        center = androidx.compose.ui.geometry.Offset(x, y)
+                    )
+                }
             }
         }
 
@@ -884,6 +916,16 @@ private fun CurriculumTrailMap(
                                 }
                             )
                         }
+                    }
+                    // 小星站在当前关顶上（对应消消乐停在当前关的小船）
+                    if (level.status == CurriculumLevelStatus.AVAILABLE) {
+                        Text(
+                            "⭐",
+                            fontSize = 24.sp,
+                            modifier = Modifier
+                                .align(Alignment.TopCenter)
+                                .offset(y = -(nodeSize / 2 + 6.dp) - 4.dp * pulse)
+                        )
                     }
                 }
                 when (level.status) {
