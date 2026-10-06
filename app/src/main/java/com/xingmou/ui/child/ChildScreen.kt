@@ -1372,11 +1372,27 @@ private fun ChatCard(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                val gameBtnRect = remember { mutableStateOf(androidx.compose.ui.geometry.Rect.Zero) }
                 androidx.compose.material3.Surface(
-                    onClick = onPlayGame,
+                    onClick = {
+                        val r = gameBtnRect.value
+                        onChoiceBegin(
+                            com.xingmou.ui.theme.Coral,
+                            r.left + r.width / 2f,
+                            r.top + r.height / 2f,
+                            r.height
+                        ) { onPlayGame() }
+                    },
                     enabled = !state.chatLoading,
                     shape = RoundedCornerShape(50),
-                    color = com.xingmou.ui.theme.Coral
+                    color = com.xingmou.ui.theme.Coral,
+                    modifier = Modifier.onGloballyPositioned { coords ->
+                        val topLeft = coords.localToRoot(androidx.compose.ui.geometry.Offset.Zero)
+                        gameBtnRect.value = androidx.compose.ui.geometry.Rect(
+                            topLeft,
+                            androidx.compose.ui.geometry.Size(coords.size.width.toFloat(), coords.size.height.toFloat())
+                        )
+                    }
                 ) {
                     Text(
                         "🎮 做游戏",
