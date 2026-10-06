@@ -1489,7 +1489,11 @@ private fun AccessibilityCard(
     onSlowMotionChange: (Boolean) -> Unit
 ) {
     SectionSurface(title = "辅助设置", supporting = "设置只保存在本机，用来调整小星的呈现方式。") {
-        SettingRow("小星朗读", "朗读儿童端短句", accessibility.speechEnabled) { onSpeechEnabledChange(it) }
+        SettingRow("小星朗读", "朗读儿童端短句", accessibility.speechEnabled) { enabled ->
+            // 关闭瞬间立即中断当前朗读并清空排队语音，不等待状态回流
+            if (!enabled) speechController.stop()
+            onSpeechEnabledChange(enabled)
+        }
         Spacer(Modifier.height(8.dp))
         Text("语速：${"%.2f".format(accessibility.speechRate)}", style = MaterialTheme.typography.bodyMedium)
         Slider(
