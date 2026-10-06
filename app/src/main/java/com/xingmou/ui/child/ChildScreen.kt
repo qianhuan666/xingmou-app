@@ -148,6 +148,17 @@ fun ChildScreen(
         choiceExpand.value = null
     }
     val selectedCourseLevel = remember { mutableStateOf<Int?>(null) }
+    // 消消乐式关卡地图是独立全屏界面：点侧栏「训练」或聊天页「做游戏」直接进入
+    val mapImmersive = remember { mutableStateOf(false) }
+    val enterMap = {
+        selectedSection.value = ChildSection.TRAINING
+        mapImmersive.value = true
+    }
+    val exitMap = {
+        mapImmersive.value = false
+        selectedSection.value = ChildSection.CHAT
+        greetingChoiceMade.value = true
+    }
     DisposableEffect(speechController) {
         onDispose { speechController.shutdown() }
     }
@@ -215,7 +226,7 @@ fun ChildScreen(
             Text("小星", modifier = Modifier.padding(vertical = 20.dp), style = MaterialTheme.typography.titleMedium)
             NavigationRailItem(
                 selected = selectedSection.value == ChildSection.TRAINING,
-                onClick = { selectedSection.value = ChildSection.TRAINING },
+                onClick = { enterMap() },
                 icon = { Text("训", style = MaterialTheme.typography.titleLarge) },
                 label = { Text("训练") },
                 alwaysShowLabel = true,
@@ -279,8 +290,8 @@ fun ChildScreen(
                 }
             }
 
-            if (selectedSection.value == ChildSection.TRAINING) {
-                // 沉浸空间打开时隐藏主页预览，把摄像头预览让给沉浸空间的小窗口（同一时刻只绑定一个）
+            if (selectedSection.value == ChildSection.TRAINING && !mapImmersive.value) {
+                // 全屏地图打开时训练主页内容不渲染（地图是独立界面）；预览也让给沉浸空间
                 if (!baselineImmersive && !courseImmersive) {
                     PerceptionHomePreview(
                         state = state,
@@ -321,7 +332,7 @@ fun ChildScreen(
                     ChatCard(
                         state = state,
                         greetingChoiceMade = greetingChoiceMade,
-                        onPlayGame = { selectedSection.value = ChildSection.TRAINING },
+                        onPlayGame = { enterMap() },
                         onChoiceBegin = { color, cx, cy, sizePx, onDone ->
                             if (choiceExpand.value == null) {
                                 choiceExpand.value = ChoiceExpand(color, cx, cy, sizePx, onDone)
@@ -427,6 +438,19 @@ fun ChildScreen(
                   onDetectManual = onDetectChooseManual
               )
           }
+          // 全屏关卡地图：优先级最低，基线小测 / 关卡练习打开时自然盖在地图之上
+          mapImmersive.value -> CurriculumMapDialog(
+              map = state.curriculumMap,
+              courseUnlocked = state.courseUnlocked,
+              isWorking = state.isWorking,
+              onBack = exitMap,
+              onStartBaseline = onStartBaseline,
+              onChooseInterest = onChooseCurriculumInterest,
+              onOpenLevel = { level ->
+                  selectedCourseLevel.value = level
+                  onOpenCurriculumLevel(level)
+              }
+          )
       }
     }
 }
@@ -472,6 +496,164 @@ private fun ImmersiveTestDialog(
             onDetachPreviewView = onDetachPreviewView,
             content = content
         )
+    }
+}
+
+/**
+ * 全屏关卡地图（独立界面）：天空背景上的消消乐式蜿蜒地图。
+ * 基线小测与关卡练习的沉浸 Dialog 打开时会盖在本层之上，退出后自然回到地图。
+ */
+@Composable
+private fun CurriculumMapDialog(
+    map: CurriculumMapUi,
+    courseUnlocked: Boolean,
+    isWorking: Boolean,
+    onBack: () -> Unit,
+    onStartBaseline: () -> Unit,
+    onChooseInterest: (String) -> Unit,
+    onOpenLevel: (Int) -> Unit
+) {
+    androidx.compose.ui.window.Dialog(
+        onDismissRequest = onBack,
+        properties = androidx.compose.ui.window.DialogProperties(
+            usePlatformDefaultWidth = false,
+            decorFitsSystemWindows = false
+        )
+    ) {
+        val view = androidx.compose.ui.platform.LocalView.current
+        DisposableEffect(Unit) {
+            val window = (view.parent as? androidx.compose.ui.window.DialogWindowProvider)?.window
+            window?.let {
+                it.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT))
+                it.clearFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND)
+                it.setDimAmount(0f)
+                it.setLayout(
+                    android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                    android.view.ViewGroup.LayoutParams.MATCH_PARENT
+                )
+            }
+            onDispose { }
+        }
+        Box(
+            Modifier
+                .fillMaxSize()
+                .background(
+                    androidx.compose.ui.graphics.Brush.verticalGradient(
+                        listOf(
+                            androidx.compose.ui.graphics.Color(0xFF9ED8FF),
+                            androidx.compose.ui.graphics.Color(0xFFCDEFF0),
+                            androidx.compose.ui.graphics.Color(0xFFFFF2C4)
+                        )
+                    )
+                )
+        ) {
+            SkyDecorations()
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .windowInsetsPadding(WindowInsets.safeDrawing)
+                    .padding(horizontal = 24.dp)
+            ) {
+                // 顶栏：返回 + 进度
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    androidx.compose.material3.Surface(
+                        onClick = onBack,
+                        shape = RoundedCornerShape(28.dp),
+                        color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.85f),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, com.xingmou.ui.theme.Rule)
+                    ) {
+                        Text(
+                            "← 返回",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = com.xingmou.ui.theme.Ink,
+                            modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp)
+                        )
+                    }
+                    Column(horizontalAlignment = Alignment.End) {
+                        Text("我的彩虹冒险", style = MaterialTheme.typography.titleLarge, color = com.xingmou.ui.theme.Ink)
+                        Text(
+                            "已点亮 ${map.completedLevels} / ${map.totalLevels} 关",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = com.xingmou.ui.theme.Ink.copy(alpha = 0.7f)
+                        )
+                    }
+                }
+
+                // 地图滚动区：第 1 关在底部，进入时直接停在最下面
+                val scrollState = rememberScrollState()
+                LaunchedEffect(map.totalLevels, courseUnlocked, map.interestChosen) {
+                    delay(120)
+                    scrollState.scrollTo(scrollState.maxValue)
+                }
+                Box(Modifier.weight(1f).fillMaxWidth()) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().verticalScroll(scrollState),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        CurriculumTrailMap(
+                            levels = map.levels,
+                            isWorking = isWorking,
+                            onOpenLevel = onOpenLevel,
+                            onLockedTap = { order -> if (order == 1 && !courseUnlocked) onStartBaseline() },
+                            immersive = true
+                        )
+                    }
+                    // 兴趣门槛：白卡浮在地图中央，选好主题后消失
+                    if (courseUnlocked && !map.interestChosen) {
+                        Box(
+                            Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Color(0x66000000)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            androidx.compose.material3.Surface(
+                                shape = RoundedCornerShape(28.dp),
+                                color = androidx.compose.ui.graphics.Color.White,
+                                shadowElevation = 8.dp,
+                                modifier = Modifier.fillMaxWidth(0.82f).padding(24.dp)
+                            ) {
+                                Column(Modifier.padding(28.dp)) {
+                                    InterestGateway(map.interestOptions, onChooseInterest)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // 基线未完成：底部温和提示 + 开始小测按钮
+                // 底部留出系统导航栏空间（全屏 Dialog 的 safeDrawing inset 在部分设备上为 0）
+                if (!courseUnlocked) {
+                    androidx.compose.material3.Surface(
+                        shape = RoundedCornerShape(24.dp),
+                        color = com.xingmou.ui.theme.CoralSoft,
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 56.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 24.dp, vertical = 14.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            Text(
+                                "先完成六题起点小测，第 1 关就会打开。",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = com.xingmou.ui.theme.CoralDark,
+                                modifier = Modifier.weight(1f)
+                            )
+                            androidx.compose.material3.Button(
+                                onClick = onStartBaseline,
+                                enabled = !isWorking,
+                                shape = RoundedCornerShape(24.dp),
+                                colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                                    containerColor = com.xingmou.ui.theme.Coral
+                                )
+                            ) { Text("开始小测", modifier = Modifier.padding(horizontal = 8.dp)) }
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -784,7 +966,9 @@ private val TrailDone = androidx.compose.ui.graphics.Color(0xFF4FB8A8)
 private fun CurriculumTrailMap(
     levels: List<CurriculumLevelUi>,
     isWorking: Boolean,
-    onOpenLevel: (Int) -> Unit
+    onOpenLevel: (Int) -> Unit,
+    onLockedTap: ((Int) -> Unit)? = null,
+    immersive: Boolean = false
 ) {
     val gap = 150.dp
     val swing = listOf(0.5f, 0.72f, 0.88f, 0.72f, 0.5f, 0.28f, 0.12f, 0.28f)
@@ -798,18 +982,22 @@ private fun CurriculumTrailMap(
         Modifier
             .fillMaxWidth()
             .height(gap * (levels.size + 1))
-            .clip(RoundedCornerShape(16.dp))
-            .background(
-                androidx.compose.ui.graphics.Brush.verticalGradient(
-                    listOf(
-                        androidx.compose.ui.graphics.Color(0xFF9ED8FF),
-                        androidx.compose.ui.graphics.Color(0xFFCDEFF0),
-                        androidx.compose.ui.graphics.Color(0xFFFFF2C4)
+            .then(
+                if (immersive) Modifier
+                else Modifier
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(
+                        androidx.compose.ui.graphics.Brush.verticalGradient(
+                            listOf(
+                                androidx.compose.ui.graphics.Color(0xFF9ED8FF),
+                                androidx.compose.ui.graphics.Color(0xFFCDEFF0),
+                                androidx.compose.ui.graphics.Color(0xFFFFF2C4)
+                            )
+                        )
                     )
-                )
             )
     ) {
-        SkyDecorations()
+        if (!immersive) SkyDecorations()
         val w = maxWidth
         val xOf = { i: Int -> (w.value * swing[i % swing.size]).dp }
         val yOf = { i: Int -> gap * (levels.size - i) }
@@ -863,13 +1051,17 @@ private fun CurriculumTrailMap(
         )
 
         levels.forEachIndexed { index, level ->
+            val canOpen = (level.status == CurriculumLevelStatus.AVAILABLE ||
+                level.status == CurriculumLevelStatus.COMPLETED) && !isWorking
+            // 第 1 关未解锁时允许点击（承接基线小测入口）
+            val lockedTapEnabled = level.status == CurriculumLevelStatus.LOCKED &&
+                level.order == 1 && onLockedTap != null && !isWorking
+            val canTap = canOpen || lockedTapEnabled
             val nodeSize = when (level.status) {
                 CurriculumLevelStatus.AVAILABLE -> 96.dp
                 CurriculumLevelStatus.COMPLETED -> 76.dp
-                CurriculumLevelStatus.LOCKED -> 64.dp
+                CurriculumLevelStatus.LOCKED -> if (lockedTapEnabled) 84.dp else 64.dp
             }
-            val canTap = (level.status == CurriculumLevelStatus.AVAILABLE ||
-                level.status == CurriculumLevelStatus.COMPLETED) && !isWorking
             val circleColor = when (level.status) {
                 CurriculumLevelStatus.COMPLETED -> TrailDone
                 CurriculumLevelStatus.AVAILABLE -> com.xingmou.ui.theme.Coral
@@ -879,12 +1071,16 @@ private fun CurriculumTrailMap(
                 modifier = Modifier
                     .offset(x = xOf(index) - nodeSize / 2, y = yOf(index) - nodeSize / 2)
                     .width(nodeSize)
-                    .then(if (canTap) Modifier.clickable { onOpenLevel(level.order) } else Modifier)
+                    .then(if (canTap) Modifier.clickable {
+                        if (lockedTapEnabled) onLockedTap?.invoke(level.order) else onOpenLevel(level.order)
+                    } else Modifier)
                     .semantics {
                         contentDescription = when (level.status) {
                             CurriculumLevelStatus.COMPLETED -> "第 ${level.order} 关 ${level.title}，已完成"
                             CurriculumLevelStatus.AVAILABLE -> "第 ${level.order} 关 ${level.title}，可以开始"
-                            CurriculumLevelStatus.LOCKED -> "第 ${level.order} 关，还没解锁"
+                            CurriculumLevelStatus.LOCKED ->
+                                if (lockedTapEnabled) "第 1 关还没解锁，点这里先做起点小测"
+                                else "第 ${level.order} 关，还没解锁"
                         }
                     },
                 horizontalAlignment = Alignment.CenterHorizontally
@@ -898,6 +1094,16 @@ private fun CurriculumTrailMap(
                                 .scale(1f + pulse * 0.04f)
                                 .clip(CircleShape)
                                 .background(com.xingmou.ui.theme.Coral.copy(alpha = 0.20f + 0.16f * pulse))
+                        )
+                    }
+                    if (lockedTapEnabled) {
+                        // 待解锁的第 1 关：淡珊瑚光圈，提示可点
+                        Box(
+                            Modifier
+                                .size(nodeSize + 20.dp)
+                                .scale(1f + pulse * 0.05f)
+                                .clip(CircleShape)
+                                .background(com.xingmou.ui.theme.Coral.copy(alpha = 0.14f + 0.14f * pulse))
                         )
                     }
                     androidx.compose.material3.Surface(
@@ -941,7 +1147,14 @@ private fun CurriculumTrailMap(
                         fontSize = 14.sp,
                         modifier = Modifier.padding(top = 2.dp)
                     )
-                    else -> {}
+                    CurriculumLevelStatus.LOCKED -> if (lockedTapEnabled) {
+                        Text(
+                            "点我做小测",
+                            color = com.xingmou.ui.theme.Coral,
+                            fontSize = 13.sp,
+                            modifier = Modifier.padding(top = 2.dp)
+                        )
+                    } else {}
                 }
             }
         }
