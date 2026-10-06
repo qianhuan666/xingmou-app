@@ -1097,6 +1097,82 @@ private fun ChatCard(
     val input = remember { mutableStateOf("") }
     val scrollState = rememberScrollState()
     val messages = state.chatMessages
+    val context = LocalContext.current
+
+    // ---- 语音输入：系统 RecognitionService，不可用时打字兜底 ----
+    val micGranted = remember {
+        mutableStateOf(
+            androidx.core.content.ContextCompat.checkSelfPermission(
+                context, android.Manifest.permission.RECORD_AUDIO
+            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        )
+    }
+    val micHint = remember { mutableStateOf<String?>(null) }
+    val micListening = remember { mutableStateOf(false) }
+    val micAvailable = remember { android.speech.SpeechRecognizer.isRecognitionAvailable(context) }
+    val recognizer = remember {
+        if (micAvailable) android.speech.SpeechRecognizer.createSpeechRecognizer(context) else null
+    }
+    androidx.compose.runtime.DisposableEffect(Unit) {
+        onDispose { recognizer?.destroy() }
+    }
+    val startListening: () -> Unit = {
+        val rec = recognizer
+        if (rec == null) {
+            micHint.value = "这台设备暂时听不到，请打字告诉我"
+        } else if (!micListening.value) {
+            val intent = android.content.Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                putExtra(
+                    android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL,
+                    android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM
+                )
+                putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE, "zh-CN")
+                putExtra(android.speech.RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+            }
+            rec.setRecognitionListener(object : android.speech.RecognitionListener {
+                override fun onReadyForSpeech(params: android.os.Bundle?) {
+                    micListening.value = true
+                    micHint.value = "正在听，请说话…"
+                }
+                override fun onBeginningOfSpeech() {}
+                override fun onRmsChanged(rmsdB: Float) {}
+                override fun onBufferReceived(buffer: ByteArray?) {}
+                override fun onEndOfSpeech() { micHint.value = "听听看…" }
+                override fun onError(error: Int) {
+                    micListening.value = false
+                    micHint.value = if (error == android.speech.SpeechRecognizer.ERROR_NO_MATCH) {
+                        "没听清，再按一次麦克风试试"
+                    } else {
+                        "没听到，也可以直接打字"
+                    }
+                }
+                override fun onResults(results: android.os.Bundle?) {
+                    micListening.value = false
+                    val text = results?.getStringArrayList(android.speech.SpeechRecognizer.RESULTS_RECOGNITION)
+                        ?.firstOrNull()?.trim()
+                    if (!text.isNullOrBlank()) {
+                        micHint.value = null
+                        onSend(text)
+                    } else {
+                        micHint.value = "没听清，再按一次麦克风试试"
+                    }
+                }
+                override fun onPartialResults(partialResults: android.os.Bundle?) {
+                    partialResults?.getStringArrayList(android.speech.SpeechRecognizer.RESULTS_RECOGNITION)
+                        ?.firstOrNull()?.let { input.value = it }
+                }
+                override fun onEvent(eventType: Int, params: android.os.Bundle?) {}
+            })
+            rec.startListening(intent)
+            micHint.value = "正在听，请说话…"
+        }
+    }
+    val micLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        micGranted.value = granted
+        if (granted) startListening() else micHint.value = "需要麦克风权限才能语音说话，也可以直接打字"
+    }
 
     // 新消息自动滚到底
     LaunchedEffect(messages.size) {
@@ -1226,6 +1302,17 @@ private fun ChatCard(
                 }
             }
 
+            // 语音输入提示行
+            val hint = micHint.value
+            if (hint != null) {
+                Text(
+                    hint,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 2.dp)
+                )
+            }
+
             // 输入区（交互模式为全屏无导航栏形态：常驻「做游戏」按钮提供去训练界面的路径）
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -1242,6 +1329,22 @@ private fun ChatCard(
                         "🎮 做游戏",
                         modifier = Modifier.padding(horizontal = 20.dp, vertical = 14.dp),
                         color = androidx.compose.ui.graphics.Color.White,
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                }
+                androidx.compose.material3.Surface(
+                    onClick = {
+                        micHint.value = null
+                        if (micGranted.value) startListening() else micLauncher.launch(android.Manifest.permission.RECORD_AUDIO)
+                    },
+                    enabled = !state.chatLoading && !micListening.value,
+                    shape = RoundedCornerShape(50),
+                    color = if (micListening.value) com.xingmou.ui.theme.Coral else androidx.compose.ui.graphics.Color.White,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, com.xingmou.ui.theme.Rule)
+                ) {
+                    Text(
+                        if (micListening.value) "🎧 听着呢" else "🎤",
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
                         style = MaterialTheme.typography.titleMedium
                     )
                 }
