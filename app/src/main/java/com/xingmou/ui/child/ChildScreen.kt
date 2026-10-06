@@ -1183,7 +1183,11 @@ private fun ChatCard(
                         GreetingChoice("💬", "和小星聊天", Modifier.weight(1f)) {
                             greetingChoiceMade.value = true
                         }
-                        GreetingChoice("🎮", "做游戏", Modifier.weight(1f)) {
+                        GreetingChoice(
+                            "🎮", "做游戏", Modifier.weight(1f),
+                            container = com.xingmou.ui.theme.Coral,
+                            content = androidx.compose.ui.graphics.Color.White
+                        ) {
                             greetingChoiceMade.value = true
                             onPlayGame()
                         }
@@ -1228,10 +1232,19 @@ private fun ChatCard(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                androidx.compose.material3.OutlinedButton(
+                androidx.compose.material3.Surface(
                     onClick = onPlayGame,
-                    enabled = !state.chatLoading
-                ) { Text("🎮 做游戏") }
+                    enabled = !state.chatLoading,
+                    shape = RoundedCornerShape(50),
+                    color = com.xingmou.ui.theme.Coral
+                ) {
+                    Text(
+                        "🎮 做游戏",
+                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 14.dp),
+                        color = androidx.compose.ui.graphics.Color.White,
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                }
                 androidx.compose.material3.OutlinedTextField(
                     value = input.value,
                     onValueChange = { input.value = it },
@@ -1252,19 +1265,21 @@ private fun ChatCard(
     }
 }
 
-/** 开场两个大选择按钮：儿童点击无需打字。 */
+/** 开场两个大选择按钮：儿童点击无需打字。「做游戏」用暖色实底与聊天形成明显区分。 */
 @Composable
 private fun GreetingChoice(
     emoji: String,
     label: String,
     modifier: Modifier = Modifier,
+    container: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.secondaryContainer,
+    content: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.onSecondaryContainer,
     onClick: () -> Unit
 ) {
     androidx.compose.material3.Surface(
         onClick = onClick,
         shape = RoundedCornerShape(24.dp),
-        color = MaterialTheme.colorScheme.secondaryContainer,
-        modifier = modifier.heightIn(min = 104.dp)
+        color = container,
+        modifier = modifier.heightIn(min = 112.dp)
     ) {
         Column(
             modifier = Modifier.fillMaxWidth().padding(vertical = 18.dp),
@@ -1274,8 +1289,8 @@ private fun GreetingChoice(
             Text(emoji, style = MaterialTheme.typography.headlineLarge)
             Text(
                 label,
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSecondaryContainer
+                style = MaterialTheme.typography.titleLarge,
+                color = content
             )
         }
     }
