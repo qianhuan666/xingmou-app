@@ -159,6 +159,8 @@ fun ChildScreen(
         selectedSection.value = ChildSection.CHAT
         greetingChoiceMade.value = true
     }
+    // 聊天页右上角低调的「更多」侧滑面板：画报 / 设置（儿童主界面不显示导航栏，低频功能藏这里）
+    val morePanelOpen = remember { mutableStateOf(false) }
     DisposableEffect(speechController) {
         onDispose { speechController.shutdown() }
     }
@@ -268,7 +270,7 @@ fun ChildScreen(
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 XiaoXingMark(Modifier.size(52.dp))
-                Column {
+                Column(Modifier.weight(1f)) {
                     Text(
                         when (selectedSection.value) {
                             ChildSection.TRAINING -> "和小星一起练习"
@@ -287,6 +289,22 @@ fun ChildScreen(
                         },
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                }
+                if (selectedSection.value == ChildSection.CHAT) {
+                    androidx.compose.material3.Surface(
+                        onClick = { morePanelOpen.value = true },
+                        shape = CircleShape,
+                        color = androidx.compose.ui.graphics.Color.White,
+                        border = androidx.compose.foundation.BorderStroke(1.dp, com.xingmou.ui.theme.Rule)
+                    ) {
+                        Text(
+                            "···",
+                            style = MaterialTheme.typography.titleLarge,
+                            color = com.xingmou.ui.theme.Ink.copy(alpha = 0.6f),
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
+                                .semantics { contentDescription = "更多功能：画报和设置" }
+                        )
+                    }
                 }
             }
 
@@ -387,6 +405,95 @@ fun ChildScreen(
                       .alpha(choiceAlpha.value)
                       .background(target.color)
               )
+          }
+      }
+
+      // 「更多」侧滑面板：从聊天页右上角进入画报/设置（侧栏在全屏聊天中不显示）
+      if (morePanelOpen.value) {
+          val panelProgress = remember { Animatable(0f) }
+          LaunchedEffect(Unit) { panelProgress.animateTo(1f, tween(260, easing = FastOutSlowInEasing)) }
+          val closePanel = {
+              morePanelOpen.value = false
+          }
+          Box(
+              Modifier.fillMaxSize()
+                  .background(androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.32f * panelProgress.value))
+                  .clickable(
+                      interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                      indication = null,
+                      onClick = closePanel
+                  )
+          ) {
+              androidx.compose.material3.Surface(
+                  color = MaterialTheme.colorScheme.surface,
+                  shape = RoundedCornerShape(topStart = 28.dp, bottomStart = 28.dp),
+                  shadowElevation = 12.dp,
+                  modifier = Modifier
+                      .align(Alignment.CenterEnd)
+                      .fillMaxHeight()
+                      .width(320.dp)
+                      .offset {
+                          IntOffset(
+                              ((1f - panelProgress.value) * 320.dp.toPx()).toInt(),
+                              0
+                          )
+                      }
+                      .clickable(
+                          interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                          indication = null,
+                          onClick = {}
+                      )
+              ) {
+                  Column(
+                      Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).padding(24.dp),
+                      verticalArrangement = Arrangement.spacedBy(12.dp)
+                  ) {
+                      Row(
+                          Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                          horizontalArrangement = Arrangement.SpaceBetween,
+                          verticalAlignment = Alignment.CenterVertically
+                      ) {
+                          Text("更多", style = MaterialTheme.typography.headlineSmall)
+                          TextButton(onClick = closePanel) { Text("关闭") }
+                      }
+                      androidx.compose.material3.Surface(
+                          onClick = {
+                              morePanelOpen.value = false
+                              selectedSection.value = ChildSection.PROFILE
+                          },
+                          shape = RoundedCornerShape(20.dp),
+                          color = MaterialTheme.colorScheme.secondaryContainer
+                      ) {
+                          Column(Modifier.fillMaxWidth().padding(20.dp)) {
+                              Text("我的彩虹画像", style = MaterialTheme.typography.titleLarge)
+                              Text(
+                                  "小星的游戏足迹，不是考试分数。",
+                                  style = MaterialTheme.typography.bodyMedium,
+                                  color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                  modifier = Modifier.padding(top = 4.dp)
+                              )
+                          }
+                      }
+                      androidx.compose.material3.Surface(
+                          onClick = {
+                              morePanelOpen.value = false
+                              selectedSection.value = ChildSection.SETTINGS
+                          },
+                          shape = RoundedCornerShape(20.dp),
+                          color = MaterialTheme.colorScheme.secondaryContainer
+                      ) {
+                          Column(Modifier.fillMaxWidth().padding(20.dp)) {
+                              Text("儿童端设置", style = MaterialTheme.typography.titleLarge)
+                              Text(
+                                  "朗读、语速、字号、感知守护等呈现方式。",
+                                  style = MaterialTheme.typography.bodyMedium,
+                                  color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                  modifier = Modifier.padding(top = 4.dp)
+                              )
+                          }
+                      }
+                  }
+              }
           }
       }
 
