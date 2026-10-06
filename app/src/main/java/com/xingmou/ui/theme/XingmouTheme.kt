@@ -1,11 +1,16 @@
 package com.xingmou.ui.theme
 
+import androidx.compose.animation.core.Easing
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.TweenSpec
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
 import androidx.compose.material3.Typography
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
@@ -125,3 +130,20 @@ fun XingmouTheme(highContrast: Boolean = false, content: @Composable () -> Unit)
         content = content
     )
 }
+
+/**
+ * 全局动画时长倍率：正常为 1f，开启「慢动效」辅助设置后 >1f。
+ * 让转场、面板滑入、呼吸提示等页面变化更慢，给儿童更多反应时间。
+ */
+val LocalMotionDurationScale = compositionLocalOf { 1f }
+
+/** 开启「慢动效」时动画时长放大到的倍数。 */
+const val SLOW_MOTION_SCALE = 1.8f
+
+/**
+ * 按慢动效设置缩放时长的 tween，替代直接调用 tween(...)。
+ * 读取 [LocalMotionDurationScale]，必须在 Composable 上下文中调用。
+ */
+@Composable
+fun <T> motionTween(durationMillis: Int, easing: Easing = FastOutSlowInEasing): TweenSpec<T> =
+    tween(durationMillis = (durationMillis * LocalMotionDurationScale.current).toInt().coerceAtLeast(1), easing = easing)

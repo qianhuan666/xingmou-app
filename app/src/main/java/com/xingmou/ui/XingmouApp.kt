@@ -46,7 +46,10 @@ import com.xingmou.core.model.Port
 import com.xingmou.ui.child.ChildScreen
 import com.xingmou.ui.parent.ParentScreen
 import com.xingmou.ui.professional.ProfessionalScreen
+import com.xingmou.ui.theme.LocalMotionDurationScale
+import com.xingmou.ui.theme.SLOW_MOTION_SCALE
 import com.xingmou.ui.theme.XingmouTheme
+import com.xingmou.ui.theme.motionTween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.input.pointer.pointerInput
@@ -102,17 +105,24 @@ fun XingmouApp(viewModel: XingmouViewModel) {
     }
     val density = LocalDensity.current
     val fontScale = if (state.accessibility.largeText) 1.15f else 1.0f
-    CompositionLocalProvider(LocalDensity provides androidx.compose.ui.unit.Density(density.density, fontScale)) {
+    val motionScale = if (state.accessibility.slowMotion) SLOW_MOTION_SCALE else 1f
+    CompositionLocalProvider(
+        LocalDensity provides androidx.compose.ui.unit.Density(density.density, fontScale),
+        LocalMotionDurationScale provides motionScale
+    ) {
         XingmouTheme(highContrast = state.accessibility.highContrast) {
+            // transitionSpec 是非组合上下文，这里用闭包捕获倍率的本地函数生成 tween
+            fun <T> mt(ms: Int): androidx.compose.animation.core.TweenSpec<T> =
+                tween(durationMillis = (ms * motionScale).toInt().coerceAtLeast(1))
             AnimatedContent(
                 targetState = state.isLoggedIn,
                 transitionSpec = {
                     if (targetState) {
                         // 进入：头像已放大铺满全屏，这里只淡入，主界面平滑浮现
-                        fadeIn(tween(500)).togetherWith(fadeOut(tween(400)))
+                        fadeIn(mt(500)).togetherWith(fadeOut(mt(400)))
                     } else {
-                        (fadeIn(tween(300)) + scaleIn(initialScale = 0.95f, animationSpec = tween(300)))
-                            .togetherWith(fadeOut(tween(300)) + scaleOut(targetScale = 1.05f, animationSpec = tween(300)))
+                        (fadeIn(mt(300)) + scaleIn(initialScale = 0.95f, animationSpec = mt(300)))
+                            .togetherWith(fadeOut(mt(300)) + scaleOut(targetScale = 1.05f, animationSpec = mt(300)))
                     }
                 },
                 label = "loginTransition"
@@ -212,19 +222,20 @@ private fun ChildEntryScreen(
     val logoScale by infiniteTransition.animateFloat(
         initialValue = 1f,
         targetValue = 1.06f,
-        animationSpec = infiniteRepeatable(tween(1200), RepeatMode.Reverse)
+        animationSpec = infiniteRepeatable(motionTween(1200), RepeatMode.Reverse)
     )
     val screenSize = remember { androidx.compose.runtime.mutableStateOf(IntSize.Zero) }
     val expandingAvatar = remember { androidx.compose.runtime.mutableStateOf<ExpandingAvatar?>(null) }
     val avatarScale = remember { Animatable(1f) }
     val density = LocalDensity.current
+    val motionScale = LocalMotionDurationScale.current
     LaunchedEffect(expandingAvatar.value) {
         val target = expandingAvatar.value ?: return@LaunchedEffect
         val w = screenSize.value.width
         val h = screenSize.value.height
         val coverScale = if (w > 0 && h > 0) (kotlin.math.sqrt((w * w + h * h).toFloat()) * 1.15f) / target.sizePx else 16f
         avatarScale.snapTo(1f)
-        avatarScale.animateTo(coverScale, animationSpec = tween(520, easing = FastOutSlowInEasing))
+        avatarScale.animateTo(coverScale, animationSpec = tween((520 * motionScale).toInt().coerceAtLeast(1), easing = FastOutSlowInEasing))
         onEnterChild(target.childId)
     }
     Box(
@@ -432,7 +443,7 @@ private fun PerceptionIndicator() {
     val alpha by infinite.animateFloat(
         initialValue = 1f,
         targetValue = 0.25f,
-        animationSpec = infiniteRepeatable(tween(900), RepeatMode.Reverse)
+        animationSpec = infiniteRepeatable(motionTween(900), RepeatMode.Reverse)
     )
     Row(
         verticalAlignment = Alignment.CenterVertically,

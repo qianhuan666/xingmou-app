@@ -1,7 +1,12 @@
 package com.xingmou.ui.child
 
 import android.Manifest
+import android.app.Activity
+import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
+import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.view.PreviewView
@@ -11,6 +16,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -19,12 +25,16 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -32,6 +42,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.xingmou.ChildUiState
 
@@ -48,11 +59,36 @@ fun PerceptionOverlay(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    val hasCameraPermission = ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+    // 记录一次拒绝，给家长明确反馈；连续被拒（系统不再弹框）时引导去系统设置
+    var permissionDenied by remember { mutableStateOf(false) }
+    var permanentlyDenied by remember { mutableStateOf(false) }
+    var requestCount by remember { mutableStateOf(0) }
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
-        if (granted) onTogglePerception(true)
+        if (granted) {
+            permissionDenied = false
+            onTogglePerception(true)
+        } else {
+            permissionDenied = true
+            val activity = context.findActivity()
+            // Android 11+ 首次拒绝后该标志也可能为 false 但系统仍可再次询问，
+            // 因此结合请求次数：首次拒绝给「再试一次」，再次被拒才判定为永久拒绝
+            val rationaleBlocked = activity == null ||
+                !ActivityCompat.shouldShowRequestPermissionRationale(activity, Manifest.permission.CAMERA)
+            permanentlyDenied = requestCount >= 2 && rationaleBlocked
+        }
+    }
+    val requestCamera: () -> Unit = {
+        permissionDenied = false
+        requestCount += 1
+        permissionLauncher.launch(Manifest.permission.CAMERA)
+    }
+    val openAppSettings: () -> Unit = {
+        val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+            .setData(Uri.fromParts("package", context.packageName, null))
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        runCatching { context.startActivity(intent) }
     }
 
     Surface(
@@ -70,13 +106,28 @@ fun PerceptionOverlay(
                 Switch(
                     checked = state.perceptionEnabled,
                     onCheckedChange = { enabled ->
-                        if (enabled && !hasCameraPermission) {
-                            permissionLauncher.launch(Manifest.permission.CAMERA)
+                        if (enabled && ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+                            requestCamera()
                         } else {
+                            permissionDenied = false
                             onTogglePerception(enabled)
                         }
                     }
                 )
+            }
+            if (permissionDenied) {
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    text = "需要允许使用相机，才能开启感知守护。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error
+                )
+                OutlinedButton(
+                    onClick = { if (permanentlyDenied) openAppSettings() else requestCamera() },
+                    modifier = Modifier.padding(top = 4.dp)
+                ) {
+                    Text(if (permanentlyDenied) "去系统设置开启相机权限" else "再试一次")
+                }
             }
             if (state.perceptionEnabled) {
                 Row(
@@ -174,6 +225,13 @@ fun PerceptionHomePreview(
     DisposableEffect(Unit) {
         onDispose { previewRef[0]?.let(onDetachPreviewView) }
     }
+}
+
+/** 沿 ContextWrapper 链找到真正的 Activity，用于权限状态判断；找不到返回 null。 */
+private tailrec fun Context.findActivity(): Activity? = when (this) {
+    is Activity -> this
+    is android.content.ContextWrapper -> baseContext.findActivity()
+    else -> null
 }
 
 private fun emotionLabel(name: String): String = when (name) {

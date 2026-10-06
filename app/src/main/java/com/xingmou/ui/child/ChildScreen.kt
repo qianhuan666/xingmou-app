@@ -7,6 +7,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -84,6 +86,8 @@ import com.xingmou.ui.components.StatusLine
 import com.xingmou.ui.components.XiaoXingMark
 import com.xingmou.ui.components.domainBarColor
 import com.xingmou.ui.theme.Error
+import com.xingmou.ui.theme.LocalMotionDurationScale
+import com.xingmou.ui.theme.motionTween
 import com.xingmou.R
 
 private enum class ChildSection { TRAINING, CHAT, PROFILE, SETTINGS }
@@ -134,6 +138,7 @@ fun ChildScreen(
     val choiceScale = remember { Animatable(1f) }
     val choiceAlpha = remember { Animatable(1f) }
     val choiceScreenSize = remember { mutableStateOf(androidx.compose.ui.unit.IntSize.Zero) }
+    val motionScale = LocalMotionDurationScale.current
     LaunchedEffect(choiceExpand.value) {
         val target = choiceExpand.value ?: return@LaunchedEffect
         val w = choiceScreenSize.value.width
@@ -143,9 +148,9 @@ fun ChildScreen(
         } else 14f
         choiceAlpha.snapTo(1f)
         choiceScale.snapTo(1f)
-        choiceScale.animateTo(cover, tween(520, easing = FastOutSlowInEasing))
+        choiceScale.animateTo(cover, tween((520 * motionScale).toInt().coerceAtLeast(1), easing = FastOutSlowInEasing))
         target.onDone()
-        choiceAlpha.animateTo(0f, tween(320))
+        choiceAlpha.animateTo(0f, tween((320 * motionScale).toInt().coerceAtLeast(1)))
         choiceExpand.value = null
     }
     val selectedCourseLevel = remember { mutableStateOf<Int?>(null) }
@@ -412,7 +417,7 @@ fun ChildScreen(
       // 「更多」侧滑面板：从聊天页右上角进入画报/设置（侧栏在全屏聊天中不显示）
       if (morePanelOpen.value) {
           val panelProgress = remember { Animatable(0f) }
-          LaunchedEffect(Unit) { panelProgress.animateTo(1f, tween(260, easing = FastOutSlowInEasing)) }
+          LaunchedEffect(Unit) { panelProgress.animateTo(1f, tween((260 * motionScale).toInt().coerceAtLeast(1), easing = FastOutSlowInEasing)) }
           val closePanel = {
               morePanelOpen.value = false
           }
@@ -1219,7 +1224,7 @@ private fun CurriculumTrailMap(
     val pulse = rememberInfiniteTransition(label = "trailPulse").animateFloat(
         initialValue = 0f,
         targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(900), RepeatMode.Reverse),
+        animationSpec = infiniteRepeatable(motionTween(900), RepeatMode.Reverse),
         label = "trailPulse"
     ).value
     BoxWithConstraints(
@@ -1430,10 +1435,15 @@ private fun RewardCard(state: ChildUiState) {
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun InterestCard(state: ChildUiState, onInterestChange: (String) -> Unit) {
     SectionSurface(title = "我喜欢的主题", supporting = "主题只用来调整示例素材，不改变训练目标。") {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        // 窄屏四个按钮会自动换行，避免横向溢出裁切
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
             state.interestOptions.forEach { option ->
                 OutlinedButton(onClick = { onInterestChange(option) }, enabled = option != state.interest) { Text(option) }
             }
@@ -1721,7 +1731,7 @@ private fun DetectPanel(detect: AutoDetectState) {
     val scale by infinite.animateFloat(
         initialValue = 0.92f, targetValue = 1.08f,
         animationSpec = androidx.compose.animation.core.infiniteRepeatable(
-            androidx.compose.animation.core.tween(1100),
+            motionTween(1100),
             repeatMode = androidx.compose.animation.core.RepeatMode.Reverse
         ), label = "scale"
     )
