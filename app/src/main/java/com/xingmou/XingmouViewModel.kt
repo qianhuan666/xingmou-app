@@ -1631,10 +1631,9 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun selectInterest(value: String) {
-        // 与地图的主题选择共享同一份持久化，重启后保持
-        curriculumInterest = value
-        if (value.isNotBlank()) persistCurriculumState()
-        _uiState.update { it.copy(child = it.child.copy(interest = value)) }
+        // 与地图顶栏的 chooseCurriculumInterest 完全等价：设置页选主题同样视为“已选兴趣”，
+        // 否则地图的选主题卡片不消失、基线完成后第 1 关也不会解锁。
+        chooseCurriculumInterest(value)
     }
 
     // ---- 20 关彩虹冒险：地图 + 播放器（作答落库 + 进度持久化）----
