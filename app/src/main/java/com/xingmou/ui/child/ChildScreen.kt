@@ -733,8 +733,8 @@ private fun CurriculumMapDialog(
                             immersive = true
                         )
                     }
-                    // 兴趣门槛：白卡浮在地图中央，选好主题后消失
-                    if (courseUnlocked && !map.interestChosen) {
+                    // 兴趣选择：白卡浮在地图中央，选好主题后消失（基线完成前后都可以选）
+                    if (!map.interestChosen) {
                         Box(
                             Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Color(0x66000000)),
                             contentAlignment = Alignment.Center
