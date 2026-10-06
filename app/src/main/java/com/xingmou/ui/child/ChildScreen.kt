@@ -1244,44 +1244,27 @@ private fun ChatCard(
             modifier = Modifier.fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // 供应商选择
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text("模型：", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                // 儿童端交互仅保留 DeepSeek，豆包/千问不在此暴露
-                com.xingmou.core.llm.ChatLlmProvider.entries
-                    .filter { it == com.xingmou.core.llm.ChatLlmProvider.DEEPSEEK }
-                    .forEach { provider ->
-                    androidx.compose.material3.FilterChip(
-                        selected = state.chatProvider == provider,
-                        onClick = { onSelectProvider(provider) },
-                        label = { Text(provider.label) }
-                    )
-                }
-            }
+            // 儿童端模型已锁定 DeepSeek，不向孩子暴露供应商等工程信息
 
-            // 未配置提示：醒目引导用户去设置 API Key
+            // 未配置提示：柔和暖色引导家长去设置 API Key
             if (!state.chatProviderConfigured) {
                 androidx.compose.material3.Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = MaterialTheme.colorScheme.errorContainer,
+                    shape = RoundedCornerShape(14.dp),
+                    color = com.xingmou.ui.theme.CoralSoft,
                     modifier = Modifier
                         .fillMaxWidth()
                         .clickable { onOpenApiKey() }
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Text("⚠", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onErrorContainer)
+                        Text("🧠", style = MaterialTheme.typography.titleSmall)
                         Text(
-                            "还未配置 ${state.chatProvider.label} 的 API Key，点这里去设置。",
+                            "小星还没连上大脑，请爸爸妈妈点这里设置一下",
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onErrorContainer
+                            color = com.xingmou.ui.theme.CoralDark
                         )
                     }
                 }
@@ -1293,8 +1276,8 @@ private fun ChatCard(
                     .fillMaxWidth()
                     .heightIn(min = 200.dp, max = 420.dp)
                     .verticalScroll(scrollState)
-                    .padding(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                    .padding(horizontal = 4.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 if (messages.isEmpty() && !greetingChoiceMade.value) {
                     // 开场问候：小星主动给出「聊天 / 做游戏」两个大按钮选择
@@ -1346,14 +1329,15 @@ private fun ChatCard(
             ) {
                 state.chatQuickTopics.forEach { topic ->
                     androidx.compose.material3.Surface(
-                        shape = RoundedCornerShape(20.dp),
-                        color = MaterialTheme.colorScheme.secondaryContainer,
+                        shape = RoundedCornerShape(50),
+                        color = androidx.compose.ui.graphics.Color.White,
+                        border = androidx.compose.foundation.BorderStroke(1.dp, com.xingmou.ui.theme.Rule),
                         modifier = Modifier.clickable(enabled = !state.chatLoading) { onSend(topic) }
                     ) {
                         Text(
                             topic,
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                            color = com.xingmou.ui.theme.Ink,
                             style = MaterialTheme.typography.bodyMedium
                         )
                     }
@@ -1410,8 +1394,15 @@ private fun ChatCard(
                     value = input.value,
                     onValueChange = { input.value = it },
                     modifier = Modifier.weight(1f),
-                    label = { Text("对小星说…") },
-                    enabled = !state.chatLoading
+                    placeholder = { Text("对小星说…") },
+                    enabled = !state.chatLoading,
+                    shape = RoundedCornerShape(28.dp),
+                    colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = com.xingmou.ui.theme.Coral,
+                        unfocusedBorderColor = com.xingmou.ui.theme.Rule,
+                        focusedContainerColor = androidx.compose.ui.graphics.Color.White,
+                        unfocusedContainerColor = androidx.compose.ui.graphics.Color.White
+                    )
                 )
                 Button(
                     onClick = {
@@ -1419,7 +1410,12 @@ private fun ChatCard(
                         input.value = ""
                         onSend(t)
                     },
-                    enabled = !state.chatLoading && input.value.isNotBlank()
+                    enabled = !state.chatLoading && input.value.isNotBlank(),
+                    shape = RoundedCornerShape(50),
+                    colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                        containerColor = com.xingmou.ui.theme.Coral,
+                        contentColor = androidx.compose.ui.graphics.Color.White
+                    )
                 ) { Text("发送") }
             }
         }
@@ -1479,11 +1475,17 @@ private data class ChoiceExpand(
 @Composable
 private fun ChatBubble(msg: com.xingmou.ChatMessageUi) {
     val isUser = msg.role == "user"
-    val avatar = if (isUser) "我" else "星"
-    val avatarColor = if (isUser) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.tertiary
-    val avatarText = if (isUser) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onTertiary
-    val bubbleColor = if (isUser) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant
-    val bubbleText = if (msg.isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
+    val bubbleColor = if (isUser) com.xingmou.ui.theme.Coral else androidx.compose.ui.graphics.Color.White
+    val bubbleBorder = if (isUser) {
+        androidx.compose.foundation.BorderStroke(1.dp, androidx.compose.ui.graphics.Color.Transparent)
+    } else {
+        androidx.compose.foundation.BorderStroke(1.dp, com.xingmou.ui.theme.Rule)
+    }
+    val bubbleText = when {
+        msg.isError -> MaterialTheme.colorScheme.error
+        isUser -> androidx.compose.ui.graphics.Color.White
+        else -> com.xingmou.ui.theme.Ink
+    }
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start,
@@ -1492,32 +1494,38 @@ private fun ChatBubble(msg: com.xingmou.ChatMessageUi) {
         if (!isUser) {
             androidx.compose.material3.Surface(
                 shape = androidx.compose.foundation.shape.CircleShape,
-                color = avatarColor,
-                modifier = Modifier.size(28.dp)
+                color = com.xingmou.ui.theme.Coral,
+                modifier = Modifier.size(34.dp)
             ) {
-                Text(avatar, modifier = Modifier.padding(2.dp), style = MaterialTheme.typography.titleSmall, color = avatarText, textAlign = TextAlign.Center)
+                androidx.compose.foundation.layout.Box(contentAlignment = Alignment.Center) {
+                    Text("星", style = MaterialTheme.typography.titleMedium, color = androidx.compose.ui.graphics.Color.White)
+                }
             }
-            Spacer(modifier = Modifier.size(6.dp))
+            Spacer(modifier = Modifier.size(8.dp))
         }
         androidx.compose.material3.Surface(
-            shape = RoundedCornerShape(16.dp),
+            shape = RoundedCornerShape(20.dp),
             color = bubbleColor,
+            border = bubbleBorder,
             modifier = Modifier.weight(1f, fill = false)
         ) {
             Text(
                 text = msg.content,
-                modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                color = bubbleText
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                color = bubbleText,
+                style = MaterialTheme.typography.bodyLarge
             )
         }
         if (isUser) {
-            Spacer(modifier = Modifier.size(6.dp))
+            Spacer(modifier = Modifier.size(8.dp))
             androidx.compose.material3.Surface(
                 shape = androidx.compose.foundation.shape.CircleShape,
-                color = avatarColor,
-                modifier = Modifier.size(28.dp)
+                color = com.xingmou.ui.theme.ExistingBlue,
+                modifier = Modifier.size(34.dp)
             ) {
-                Text(avatar, modifier = Modifier.padding(2.dp), style = MaterialTheme.typography.titleSmall, color = avatarText, textAlign = TextAlign.Center)
+                androidx.compose.foundation.layout.Box(contentAlignment = Alignment.Center) {
+                    Text("我", style = MaterialTheme.typography.titleMedium, color = androidx.compose.ui.graphics.Color.White)
+                }
             }
         }
     }
