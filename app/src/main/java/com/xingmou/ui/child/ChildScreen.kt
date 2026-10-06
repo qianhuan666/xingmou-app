@@ -1464,10 +1464,42 @@ private fun InterestCard(state: ChildUiState, onInterestChange: (String) -> Unit
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             state.interestOptions.forEach { option ->
-                OutlinedButton(onClick = { onInterestChange(option) }, enabled = option != state.interest) { Text(option) }
+                val selected = option == state.interest
+                androidx.compose.material3.Surface(
+                    onClick = { if (!selected) onInterestChange(option) },
+                    shape = RoundedCornerShape(20.dp),
+                    color = if (selected) com.xingmou.ui.theme.CoralSoft else androidx.compose.ui.graphics.Color.White,
+                    border = androidx.compose.foundation.BorderStroke(
+                        1.dp,
+                        if (selected) com.xingmou.ui.theme.Coral else com.xingmou.ui.theme.Rule
+                    ),
+                    modifier = Modifier.semantics {
+                        contentDescription = if (selected) "$option（当前主题）" else "选择${option}主题"
+                    }
+                ) {
+                    Row(
+                        Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            if (selected) "$option  ✓" else option,
+                            color = if (selected) com.xingmou.ui.theme.CoralDark else com.xingmou.ui.theme.Ink
+                        )
+                    }
+                }
             }
         }
-        Text("当前主题：${state.interest}", modifier = Modifier.padding(top = 8.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(
+            if (state.interest.isBlank()) {
+                "还没选主题，先挑一个喜欢的吧。"
+            } else {
+                "当前主题：${state.interest}。每个主题有各自的闯关进度和星星，换主题不会影响其他主题。"
+            },
+            modifier = Modifier.padding(top = 8.dp),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }
 
@@ -1518,23 +1550,32 @@ private fun AccessibilityCard(
     onSlowMotionChange: (Boolean) -> Unit
 ) {
     SectionSurface(title = "辅助设置", supporting = "设置只保存在本机，用来调整小星的呈现方式。") {
+        // —— 朗读组 ——
+        SettingsGroupLabel("朗读")
         SettingRow("小星朗读", "朗读儿童端短句", accessibility.speechEnabled) { enabled ->
-            // 关闭瞬间立即中断当前朗读并清空排队语音，不等待状态回流
-            if (!enabled) speechController.stop()
+            if (!enabled) {
+                // 关闭瞬间立即中断当前朗读并清空排队语音，不等待状态回流
+                speechController.stop()
+            } else {
+                // 开启时立即试听一句，家长不用等到下一题就能确认语音是否工作
+                speechController.speak("朗读已经打开啦，我会把题目读给你听。")
+            }
             onSpeechEnabledChange(enabled)
         }
         Spacer(Modifier.height(8.dp))
-        Text("语速：${"%.2f".format(accessibility.speechRate)}", style = MaterialTheme.typography.bodyMedium)
+        Text("语速：${speechRateWord(accessibility.speechRate)}（${"%.2f".format(accessibility.speechRate)}）", style = MaterialTheme.typography.bodyMedium)
         Slider(
             value = accessibility.speechRate,
             onValueChange = onSpeechRateChange,
             enabled = accessibility.speechEnabled,
-            onValueChangeFinished = { speechController.speak("小星会用这个速度说话。") },
+            onValueChangeFinished = { speechController.speak("今天天气真好，我们一起来玩游戏吧。") },
             valueRange = 0.75f..1.25f,
-            steps = 4,
+            // 3 个中间点 → 0.75 / 0.875 / 1.00 / 1.125 / 1.25，默认 1.00 正好落在标准档
+            steps = 3,
             modifier = Modifier.fillMaxWidth().semantics { contentDescription = "朗读音语速调节，需先开启小星朗读" }
         )
-        Text("音量：${(accessibility.speechVolume * 100).toInt()}%", style = MaterialTheme.typography.bodyMedium)
+        SliderEndLabels("慢", "快")
+        Text("音量：${speechVolumeWord(accessibility.speechVolume)}（${(accessibility.speechVolume * 100).toInt()}%）", style = MaterialTheme.typography.bodyMedium)
         Slider(
             value = accessibility.speechVolume,
             onValueChange = onSpeechVolumeChange,
@@ -1544,16 +1585,56 @@ private fun AccessibilityCard(
             steps = 4,
             modifier = Modifier.fillMaxWidth().semantics { contentDescription = "朗读音量调节，需先开启小星朗读" }
         )
+        SliderEndLabels("轻柔", "响亮")
         if (!accessibility.speechEnabled) {
             Text("开启「小星朗读」后可以调整语速和音量。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(Modifier.height(4.dp))
         }
+
+        // —— 显示与动效组 ——
+        SettingsGroupLabel("显示与动效")
         SettingRow("大字体", "增加界面文字大小", accessibility.largeText) { onLargeTextChange(it) }
         Spacer(Modifier.height(8.dp))
         SettingRow("高对比", "提高文字与表面的对比度", accessibility.highContrast) { onHighContrastChange(it) }
         Spacer(Modifier.height(8.dp))
         SettingRow("慢动效", "放慢页面变化，给更多反应时间", accessibility.slowMotion) { onSlowMotionChange(it) }
     }
+}
+
+/** 辅助设置里的小组标题（朗读 / 显示与动效）。 */
+@Composable
+private fun SettingsGroupLabel(text: String) {
+    Spacer(Modifier.height(10.dp))
+    Text(
+        text,
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(bottom = 2.dp)
+    )
+}
+
+/** 滑条两端的语义标签（如 慢/快、轻柔/响亮）。 */
+@Composable
+private fun SliderEndLabels(left: String, right: String) {
+    Row(
+        Modifier.fillMaxWidth().padding(bottom = 4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(left, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(right, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+private fun speechRateWord(value: Float): String = when {
+    value <= 0.92f -> "慢"
+    value >= 1.08f -> "快"
+    else -> "标准"
+}
+
+private fun speechVolumeWord(value: Float): String = when {
+    value <= 0.62f -> "轻柔"
+    value >= 0.95f -> "响亮"
+    else -> "标准"
 }
 
 private fun assetResource(key: String): Int = when (key) {
