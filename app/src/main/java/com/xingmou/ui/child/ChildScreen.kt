@@ -172,6 +172,8 @@ fun ChildScreen(
 
     Box(modifier = modifier.fillMaxSize()) {
       Row(modifier = Modifier.fillMaxSize()) {
+        // 交互模式为独立全屏形态：不显示导航栏，由开场两个选项（聊天/做游戏）决定去向
+        if (selectedSection.value != ChildSection.CHAT) {
         NavigationRail(
             modifier = Modifier.fillMaxHeight(),
             containerColor = MaterialTheme.colorScheme.surface
@@ -209,6 +211,7 @@ fun ChildScreen(
                 alwaysShowLabel = true,
                 modifier = Modifier.semantics { contentDescription = "儿童设置界面" }
             )
+        }
         }
 
         Column(
@@ -1219,12 +1222,16 @@ private fun ChatCard(
                 }
             }
 
-            // 输入区
+            // 输入区（交互模式为全屏无导航栏形态：常驻「做游戏」按钮提供去训练界面的路径）
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                androidx.compose.material3.OutlinedButton(
+                    onClick = onPlayGame,
+                    enabled = !state.chatLoading
+                ) { Text("🎮 做游戏") }
                 androidx.compose.material3.OutlinedTextField(
                     value = input.value,
                     onValueChange = { input.value = it },
