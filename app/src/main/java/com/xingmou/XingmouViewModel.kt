@@ -144,6 +144,7 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
     private var pendingImport: com.xingmou.core.consent.AuthorizedChildExport? = null
     private var generatedCurriculum: List<GeneratedCurriculumLevel> = emptyList()
     private val curriculumPassedOrders = mutableSetOf<Int>()
+    private val curriculumLevelStars = mutableMapOf<Int, Int>()
     private var curriculumInterestChosen = false
     private val localUserId = SeedData.DEMO_USER_ID
     private val childId: String
@@ -1624,22 +1625,44 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
 
     // ---- 20 关彩虹冒险：地图 + 播放器（作答落库 + 进度持久化）----
 
-    /** 从 SharedPreferences 恢复当前儿童的通关顺序与兴趣门槛（键按 childId 隔离）。 */
+    /** 从 SharedPreferences 恢复当前儿童的通关顺序、星级与兴趣门槛（键按 childId 隔离）。 */
     private fun loadCurriculumState(scopedChildId: String) {
         curriculumPassedOrders.clear()
         val saved = curriculumPrefs.getString("passed_orders_$scopedChildId", null)
         if (!saved.isNullOrBlank()) {
             curriculumPassedOrders.addAll(saved.split(',').mapNotNull { it.trim().toIntOrNull() })
         }
+        curriculumLevelStars.clear()
+        val savedStars = curriculumPrefs.getString("level_stars_$scopedChildId", null)
+        if (!savedStars.isNullOrBlank()) {
+            savedStars.split(',').forEach { pair ->
+                val parts = pair.trim().split(':')
+                val order = parts.getOrNull(0)?.toIntOrNull()
+                val stars = parts.getOrNull(1)?.toIntOrNull()
+                if (order != null && stars != null && stars in 1..3) curriculumLevelStars[order] = stars
+            }
+        }
         curriculumInterestChosen = curriculumPrefs.getBoolean("interest_chosen_$scopedChildId", false)
     }
 
-    /** 把通关顺序与兴趣门槛写回 SharedPreferences，进程重启后解锁链不归零。 */
+    /** 把通关顺序、星级与兴趣门槛写回 SharedPreferences，进程重启后解锁链不归零。 */
     private fun persistCurriculumState() {
         curriculumPrefs.edit()
             .putString("passed_orders_$childId", curriculumPassedOrders.sorted().joinToString(","))
+            .putString("level_stars_$childId", curriculumLevelStars.entries.sortedBy { it.key }.joinToString(",") { "${it.key}:${it.value}" })
             .putBoolean("interest_chosen_$childId", curriculumInterestChosen)
             .apply()
+    }
+
+    /** 通关正确率映射星级：≥90% 三星、≥75% 两星、通过即至少一星（与 isPassed 的 60% 门槛对齐）。 */
+    private fun starRatingFor(correct: Int, total: Int): Int {
+        if (total <= 0) return 0
+        val accuracy = correct.toDouble() / total
+        return when {
+            accuracy >= 0.9 -> 3
+            accuracy >= 0.75 -> 2
+            else -> 1
+        }
     }
 
     /** 按基线得分（最弱在前）排序能力域；无基线时用默认 A..F。 */
@@ -1678,7 +1701,8 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                 icon = level.icon,
                 theme = level.theme,
                 difficulty = level.difficulty,
-                status = status
+                status = status,
+                stars = if (status == CurriculumLevelStatus.COMPLETED) curriculumLevelStars[level.order] ?: 1 else 0
             )
         }
         return CurriculumMapUi(
@@ -1804,7 +1828,13 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                 val runTotal = player.runTotal + 1
                 val finished = nextIndex >= activities.size
                 val passed = level != null && CurriculumCatalog.isPassed(level, runCompleted, runCorrect, runTotal)
-                if (passed) level?.let { curriculumPassedOrders.add(it.order) }
+                if (passed) {
+                    level?.let {
+                        curriculumPassedOrders.add(it.order)
+                        val earned = starRatingFor(runCorrect, runTotal)
+                        if (earned > (curriculumLevelStars[it.order] ?: 0)) curriculumLevelStars[it.order] = earned
+                    }
+                }
                 persistCurriculumState()
                 val nextActivity = if (!finished) activities.getOrNull(nextIndex) else null
                 val nextQuestion = nextActivity?.let { activity ->

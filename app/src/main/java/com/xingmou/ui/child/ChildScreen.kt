@@ -20,6 +20,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.rememberScrollState
@@ -54,6 +57,10 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
@@ -751,7 +758,7 @@ private fun CurriculumMapCard(
         when {
             !courseUnlocked -> Text("完成六题起点小测后，就可以开始第一关。", color = MaterialTheme.colorScheme.onSurfaceVariant)
             !map.interestChosen -> InterestGateway(map.interestOptions, onChooseInterest)
-            else -> map.levels.forEach { level -> LevelButton(level, isWorking, onOpenLevel) }
+            else -> CurriculumTrailMap(map.levels, isWorking, onOpenLevel)
         }
     }
 }
@@ -768,26 +775,134 @@ private fun InterestGateway(options: List<String>, onChooseInterest: (String) ->
     }
 }
 
+/** 已通关节点的薄荷青底色。 */
+private val TrailDone = androidx.compose.ui.graphics.Color(0xFF4FB8A8)
+
+/** 消消乐式蜿蜒闯关地图：S 形波浪路径上的圆形关卡节点，第 1 关在底部向上闯关。 */
 @Composable
-private fun LevelButton(level: CurriculumLevelUi, isWorking: Boolean, onOpenLevel: (Int) -> Unit) {
-    val label = when (level.status) {
-        CurriculumLevelStatus.COMPLETED -> "✓ ${level.icon} 第 ${level.order} 关 · ${level.title} · ${level.theme}"
-        CurriculumLevelStatus.AVAILABLE -> "▶ ${level.icon} 第 ${level.order} 关 · ${level.title} · ${level.theme}"
-        CurriculumLevelStatus.LOCKED -> "🔒 ${level.icon} 第 ${level.order} 关 · ${level.title}"
-    }
-    val clickable = level.status == CurriculumLevelStatus.AVAILABLE || level.status == CurriculumLevelStatus.COMPLETED
-    if (clickable) {
-        Button(
-            onClick = { onOpenLevel(level.order) },
-            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).heightIn(min = 56.dp),
-            enabled = !isWorking
-        ) { Text(label) }
-    } else {
-        OutlinedButton(
-            onClick = {},
-            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).heightIn(min = 52.dp),
-            enabled = false
-        ) { Text(label) }
+private fun CurriculumTrailMap(
+    levels: List<CurriculumLevelUi>,
+    isWorking: Boolean,
+    onOpenLevel: (Int) -> Unit
+) {
+    val gap = 150.dp
+    val swing = listOf(0.5f, 0.72f, 0.88f, 0.72f, 0.5f, 0.28f, 0.12f, 0.28f)
+    val pulse = rememberInfiniteTransition(label = "trailPulse").animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(900), RepeatMode.Reverse),
+        label = "trailPulse"
+    ).value
+    BoxWithConstraints(Modifier.fillMaxWidth().height(gap * (levels.size + 1))) {
+        val w = maxWidth
+        val xOf = { i: Int -> (w.value * swing[i % swing.size]).dp }
+        val yOf = { i: Int -> gap * (levels.size - i) }
+
+        // 节点之间的连线：两端都通关为珊瑚实线，其余灰色虚线
+        Canvas(Modifier.fillMaxSize()) {
+            levels.forEachIndexed { i, level ->
+                if (i == levels.lastIndex) return@forEachIndexed
+                val a = androidx.compose.ui.geometry.Offset(size.width * swing[i % swing.size], yOf(i).toPx())
+                val b = androidx.compose.ui.geometry.Offset(size.width * swing[(i + 1) % swing.size], yOf(i + 1).toPx())
+                val mid = androidx.compose.ui.geometry.Offset((a.x + b.x) / 2f, (a.y + b.y) / 2f)
+                val path = androidx.compose.ui.graphics.Path().apply {
+                    moveTo(a.x, a.y)
+                    quadraticBezierTo(mid.x, mid.y, b.x, b.y)
+                }
+                val solid = level.status == CurriculumLevelStatus.COMPLETED &&
+                    levels[i + 1].status == CurriculumLevelStatus.COMPLETED
+                drawPath(
+                    path,
+                    color = if (solid) com.xingmou.ui.theme.Coral else com.xingmou.ui.theme.Rule,
+                    style = androidx.compose.ui.graphics.drawscope.Stroke(
+                        width = 5.dp.toPx(),
+                        pathEffect = if (solid) null
+                        else androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(22f, 18f))
+                    )
+                )
+            }
+        }
+
+        // 顶点装饰：彩虹城堡（第 20 关上方）
+        Text(
+            "🏰",
+            fontSize = 40.sp,
+            modifier = Modifier.offset(x = (w.value * 0.5f).dp - 24.dp, y = gap * 0.32f)
+        )
+
+        levels.forEachIndexed { index, level ->
+            val nodeSize = when (level.status) {
+                CurriculumLevelStatus.AVAILABLE -> 96.dp
+                CurriculumLevelStatus.COMPLETED -> 76.dp
+                CurriculumLevelStatus.LOCKED -> 64.dp
+            }
+            val canTap = (level.status == CurriculumLevelStatus.AVAILABLE ||
+                level.status == CurriculumLevelStatus.COMPLETED) && !isWorking
+            val circleColor = when (level.status) {
+                CurriculumLevelStatus.COMPLETED -> TrailDone
+                CurriculumLevelStatus.AVAILABLE -> com.xingmou.ui.theme.Coral
+                CurriculumLevelStatus.LOCKED -> androidx.compose.ui.graphics.Color(0xFFE3E7EE)
+            }
+            Column(
+                modifier = Modifier
+                    .offset(x = xOf(index) - nodeSize / 2, y = yOf(index) - nodeSize / 2)
+                    .width(nodeSize)
+                    .then(if (canTap) Modifier.clickable { onOpenLevel(level.order) } else Modifier)
+                    .semantics {
+                        contentDescription = when (level.status) {
+                            CurriculumLevelStatus.COMPLETED -> "第 ${level.order} 关 ${level.title}，已完成"
+                            CurriculumLevelStatus.AVAILABLE -> "第 ${level.order} 关 ${level.title}，可以开始"
+                            CurriculumLevelStatus.LOCKED -> "第 ${level.order} 关，还没解锁"
+                        }
+                    },
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    if (level.status == CurriculumLevelStatus.AVAILABLE) {
+                        // 当前关呼吸光圈
+                        Box(
+                            Modifier
+                                .size(nodeSize + 22.dp)
+                                .scale(1f + pulse * 0.04f)
+                                .clip(CircleShape)
+                                .background(com.xingmou.ui.theme.Coral.copy(alpha = 0.20f + 0.16f * pulse))
+                        )
+                    }
+                    androidx.compose.material3.Surface(
+                        shape = CircleShape,
+                        color = circleColor,
+                        border = androidx.compose.foundation.BorderStroke(3.dp, androidx.compose.ui.graphics.Color.White),
+                        shadowElevation = 4.dp
+                    ) {
+                        Box(Modifier.size(nodeSize), contentAlignment = Alignment.Center) {
+                            Text(
+                                if (level.status == CurriculumLevelStatus.LOCKED) "🔒" else level.icon,
+                                fontSize = when (level.status) {
+                                    CurriculumLevelStatus.AVAILABLE -> 38.sp
+                                    CurriculumLevelStatus.COMPLETED -> 30.sp
+                                    CurriculumLevelStatus.LOCKED -> 26.sp
+                                }
+                            )
+                        }
+                    }
+                }
+                when (level.status) {
+                    CurriculumLevelStatus.COMPLETED -> Text(
+                        "★".repeat(level.stars) + "☆".repeat((3 - level.stars).coerceAtLeast(0)),
+                        color = androidx.compose.ui.graphics.Color(0xFFFFB300),
+                        fontSize = 16.sp,
+                        modifier = Modifier.padding(top = 2.dp)
+                    )
+                    CurriculumLevelStatus.AVAILABLE -> Text(
+                        "第 ${level.order} 关",
+                        color = com.xingmou.ui.theme.Ink,
+                        fontSize = 14.sp,
+                        modifier = Modifier.padding(top = 2.dp)
+                    )
+                    else -> {}
+                }
+            }
+        }
     }
 }
 
