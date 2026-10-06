@@ -110,7 +110,9 @@ fun ChildScreen(
     val context = LocalContext.current
     val speechController = remember(context) { ChildSpeechController(context) }
     val soundEffects = remember(context) { ChildSoundEffects() }
-    val selectedSection = remember { mutableStateOf(ChildSection.TRAINING) }
+    // 儿童端默认进入交互模式：先由小星给出「聊天 / 做游戏」两个选择
+    val selectedSection = remember { mutableStateOf(ChildSection.CHAT) }
+    val greetingChoiceMade = remember { mutableStateOf(false) }
     val selectedCourseLevel = remember { mutableStateOf<Int?>(null) }
     DisposableEffect(speechController) {
         onDispose { speechController.shutdown() }
@@ -277,6 +279,8 @@ fun ChildScreen(
             } else if (selectedSection.value == ChildSection.CHAT) {
                 ChatCard(
                     state = state,
+                    greetingChoiceMade = greetingChoiceMade,
+                    onPlayGame = { selectedSection.value = ChildSection.TRAINING },
                     onSend = onSendChatMessage,
                     onSelectProvider = onSelectChatProvider,
                     onOpenApiKey = onOpenApiKey
@@ -1081,6 +1085,8 @@ private fun DetectPanel(detect: AutoDetectState) {
 @Composable
 private fun ChatCard(
     state: ChildUiState,
+    greetingChoiceMade: androidx.compose.runtime.MutableState<Boolean>,
+    onPlayGame: () -> Unit,
     onSend: (String) -> Unit,
     onSelectProvider: (com.xingmou.core.llm.ChatLlmProvider) -> Unit,
     onOpenApiKey: () -> Unit
@@ -1158,7 +1164,28 @@ private fun ChatCard(
                     .padding(8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                if (messages.isEmpty()) {
+                if (messages.isEmpty() && !greetingChoiceMade.value) {
+                    // 开场问候：小星主动给出「聊天 / 做游戏」两个大按钮选择
+                    ChatBubble(
+                        com.xingmou.ChatMessageUi(
+                            id = "greeting",
+                            role = "assistant",
+                            content = "你好呀，我是小星！今天想和我聊天，还是一起做游戏呀？"
+                        )
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        GreetingChoice("💬", "和小星聊天", Modifier.weight(1f)) {
+                            greetingChoiceMade.value = true
+                        }
+                        GreetingChoice("🎮", "做游戏", Modifier.weight(1f)) {
+                            greetingChoiceMade.value = true
+                            onPlayGame()
+                        }
+                    }
+                } else if (messages.isEmpty()) {
                     Text(state.chatHint, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 messages.forEach { msg ->
@@ -1214,6 +1241,35 @@ private fun ChatCard(
                     enabled = !state.chatLoading && input.value.isNotBlank()
                 ) { Text("发送") }
             }
+        }
+    }
+}
+
+/** 开场两个大选择按钮：儿童点击无需打字。 */
+@Composable
+private fun GreetingChoice(
+    emoji: String,
+    label: String,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    androidx.compose.material3.Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(24.dp),
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        modifier = modifier.heightIn(min = 104.dp)
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(vertical = 18.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Text(emoji, style = MaterialTheme.typography.headlineLarge)
+            Text(
+                label,
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSecondaryContainer
+            )
         }
     }
 }
