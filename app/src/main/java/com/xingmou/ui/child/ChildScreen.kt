@@ -46,6 +46,14 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
@@ -113,6 +121,25 @@ fun ChildScreen(
     // 儿童端默认进入交互模式：先由小星给出「聊天 / 做游戏」两个选择
     val selectedSection = remember { mutableStateOf(ChildSection.CHAT) }
     val greetingChoiceMade = remember { mutableStateOf(false) }
+    // 开场选择放大转场：色块从按钮位置铺满全屏后切换，再淡出（与进入儿童端的头像特效同款）
+    val choiceExpand = remember { mutableStateOf<ChoiceExpand?>(null) }
+    val choiceScale = remember { Animatable(1f) }
+    val choiceAlpha = remember { Animatable(1f) }
+    val choiceScreenSize = remember { mutableStateOf(androidx.compose.ui.unit.IntSize.Zero) }
+    LaunchedEffect(choiceExpand.value) {
+        val target = choiceExpand.value ?: return@LaunchedEffect
+        val w = choiceScreenSize.value.width
+        val h = choiceScreenSize.value.height
+        val cover = if (w > 0 && h > 0 && target.sizePx > 0f) {
+            (kotlin.math.sqrt((w * w + h * h).toFloat()) / target.sizePx) * 1.2f
+        } else 14f
+        choiceAlpha.snapTo(1f)
+        choiceScale.snapTo(1f)
+        choiceScale.animateTo(cover, tween(520, easing = FastOutSlowInEasing))
+        target.onDone()
+        choiceAlpha.animateTo(0f, tween(320))
+        choiceExpand.value = null
+    }
     val selectedCourseLevel = remember { mutableStateOf<Int?>(null) }
     DisposableEffect(speechController) {
         onDispose { speechController.shutdown() }
@@ -170,7 +197,7 @@ fun ChildScreen(
     val baselineImmersive = baseline.isOpen && baseline.status == BaselineStatus.IN_PROGRESS
     val courseImmersive = selectedCourseLevel.value != null
 
-    Box(modifier = modifier.fillMaxSize()) {
+    Box(modifier = modifier.fillMaxSize().onSizeChanged { choiceScreenSize.value = it }) {
       Row(modifier = Modifier.fillMaxSize()) {
         // 交互模式为独立全屏形态：不显示导航栏，由开场两个选项（聊天/做游戏）决定去向
         if (selectedSection.value != ChildSection.CHAT) {
@@ -284,6 +311,11 @@ fun ChildScreen(
                     state = state,
                     greetingChoiceMade = greetingChoiceMade,
                     onPlayGame = { selectedSection.value = ChildSection.TRAINING },
+                    onChoiceBegin = { color, cx, cy, sizePx, onDone ->
+                        if (choiceExpand.value == null) {
+                            choiceExpand.value = ChoiceExpand(color, cx, cy, sizePx, onDone)
+                        }
+                    },
                     onSend = onSendChatMessage,
                     onSelectProvider = onSelectChatProvider,
                     onOpenApiKey = onOpenApiKey
@@ -313,6 +345,26 @@ fun ChildScreen(
                 )
             }
         }
+      }
+
+      // 开场选择放大转场覆盖层：按钮色块从原位铺满全屏，到位后新界面已切换，覆盖层淡出
+      choiceExpand.value?.let { target ->
+          val base = with(androidx.compose.ui.platform.LocalDensity.current) { target.sizePx.toDp() }
+          Box(modifier = Modifier.fillMaxSize()) {
+              Box(
+                  modifier = Modifier
+                      .offset {
+                          IntOffset(
+                              (target.centerX - target.sizePx / 2f).toInt(),
+                              (target.centerY - target.sizePx / 2f).toInt()
+                          )
+                      }
+                      .size(base)
+                      .scale(choiceScale.value)
+                      .alpha(choiceAlpha.value)
+                      .background(target.color)
+              )
+          }
       }
 
       // ===== 儿童专属沉浸测试空间（全屏 Dialog，盖住顶栏和导航） =====
@@ -1090,6 +1142,7 @@ private fun ChatCard(
     state: ChildUiState,
     greetingChoiceMade: androidx.compose.runtime.MutableState<Boolean>,
     onPlayGame: () -> Unit,
+    onChoiceBegin: (androidx.compose.ui.graphics.Color, Float, Float, Float, () -> Unit) -> Unit,
     onSend: (String) -> Unit,
     onSelectProvider: (com.xingmou.core.llm.ChatLlmProvider) -> Unit,
     onOpenApiKey: () -> Unit
@@ -1256,16 +1309,21 @@ private fun ChatCard(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        GreetingChoice("💬", "和小星聊天", Modifier.weight(1f)) {
-                            greetingChoiceMade.value = true
+                        val chatContainer = MaterialTheme.colorScheme.secondaryContainer
+                        GreetingChoice("💬", "和小星聊天", Modifier.weight(1f)) { cx, cy, h ->
+                            onChoiceBegin(chatContainer, cx, cy, h) {
+                                greetingChoiceMade.value = true
+                            }
                         }
                         GreetingChoice(
                             "🎮", "做游戏", Modifier.weight(1f),
                             container = com.xingmou.ui.theme.Coral,
                             content = androidx.compose.ui.graphics.Color.White
-                        ) {
-                            greetingChoiceMade.value = true
-                            onPlayGame()
+                        ) { cx, cy, h ->
+                            onChoiceBegin(com.xingmou.ui.theme.Coral, cx, cy, h) {
+                                greetingChoiceMade.value = true
+                                onPlayGame()
+                            }
                         }
                     }
                 } else if (messages.isEmpty()) {
@@ -1368,7 +1426,7 @@ private fun ChatCard(
     }
 }
 
-/** 开场两个大选择按钮：儿童点击无需打字。「做游戏」用暖色实底与聊天形成明显区分。 */
+/** 开场两个大选择按钮：儿童点击无需打字。「做游戏」用暖色实底与聊天形成明显区分。点击后色块从按钮位置放大铺满全屏。 */
 @Composable
 private fun GreetingChoice(
     emoji: String,
@@ -1376,13 +1434,23 @@ private fun GreetingChoice(
     modifier: Modifier = Modifier,
     container: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.secondaryContainer,
     content: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.onSecondaryContainer,
-    onClick: () -> Unit
+    onStart: (Float, Float, Float) -> Unit
 ) {
+    val rectState = remember { mutableStateOf(androidx.compose.ui.geometry.Rect.Zero) }
     androidx.compose.material3.Surface(
-        onClick = onClick,
+        onClick = {
+            val r = rectState.value
+            onStart(r.left + r.width / 2f, r.top + r.height / 2f, r.height)
+        },
         shape = RoundedCornerShape(24.dp),
         color = container,
-        modifier = modifier.heightIn(min = 112.dp)
+        modifier = modifier.heightIn(min = 112.dp).onGloballyPositioned { coords ->
+            val topLeft = coords.localToRoot(androidx.compose.ui.geometry.Offset.Zero)
+            rectState.value = androidx.compose.ui.geometry.Rect(
+                topLeft,
+                androidx.compose.ui.geometry.Size(coords.size.width.toFloat(), coords.size.height.toFloat())
+            )
+        }
     ) {
         Column(
             modifier = Modifier.fillMaxWidth().padding(vertical = 18.dp),
@@ -1398,6 +1466,15 @@ private fun GreetingChoice(
         }
     }
 }
+
+/** 开场选择放大转场的参数：色块颜色、按钮中心与高度、切换完成回调。 */
+private data class ChoiceExpand(
+    val color: androidx.compose.ui.graphics.Color,
+    val centerX: Float,
+    val centerY: Float,
+    val sizePx: Float,
+    val onDone: () -> Unit
+)
 
 @Composable
 private fun ChatBubble(msg: com.xingmou.ChatMessageUi) {
