@@ -53,9 +53,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.zIndex
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
@@ -68,6 +70,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlin.math.hypot
 import com.xingmou.AccessibilityUiState
 import com.xingmou.AutoDetectState
 import com.xingmou.ChildUiState
@@ -138,13 +141,17 @@ fun ChildScreen(
     val choiceScale = remember { Animatable(1f) }
     val choiceAlpha = remember { Animatable(1f) }
     val choiceScreenSize = remember { mutableStateOf(androidx.compose.ui.unit.IntSize.Zero) }
+    // 按钮的 localToRoot 坐标是相对于 Compose 根节点的，而覆盖层位于 ChildScreen
+    // 根 Box 内。记录根 Box 在同一坐标系中的原点，避免 Scaffold 内边距导致覆盖层整体偏移。
+    val choiceRootOrigin = remember { mutableStateOf(Offset.Zero) }
     val motionScale = LocalMotionDurationScale.current
     LaunchedEffect(choiceExpand.value) {
         val target = choiceExpand.value ?: return@LaunchedEffect
         val w = choiceScreenSize.value.width
         val h = choiceScreenSize.value.height
         val cover = if (w > 0 && h > 0 && target.sizePx > 0f) {
-            (kotlin.math.sqrt((w * w + h * h).toFloat()) / target.sizePx) * 1.2f
+            // 用 Float 计算，且以容器对角线为覆盖基准，给边界留出余量。
+            (hypot(w.toFloat(), h.toFloat()) / target.sizePx) * 1.25f
         } else 14f
         choiceAlpha.snapTo(1f)
         choiceScale.snapTo(1f)
@@ -221,7 +228,14 @@ fun ChildScreen(
     val baselineImmersive = baseline.isOpen && baseline.status == BaselineStatus.IN_PROGRESS
     val courseImmersive = selectedCourseLevel.value != null
 
-    Box(modifier = modifier.fillMaxSize().onSizeChanged { choiceScreenSize.value = it }) {
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .onSizeChanged { choiceScreenSize.value = it }
+            .onGloballyPositioned { coordinates ->
+                choiceRootOrigin.value = coordinates.localToRoot(Offset.Zero)
+            }
+    ) {
       Row(modifier = Modifier.fillMaxSize()) {
         // 交互模式为独立全屏形态：不显示导航栏，由开场两个选项（聊天/做游戏）决定去向
         if (selectedSection.value != ChildSection.CHAT) {
@@ -341,7 +355,14 @@ fun ChildScreen(
                         onPlayGame = { enterMap() },
                         onChoiceBegin = { color, cx, cy, sizePx, onDone ->
                             if (choiceExpand.value == null) {
-                                choiceExpand.value = ChoiceExpand(color, cx, cy, sizePx, onDone)
+                                val origin = choiceRootOrigin.value
+                                choiceExpand.value = ChoiceExpand(
+                                    color = color,
+                                    centerX = cx - origin.x,
+                                    centerY = cy - origin.y,
+                                    sizePx = sizePx,
+                                    onDone = onDone
+                                )
                             }
                         },
                         onSend = onSendChatMessage,
@@ -379,7 +400,7 @@ fun ChildScreen(
       // 开场选择放大转场覆盖层：按钮色块从原位铺满全屏，到位后新界面已切换，覆盖层淡出
       choiceExpand.value?.let { target ->
           val base = with(androidx.compose.ui.platform.LocalDensity.current) { target.sizePx.toDp() }
-          Box(modifier = Modifier.fillMaxSize()) {
+          Box(modifier = Modifier.fillMaxSize().zIndex(10f)) {
               Box(
                   modifier = Modifier
                       .offset {
