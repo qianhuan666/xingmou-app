@@ -2958,7 +2958,7 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
             val metrics = com.xingmou.core.agent.AgentMetricsRepository(database).forChild(scopedChildId)
             val metricsSummary = metrics.unsupportedJudgmentRate?.let { rate ->
                 "无依据判断率 %.0f%% · 已标注 %d 条".format(rate * 100, metrics.evidenceAnnotationSampleCount)
-            } ?: "依据标注：未采样"
+            } ?: "人工标注：暂无"
             if (activeChildId != scopedChildId) return@launch
             _uiState.update { state -> state.copy(professional = state.professional.copy(
                 auditRuns = runs.map { AgentRunAuditUi(it.runId, it.taskType, it.port, it.status, it.startedAt) },

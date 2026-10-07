@@ -629,7 +629,7 @@ private fun AgentPanel(state: ProfessionalUiState, onRefreshAudit: () -> Unit, o
         StatusLine("最近事件", state.recentEvent)
         state.agentRunId?.let {
             Spacer(Modifier.height(8.dp))
-            StatusLine("runId", it)
+            StatusLine("运行编号", it)
         }
         HorizontalDivider(Modifier.padding(vertical = 14.dp))
         Text("规则与工具", style = MaterialTheme.typography.titleMedium)
@@ -637,6 +637,9 @@ private fun AgentPanel(state: ProfessionalUiState, onRefreshAudit: () -> Unit, o
         HorizontalDivider(Modifier.padding(vertical = 14.dp))
         Text("审计回放", style = MaterialTheme.typography.titleMedium)
         Text(state.auditMessage, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (state.auditRuns.isEmpty()) {
+            Text("智能体自动生成方案时会在此留下决策轨迹，专业人员可回放和标注。", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp))
+        }
         Text(state.auditMetricsSummary, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp))
         OutlinedButton(onClick = onRefreshAudit, modifier = Modifier.padding(top = 8.dp)) { Text("刷新当前儿童运行记录") }
         state.auditRuns.forEach { run ->
