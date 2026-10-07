@@ -243,6 +243,7 @@ data class RainbowProfileUi(
     val domainBars: List<RainbowDomainUi> = emptyList(),
     val narrative: String = "",
     val parentSummary: String = "",
+    val parentDetailAdvice: String = "",
     val createdLabel: String = ""
 )
 

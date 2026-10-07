@@ -1361,44 +1361,34 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
         return "你在${strongest}小游戏里找到了自己的好办法！接下来我们会从轻松的${gentle}游戏开始，慢慢玩、慢慢进步，每一次尝试都值得一颗星星。"
     }
 
-    /** 家长向能力概括：逐域分组点评+领域专属建议+整体水平。避免诊断性语言。 */
+    /** 家长向能力概括：精简版，只点出强项和需加强领域数量+整体水平。 */
     private fun parentSummary(scores: Map<String, Int>): String {
         val entries = scores.entries.sortedByDescending { it.value }
         if (entries.isEmpty()) return "孩子还没完成起点小测，完成后这里会显示能力概括。"
         val parts = mutableListOf<String>()
-        // 强项
-        val strong = entries.filter { it.value >= 50 }
-        if (strong.isNotEmpty()) {
-            val names = strong.joinToString("、") { "${DomainCatalog.find(it.key)?.name ?: it.key}（${it.value}分）" }
-            parts.add("表现不错的是${names}")
+        val top = entries.first()
+        val topName = DomainCatalog.find(top.key)?.name ?: "游戏"
+        parts.add("最强项是${topName}（${top.value}分）")
+        val weakCount = entries.count { it.value < 30 }
+        if (weakCount > 0) {
+            parts.add("还有${weakCount}个领域需要更多练习")
         }
-        // 发展中
-        val developing = entries.filter { it.value in 30..49 }
-        if (developing.isNotEmpty()) {
-            val names = developing.joinToString("、") { "${DomainCatalog.find(it.key)?.name ?: it.key}（${it.value}分）" }
-            parts.add("正在发展中的是${names}，日常可以多穿插相关小活动")
-        }
-        // 起步阶段（1-29分）和尚未测评（0分）合并为"需要更多练习"
-        val weak = entries.filter { it.value < 30 }
-        if (weak.isNotEmpty()) {
-            val weakParts = weak.map { e ->
-                val name = DomainCatalog.find(e.key)?.name ?: e.key
-                val suggestion = domainSuggestion(e.key)
-                if (e.value == 0) {
-                    "${name}（尚未测评）"
-                } else {
-                    "${name}（${e.value}分）"
-                } to suggestion
-            }
-            val weakNames = weakParts.joinToString("、") { it.first }
-            val tips = weakParts.mapNotNull { it.second }.filter { it.isNotBlank() }.joinToString("；")
-            parts.add("需要更多练习的是${weakNames}${if (tips.isNotBlank()) "。建议：$tips" else ""}")
-        }
-        // 整体
         val avg = entries.map { it.value }.average().toInt()
-        val assessed = entries.count { it.value > 0 }
-        parts.add("整体来看，已测评${assessed}个领域，均分约${avg}，处于${scoreLevelWord(avg)}水平")
-        return parts.joinToString("；") + "。"
+        parts.add("整体${scoreLevelWord(avg)}（均分${avg}）")
+        return parts.joinToString("，") + "。"
+    }
+
+    /** 展开区用的详细建议文本：列出弱项领域的日常陪练方向。 */
+    private fun parentDetailAdvice(scores: Map<String, Int>): String {
+        val entries = scores.entries.sortedByDescending { it.value }
+        val weak = entries.filter { it.value < 30 }
+        if (weak.isEmpty()) return "各领域发展均衡，继续保持日常练习。"
+        return weak.joinToString("；") { e ->
+            val name = DomainCatalog.find(e.key)?.name ?: e.key
+            val status = if (e.value == 0) "尚未测评" else "${e.value}分"
+            val tip = domainSuggestion(e.key)
+            "$name（$status）${if (tip.isNotBlank()) "：$tip" else ""}"
+        } + "。"
     }
 
     /** 每个领域的日常陪练小建议，给家长具体可操作的方向。 */
@@ -1442,6 +1432,7 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
             },
             narrative = childNarrative(scores),
             parentSummary = parentSummary(scores),
+            parentDetailAdvice = parentDetailAdvice(scores),
             createdLabel = createdLabel
         )
     }

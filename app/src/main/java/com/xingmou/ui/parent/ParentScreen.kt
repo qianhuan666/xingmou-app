@@ -543,6 +543,9 @@ private fun ParentProfileCard(profile: RainbowProfileUi) {
                 Text(if (showDetails.value) "收起六域详情" else "展开六域详情")
             }
             if (showDetails.value) {
+                if (profile.parentDetailAdvice.isNotBlank()) {
+                    Text(profile.parentDetailAdvice, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 4.dp))
+                }
                 profile.domainBars.forEach { bar ->
                     Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
                         Column(Modifier.weight(1f)) {
