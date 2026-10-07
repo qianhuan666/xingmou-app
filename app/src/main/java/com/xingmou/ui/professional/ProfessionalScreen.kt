@@ -119,8 +119,8 @@ fun ProfessionalScreen(
             NavigationRailItem(
                 selected = selectedSection.value == ProfessionalSection.AGENT,
                 onClick = { selectedSection.value = ProfessionalSection.AGENT },
-                icon = { Text("AI", style = MaterialTheme.typography.titleLarge) },
-                label = { Text("Agent") }
+                icon = { Text("审", style = MaterialTheme.typography.titleLarge) },
+                label = { Text("审计") }
             )
         }
         Column(
@@ -133,17 +133,17 @@ fun ProfessionalScreen(
                     ProfessionalSection.PLAN -> "训练方案"
                     ProfessionalSection.ASSESSMENT -> "量表与评估"
                     ProfessionalSection.CARE -> "个案管理"
-                    ProfessionalSection.AGENT -> "Agent 运行审计"
+                    ProfessionalSection.AGENT -> "审计回放"
                 },
                 style = MaterialTheme.typography.headlineMedium
             )
             Text(
                 when (selectedSection.value) {
                     ProfessionalSection.ANALYSIS -> "查看能力分析、个体与分组报告及训练明细。"
-                    ProfessionalSection.PLAN -> "Agent 生成草案，专业人员确认并签署生效。"
+                    ProfessionalSection.PLAN -> "智能体生成草案，专业人员确认并签署生效。"
                     ProfessionalSection.ASSESSMENT -> "转录专业量表，并参考本地方法库。"
                     ProfessionalSection.CARE -> "记录个案阶段与家庭反馈。"
-                    ProfessionalSection.AGENT -> "查看当前儿童的 Agent 运行记录与决策轨迹。"
+                    ProfessionalSection.AGENT -> "查看智能体运行记录与决策轨迹。"
                 },
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -203,7 +203,7 @@ private fun AdaptiveOverviewPanel(state: ProfessionalUiState) {
 @Composable
 private fun MethodLibraryPanel(onAssociateWithPlan: (String) -> Unit) {
     val expandedMethod = remember { mutableStateOf<String?>(null) }
-    SectionSurface(title = "12 方法库", supporting = "点击方法展开详情，可关联到训练方案。仅供专业人员参考。") {
+    SectionSurface(title = "康复方法库", supporting = "点击方法展开详情，可关联到训练方案。仅供专业人员参考。") {
         RehabilitationMethods.all.forEachIndexed { index, method ->
             if (index > 0) HorizontalDivider(Modifier.padding(vertical = 8.dp))
             val isExpanded = expandedMethod.value == method.id
