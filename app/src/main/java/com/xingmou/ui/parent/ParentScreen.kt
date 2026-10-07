@@ -268,7 +268,7 @@ private fun HomeTaskPanel(
     }
     Spacer(Modifier.height(16.dp))
     // 卡片 2：怎么做
-    SectionSurface(title = "5 分钟陪练示范", supporting = "按步骤进行，不必一次做完。${state.homeTaskDurationMinutes} 分钟 · ${state.homeTaskSupportLevel}。出现疲劳、拒绝或风险时暂停。") {
+    SectionSurface(title = "5 分钟陪练示范", supporting = "按步骤进行，不必一次做完。${state.homeTaskDurationMinutes} 分钟 · ${supportWord(state.homeTaskSupportLevel)}。出现疲劳、拒绝或风险时暂停。") {
         DemoSteps(state.homeDemoStep, state.homeTaskSafetyStopped)
         Button(
             onClick = onAdvanceDemo,
