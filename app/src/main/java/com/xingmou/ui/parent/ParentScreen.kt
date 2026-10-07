@@ -534,30 +534,36 @@ private fun ParentProfileCard(profile: RainbowProfileUi) {
         return
     }
     SectionSurface(title = "平台初始能力画像", supporting = "生成于 ${profile.createdLabel}") {
-        Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
             if (profile.parentSummary.isNotBlank()) {
-                Text(profile.parentSummary, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(bottom = 4.dp))
+                Text(profile.parentSummary, style = MaterialTheme.typography.bodyLarge)
             }
-            profile.domainBars.forEach { bar ->
-                Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+            var showDetails = remember { mutableStateOf(false) }
+            TextButton(onClick = { showDetails.value = !showDetails.value }, modifier = Modifier.fillMaxWidth()) {
+                Text(if (showDetails.value) "收起六域详情" else "展开六域详情")
+            }
+            if (showDetails.value) {
+                profile.domainBars.forEach { bar ->
+                    Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
                         Column(Modifier.weight(1f)) {
-                        Text(bar.name, style = MaterialTheme.typography.titleMedium)
-                        if (bar.description.isNotBlank()) {
-                            Text(bar.description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 2.dp))
+                            Text(bar.name, style = MaterialTheme.typography.titleMedium)
+                            if (bar.description.isNotBlank()) {
+                                Text(bar.description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 2.dp))
+                            }
+                            LinearProgressIndicator(
+                                progress = { bar.score / 100f },
+                                color = domainBarColor(bar.colorKey),
+                                modifier = Modifier.fillMaxWidth().padding(top = 6.dp)
+                            )
                         }
-                        LinearProgressIndicator(
-                            progress = { bar.score / 100f },
-                            color = domainBarColor(bar.colorKey),
-                            modifier = Modifier.fillMaxWidth().padding(top = 6.dp)
-                        )
+                        Text("训练起点 ${bar.score} · ${scoreLevelWord(bar.score)}", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    Text("训练起点 ${bar.score} · ${scoreLevelWord(bar.score)}", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }
-        Spacer(Modifier.height(14.dp))
-        Text(profile.narrative, style = MaterialTheme.typography.bodyLarge)
         Spacer(Modifier.height(10.dp))
+        Text(profile.narrative, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.height(6.dp))
         Text("平台原创训练起点画像，不等同于标准化量表或医学诊断。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
