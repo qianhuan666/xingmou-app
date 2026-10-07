@@ -436,6 +436,16 @@ data class TrainingDetailUi(
     val reaction: String
 )
 
+/** 支持等级 L0-L4 翻译为家长可读的描述。 */
+fun supportWord(level: String): String = when (level) {
+    "L0" -> "独立完成"
+    "L1" -> "需要少量提示"
+    "L2" -> "需要一些提示"
+    "L3" -> "需要较多帮助"
+    "L4" -> "需要全程帮助"
+    else -> "支持等级待定"
+}
+
 data class AssessmentRecordUi(
     val assessmentName: String,
     val version: Int,

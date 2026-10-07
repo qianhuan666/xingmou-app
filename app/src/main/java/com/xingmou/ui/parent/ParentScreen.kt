@@ -62,6 +62,7 @@ import com.xingmou.ParentUiState
 import com.xingmou.RainbowProfileUi
 import com.xingmou.parentRiskLabel
 import com.xingmou.parentRouteLabel
+import com.xingmou.supportWord
 
 import com.xingmou.ui.components.AgentStatusLine
 import com.xingmou.ui.components.SectionSurface
@@ -216,15 +217,6 @@ private fun streakWord(correct: Int, error: Int): String = when {
     correct > 0 -> "连续完成 ${correct} 次"
     error > 0 -> "连续未完成 ${error} 次"
     else -> "还没有练习记录"
-}
-
-private fun supportWord(level: String): String = when (level) {
-    "L0" -> "独立完成"
-    "L1" -> "需要少量提示"
-    "L2" -> "需要一些提示"
-    "L3" -> "需要较多帮助"
-    "L4" -> "需要全程帮助"
-    else -> "支持等级待定"
 }
 
 @Composable
@@ -661,8 +653,13 @@ private fun ParentTrainingStatsCard(state: ParentUiState) {
             Text("暂无训练记录。", modifier = Modifier.padding(top = 8.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
         } else state.recentTrainingDetails.forEachIndexed { index, detail ->
             if (index > 0) HorizontalDivider(Modifier.padding(vertical = 8.dp))
-            Text("${java.text.SimpleDateFormat("MM-dd HH:mm", java.util.Locale.getDefault()).format(java.util.Date(detail.timestamp))} · ${detail.domain}/${detail.task}", style = MaterialTheme.typography.titleSmall)
-            Text("${detail.result} · ${detail.support} · 反应时 ${detail.reaction}", modifier = Modifier.padding(top = 4.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("${detail.domain} · ${detail.task}", style = MaterialTheme.typography.titleSmall)
+            Text(
+                "${java.text.SimpleDateFormat("MM-dd HH:mm", java.util.Locale.getDefault()).format(java.util.Date(detail.timestamp))} · ${detail.result} · ${detail.support} · 反应时 ${detail.reaction}",
+                modifier = Modifier.padding(top = 4.dp),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall
+            )
         }
     }
 }

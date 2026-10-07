@@ -2757,12 +2757,13 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                     )
                 }.sortedWith(compareBy({ it.domain }, { it.task }))
                 val trainingDetails = records.take(10).map { item ->
+                    val taskIdShort = item.taskId.substringBefore("-")
                     TrainingDetailUi(
                         timestamp = item.createdAt,
-                        domain = item.domain,
-                        task = item.taskId,
+                        domain = DomainCatalog.find(item.domain)?.name ?: item.domain,
+                        task = TaskCatalog.find(taskIdShort)?.name ?: item.taskId,
                         result = if (item.correct) "完成" else "需再试",
-                        support = "${item.supportLevel} / 提示 ${item.promptLevel}",
+                        support = "${supportWord(item.supportLevel)} · 提示 ${item.promptLevel} 次",
                         reaction = item.reactionMs?.let { "$it ms" } ?: "—"
                     )
                 }
