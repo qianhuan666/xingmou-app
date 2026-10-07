@@ -648,12 +648,12 @@ private fun ParentTrainingStatsCard(state: ParentUiState) {
         }
         HorizontalDivider(Modifier.padding(vertical = 14.dp))
         Text("正确率走势", style = MaterialTheme.typography.titleMedium)
-        Text("按训练记录时间分段，仅用于回看过程变化。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("按训练时间从早到晚分成最多 5 段，用于回看正确率的变化。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (state.trendPoints.isEmpty()) {
             Text("暂无足够记录生成趋势。", modifier = Modifier.padding(top = 8.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
         } else state.trendPoints.forEach { point ->
             Row(modifier = Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("第${point.label}段", modifier = Modifier.weight(0.22f), style = MaterialTheme.typography.labelMedium)
+                Text(point.dateRange.ifBlank { "第${point.label}段" }, modifier = Modifier.weight(0.22f), style = MaterialTheme.typography.labelMedium)
                 LinearProgressIndicator(progress = { point.accuracy }, modifier = Modifier.weight(0.55f).padding(top = 3.dp))
                 Text("${(point.accuracy * 100).toInt()}% · ${point.sampleCount}条", modifier = Modifier.weight(0.23f), style = MaterialTheme.typography.labelSmall)
             }

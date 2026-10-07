@@ -426,7 +426,7 @@ data class ReportGroupUi(
     val averageReaction: String
 )
 
-data class ReportTrendPointUi(val label: String, val accuracy: Float, val sampleCount: Int)
+data class ReportTrendPointUi(val label: String, val accuracy: Float, val sampleCount: Int, val dateRange: String = "")
 
 data class TrainingDetailUi(
     val timestamp: Long,

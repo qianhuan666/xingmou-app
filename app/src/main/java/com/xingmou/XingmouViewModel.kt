@@ -2718,10 +2718,17 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                     .chunked((records.size / 5).coerceAtLeast(1))
                     .takeLast(5)
                     .mapIndexed { index, chunk ->
+                        val fmt = SimpleDateFormat("MM-dd", Locale.CHINA)
+                        val range = if (chunk.size <= 1) {
+                            fmt.format(Date(chunk.first().createdAt))
+                        } else {
+                            "${fmt.format(Date(chunk.first().createdAt))}~${fmt.format(Date(chunk.last().createdAt))}"
+                        }
                         ReportTrendPointUi(
                             label = "${index + 1}",
                             accuracy = if (chunk.isEmpty()) 0f else chunk.count { it.correct }.toFloat() / chunk.size,
-                            sampleCount = chunk.size
+                            sampleCount = chunk.size,
+                            dateRange = range
                         )
                     }
                 val homeTasks = database.homeTaskDao().allForChild(childId).associateBy { it.taskId }
