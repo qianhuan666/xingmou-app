@@ -62,6 +62,7 @@ import com.xingmou.ParentUiState
 import com.xingmou.RainbowProfileUi
 import com.xingmou.parentRiskLabel
 import com.xingmou.parentRouteLabel
+import com.xingmou.scoreLevelWord
 import com.xingmou.supportWord
 
 import com.xingmou.ui.components.AgentStatusLine
@@ -217,14 +218,6 @@ private fun streakWord(correct: Int, error: Int): String = when {
     correct > 0 -> "连续完成 ${correct} 次"
     error > 0 -> "连续未完成 ${error} 次"
     else -> "还没有练习记录"
-}
-
-private fun scoreLevelWord(score: Int): String = when {
-    score >= 80 -> "表现不错"
-    score >= 50 -> "中等水平"
-    score >= 30 -> "发展中"
-    score > 0 -> "起步阶段"
-    else -> "尚未测评"
 }
 
 @Composable
@@ -542,6 +535,9 @@ private fun ParentProfileCard(profile: RainbowProfileUi) {
     }
     SectionSurface(title = "平台初始能力画像", supporting = "生成于 ${profile.createdLabel}") {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+            if (profile.parentSummary.isNotBlank()) {
+                Text(profile.parentSummary, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(bottom = 4.dp))
+            }
             profile.domainBars.forEach { bar ->
                 Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
                         Column(Modifier.weight(1f)) {

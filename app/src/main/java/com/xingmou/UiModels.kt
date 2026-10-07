@@ -242,6 +242,7 @@ data class RainbowProfileUi(
     val present: Boolean = false,
     val domainBars: List<RainbowDomainUi> = emptyList(),
     val narrative: String = "",
+    val parentSummary: String = "",
     val createdLabel: String = ""
 )
 
@@ -438,6 +439,14 @@ data class TrainingDetailUi(
 )
 
 /** 支持等级 L0-L4 翻译为家长可读的描述。 */
+fun scoreLevelWord(score: Int): String = when {
+    score >= 80 -> "表现不错"
+    score >= 50 -> "中等水平"
+    score >= 30 -> "发展中"
+    score > 0 -> "起步阶段"
+    else -> "尚未测评"
+}
+
 fun supportWord(level: String): String = when (level) {
     "L0" -> "独立完成"
     "L1" -> "需要少量提示"
