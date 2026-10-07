@@ -1385,7 +1385,8 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                     name = domain?.name ?: id,
                     emoji = domainEmoji(id),
                     colorKey = domain?.displayColor ?: "slate",
-                    score = scores[id] ?: 0
+                    score = scores[id] ?: 0,
+                    description = domain?.summary ?: ""
                 )
             },
             narrative = childNarrative(scores),

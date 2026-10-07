@@ -219,6 +219,14 @@ private fun streakWord(correct: Int, error: Int): String = when {
     else -> "还没有练习记录"
 }
 
+private fun scoreLevelWord(score: Int): String = when {
+    score >= 80 -> "表现不错"
+    score >= 50 -> "中等水平"
+    score >= 30 -> "发展中"
+    score > 0 -> "起步阶段"
+    else -> "尚未测评"
+}
+
 @Composable
 private fun HomeTaskPanel(
     state: ParentUiState,
@@ -538,13 +546,16 @@ private fun ParentProfileCard(profile: RainbowProfileUi) {
                 Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
                         Column(Modifier.weight(1f)) {
                         Text(bar.name, style = MaterialTheme.typography.titleMedium)
+                        if (bar.description.isNotBlank()) {
+                            Text(bar.description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 2.dp))
+                        }
                         LinearProgressIndicator(
                             progress = { bar.score / 100f },
                             color = domainBarColor(bar.colorKey),
                             modifier = Modifier.fillMaxWidth().padding(top = 6.dp)
                         )
                     }
-                    Text("训练起点 ${bar.score}", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("训练起点 ${bar.score} · ${scoreLevelWord(bar.score)}", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }

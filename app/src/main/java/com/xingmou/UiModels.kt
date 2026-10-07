@@ -233,7 +233,8 @@ data class RainbowDomainUi(
     val name: String,
     val emoji: String,
     val colorKey: String,
-    val score: Int
+    val score: Int,
+    val description: String = ""
 )
 
 /** 儿童端「我的彩虹画像」数据画报：完成起点小测后生成，展示六域训练起点与鼓励叙述。 */
