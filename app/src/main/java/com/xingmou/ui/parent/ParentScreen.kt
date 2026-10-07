@@ -664,18 +664,26 @@ private fun ParentTrainingStatsCard(state: ParentUiState) {
             }
         }
         HorizontalDivider(Modifier.padding(vertical = 14.dp))
-        Text("最近训练记录", style = MaterialTheme.typography.titleMedium)
-        if (state.recentTrainingDetails.isEmpty()) {
-            Text("暂无训练记录。", modifier = Modifier.padding(top = 8.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
-        } else state.recentTrainingDetails.forEachIndexed { index, detail ->
-            if (index > 0) HorizontalDivider(Modifier.padding(vertical = 8.dp))
-            Text("${detail.domain} · ${detail.task}", style = MaterialTheme.typography.titleSmall)
-            Text(
-                "${java.text.SimpleDateFormat("MM-dd HH:mm", java.util.Locale.getDefault()).format(java.util.Date(detail.timestamp))} · ${detail.result} · ${detail.support} · 反应时 ${detail.reaction}",
-                modifier = Modifier.padding(top = 4.dp),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                style = MaterialTheme.typography.bodySmall
-            )
+        var showRecords = remember { mutableStateOf(false) }
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+            Text("最近训练记录", style = MaterialTheme.typography.titleMedium)
+            TextButton(onClick = { showRecords.value = !showRecords.value }) {
+                Text(if (showRecords.value) "收起" else "展开")
+            }
+        }
+        if (showRecords.value) {
+            if (state.recentTrainingDetails.isEmpty()) {
+                Text("暂无训练记录。", modifier = Modifier.padding(top = 8.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
+            } else state.recentTrainingDetails.forEachIndexed { index, detail ->
+                if (index > 0) HorizontalDivider(Modifier.padding(vertical = 8.dp))
+                Text("${detail.domain} · ${detail.task}", style = MaterialTheme.typography.titleSmall)
+                Text(
+                    "${java.text.SimpleDateFormat("MM-dd HH:mm", java.util.Locale.getDefault()).format(java.util.Date(detail.timestamp))} · ${detail.result} · ${detail.support} · 反应时 ${detail.reaction}",
+                    modifier = Modifier.padding(top = 4.dp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
         }
     }
 }
