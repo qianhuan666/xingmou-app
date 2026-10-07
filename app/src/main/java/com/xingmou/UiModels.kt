@@ -212,7 +212,8 @@ data class CurriculumLevelUi(
     val icon: String,
     val theme: String,
     val difficulty: Int,
-    val status: CurriculumLevelStatus
+    val status: CurriculumLevelStatus,
+    val stars: Int = 0
 )
 
 /** 地图：20 关列表 + 解锁链 + 兴趣门槛（选择主题后才开放第一关）。 */

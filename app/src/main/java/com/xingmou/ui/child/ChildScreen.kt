@@ -7,6 +7,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -20,6 +22,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.rememberScrollState
@@ -46,6 +51,18 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
@@ -69,6 +86,8 @@ import com.xingmou.ui.components.StatusLine
 import com.xingmou.ui.components.XiaoXingMark
 import com.xingmou.ui.components.domainBarColor
 import com.xingmou.ui.theme.Error
+import com.xingmou.ui.theme.LocalMotionDurationScale
+import com.xingmou.ui.theme.motionTween
 import com.xingmou.R
 
 private enum class ChildSection { TRAINING, CHAT, PROFILE, SETTINGS }
@@ -87,6 +106,7 @@ fun ChildScreen(
     onAnswerCurriculumActivity: (Int) -> Unit,
     onLeaveCurriculumLevel: () -> Unit,
     onChooseCurriculumInterest: (String) -> Unit,
+    onResetCurriculum: () -> Unit,
     onPause: () -> Unit,
     onResume: () -> Unit,
     onSpeechEnabledChange: (Boolean) -> Unit,
@@ -110,8 +130,41 @@ fun ChildScreen(
     val context = LocalContext.current
     val speechController = remember(context) { ChildSpeechController(context) }
     val soundEffects = remember(context) { ChildSoundEffects() }
-    val selectedSection = remember { mutableStateOf(ChildSection.TRAINING) }
+    // 儿童端默认进入交互模式：先由小星给出「聊天 / 做游戏」两个选择
+    val selectedSection = remember { mutableStateOf(ChildSection.CHAT) }
+    val greetingChoiceMade = remember { mutableStateOf(false) }
+    // 开场选择放大转场：色块从按钮位置铺满全屏后切换，再淡出（与进入儿童端的头像特效同款）
+    val choiceExpand = remember { mutableStateOf<ChoiceExpand?>(null) }
+    val choiceScale = remember { Animatable(1f) }
+    val choiceAlpha = remember { Animatable(1f) }
+    val choiceScreenSize = remember { mutableStateOf(androidx.compose.ui.unit.IntSize.Zero) }
+    val motionScale = LocalMotionDurationScale.current
+    LaunchedEffect(choiceExpand.value) {
+        val target = choiceExpand.value ?: return@LaunchedEffect
+        val w = choiceScreenSize.value.width
+        val h = choiceScreenSize.value.height
+        val cover = if (w > 0 && h > 0 && target.sizePx > 0f) {
+            (kotlin.math.sqrt((w * w + h * h).toFloat()) / target.sizePx) * 1.2f
+        } else 14f
+        choiceAlpha.snapTo(1f)
+        choiceScale.snapTo(1f)
+        choiceScale.animateTo(cover, tween((520 * motionScale).toInt().coerceAtLeast(1), easing = FastOutSlowInEasing))
+        target.onDone()
+        choiceAlpha.animateTo(0f, tween((320 * motionScale).toInt().coerceAtLeast(1)))
+        choiceExpand.value = null
+    }
     val selectedCourseLevel = remember { mutableStateOf<Int?>(null) }
+    // 消消乐式关卡地图是独立全屏界面：点侧栏「训练」或聊天页「做游戏」直接进入
+    val mapImmersive = remember { mutableStateOf(false) }
+    val enterMap = {
+        selectedSection.value = ChildSection.TRAINING
+        mapImmersive.value = true
+    }
+    val exitMap = {
+        mapImmersive.value = false
+        selectedSection.value = ChildSection.CHAT
+        greetingChoiceMade.value = true
+    }
     DisposableEffect(speechController) {
         onDispose { speechController.shutdown() }
     }
@@ -168,8 +221,10 @@ fun ChildScreen(
     val baselineImmersive = baseline.isOpen && baseline.status == BaselineStatus.IN_PROGRESS
     val courseImmersive = selectedCourseLevel.value != null
 
-    Box(modifier = modifier.fillMaxSize()) {
+    Box(modifier = modifier.fillMaxSize().onSizeChanged { choiceScreenSize.value = it }) {
       Row(modifier = Modifier.fillMaxSize()) {
+        // 交互模式为独立全屏形态：不显示导航栏，由开场两个选项（聊天/做游戏）决定去向
+        if (selectedSection.value != ChildSection.CHAT) {
         NavigationRail(
             modifier = Modifier.fillMaxHeight(),
             containerColor = MaterialTheme.colorScheme.surface
@@ -177,7 +232,7 @@ fun ChildScreen(
             Text("小星", modifier = Modifier.padding(vertical = 20.dp), style = MaterialTheme.typography.titleMedium)
             NavigationRailItem(
                 selected = selectedSection.value == ChildSection.TRAINING,
-                onClick = { selectedSection.value = ChildSection.TRAINING },
+                onClick = { enterMap() },
                 icon = { Text("训", style = MaterialTheme.typography.titleLarge) },
                 label = { Text("训练") },
                 alwaysShowLabel = true,
@@ -208,14 +263,18 @@ fun ChildScreen(
                 modifier = Modifier.semantics { contentDescription = "儿童设置界面" }
             )
         }
+        }
 
+        // 交互模式不滚动：消息列表占满剩余高度、输入区固定底部（聊天应用标准布局）
         Column(
-            modifier = Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()).padding(24.dp),
+            modifier = Modifier.weight(1f).fillMaxHeight()
+                .then(if (selectedSection.value == ChildSection.CHAT) Modifier else Modifier.verticalScroll(rememberScrollState()))
+                .padding(24.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 XiaoXingMark(Modifier.size(52.dp))
-                Column {
+                Column(Modifier.weight(1f)) {
                     Text(
                         when (selectedSection.value) {
                             ChildSection.TRAINING -> "和小星一起练习"
@@ -237,8 +296,8 @@ fun ChildScreen(
                 }
             }
 
-            if (selectedSection.value == ChildSection.TRAINING) {
-                // 沉浸空间打开时隐藏主页预览，把摄像头预览让给沉浸空间的小窗口（同一时刻只绑定一个）
+            if (selectedSection.value == ChildSection.TRAINING && !mapImmersive.value) {
+                // 全屏地图打开时训练主页内容不渲染（地图是独立界面）；预览也让给沉浸空间
                 if (!baselineImmersive && !courseImmersive) {
                     PerceptionHomePreview(
                         state = state,
@@ -275,12 +334,21 @@ fun ChildScreen(
                     Text("小星正在准备这一关…", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             } else if (selectedSection.value == ChildSection.CHAT) {
-                ChatCard(
-                    state = state,
-                    onSend = onSendChatMessage,
-                    onSelectProvider = onSelectChatProvider,
-                    onOpenApiKey = onOpenApiKey
-                )
+                Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                    ChatCard(
+                        state = state,
+                        greetingChoiceMade = greetingChoiceMade,
+                        onPlayGame = { enterMap() },
+                        onChoiceBegin = { color, cx, cy, sizePx, onDone ->
+                            if (choiceExpand.value == null) {
+                                choiceExpand.value = ChoiceExpand(color, cx, cy, sizePx, onDone)
+                            }
+                        },
+                        onSend = onSendChatMessage,
+                        onSelectProvider = onSelectChatProvider,
+                        onOpenApiKey = onOpenApiKey
+                    )
+                }
             } else if (selectedSection.value == ChildSection.PROFILE) {
                 RainbowProfileCard(state.rainbowProfile)
             } else {
@@ -306,6 +374,26 @@ fun ChildScreen(
                 )
             }
         }
+      }
+
+      // 开场选择放大转场覆盖层：按钮色块从原位铺满全屏，到位后新界面已切换，覆盖层淡出
+      choiceExpand.value?.let { target ->
+          val base = with(androidx.compose.ui.platform.LocalDensity.current) { target.sizePx.toDp() }
+          Box(modifier = Modifier.fillMaxSize()) {
+              Box(
+                  modifier = Modifier
+                      .offset {
+                          IntOffset(
+                              (target.centerX - target.sizePx / 2f).toInt(),
+                              (target.centerY - target.sizePx / 2f).toInt()
+                          )
+                      }
+                      .size(base)
+                      .scale(choiceScale.value)
+                      .alpha(choiceAlpha.value)
+                      .background(target.color)
+              )
+          }
       }
 
       // ===== 儿童专属沉浸测试空间（全屏 Dialog，盖住顶栏和导航） =====
@@ -356,6 +444,28 @@ fun ChildScreen(
                   onDetectManual = onDetectChooseManual
               )
           }
+          // 全屏关卡地图：优先级最低，基线小测 / 关卡练习打开时自然盖在地图之上
+          mapImmersive.value -> CurriculumMapDialog(
+              map = state.curriculumMap,
+              courseUnlocked = state.courseUnlocked,
+              isWorking = state.isWorking,
+              onBack = exitMap,
+              onStartBaseline = onStartBaseline,
+              onChooseInterest = onChooseCurriculumInterest,
+              onReset = {
+                  selectedCourseLevel.value = null
+                  onResetCurriculum()
+              },
+              onOpenLevel = { level ->
+                  selectedCourseLevel.value = level
+                  onOpenCurriculumLevel(level)
+              },
+              onOpenSection = { section ->
+                  // 退出全屏地图并落到所选分区（画报 / 设置），不经过 exitMap 的“回到聊天”
+                  mapImmersive.value = false
+                  selectedSection.value = section
+              }
+          )
       }
     }
 }
@@ -401,6 +511,417 @@ private fun ImmersiveTestDialog(
             onDetachPreviewView = onDetachPreviewView,
             content = content
         )
+    }
+}
+
+/**
+ * 「更多」右侧滑面板：画报 / 设置。盖在当前全屏界面（关卡地图）之上。
+ */
+@Composable
+private fun MoreMenuSheet(
+    onDismiss: () -> Unit,
+    onOpenProfile: () -> Unit,
+    onOpenSettings: () -> Unit
+) {
+    val motionScale = LocalMotionDurationScale.current
+    val panelProgress = remember { Animatable(0f) }
+    LaunchedEffect(Unit) { panelProgress.animateTo(1f, tween((260 * motionScale).toInt().coerceAtLeast(1), easing = FastOutSlowInEasing)) }
+    Box(
+        Modifier.fillMaxSize()
+            .background(androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.32f * panelProgress.value))
+            .clickable(
+                interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                indication = null,
+                onClick = onDismiss
+            )
+    ) {
+        androidx.compose.material3.Surface(
+            color = MaterialTheme.colorScheme.surface,
+            shape = RoundedCornerShape(topStart = 28.dp, bottomStart = 28.dp),
+            shadowElevation = 12.dp,
+            modifier = Modifier
+                .align(Alignment.CenterEnd)
+                .fillMaxHeight()
+                .width(320.dp)
+                .offset {
+                    IntOffset(
+                        ((1f - panelProgress.value) * 320.dp.toPx()).toInt(),
+                        0
+                    )
+                }
+                .clickable(
+                    interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                    indication = null,
+                    onClick = {}
+                )
+        ) {
+            Column(
+                Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).padding(24.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Row(
+                    Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("更多", style = MaterialTheme.typography.headlineSmall)
+                    TextButton(onClick = onDismiss) { Text("关闭") }
+                }
+                androidx.compose.material3.Surface(
+                    onClick = onOpenProfile,
+                    shape = RoundedCornerShape(20.dp),
+                    color = MaterialTheme.colorScheme.secondaryContainer
+                ) {
+                    Column(Modifier.fillMaxWidth().padding(20.dp)) {
+                        Text("我的彩虹画像", style = MaterialTheme.typography.titleLarge)
+                        Text(
+                            "小星的游戏足迹，不是考试分数。",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
+                    }
+                }
+                androidx.compose.material3.Surface(
+                    onClick = onOpenSettings,
+                    shape = RoundedCornerShape(20.dp),
+                    color = MaterialTheme.colorScheme.secondaryContainer
+                ) {
+                    Column(Modifier.fillMaxWidth().padding(20.dp)) {
+                        Text("儿童端设置", style = MaterialTheme.typography.titleLarge)
+                        Text(
+                            "朗读、语速、字号、感知守护等呈现方式。",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * 全屏关卡地图（独立界面）：天空背景上的消消乐式蜿蜒地图。
+ * 基线小测与关卡练习的沉浸 Dialog 打开时会盖在本层之上，退出后自然回到地图。
+ */
+@Composable
+private fun CurriculumMapDialog(
+    map: CurriculumMapUi,
+    courseUnlocked: Boolean,
+    isWorking: Boolean,
+    onBack: () -> Unit,
+    onStartBaseline: () -> Unit,
+    onChooseInterest: (String) -> Unit,
+    onReset: () -> Unit,
+    onOpenLevel: (Int) -> Unit,
+    onOpenSection: (ChildSection) -> Unit
+) {
+    val showResetConfirm = remember { mutableStateOf(false) }
+    // 随时更换兴趣主题的浮层
+    val showInterestSheet = remember { mutableStateOf(false) }
+    // 「更多」侧滑面板（画报 / 设置）
+    val showMenu = remember { mutableStateOf(false) }
+    androidx.compose.ui.window.Dialog(
+        onDismissRequest = onBack,
+        properties = androidx.compose.ui.window.DialogProperties(
+            usePlatformDefaultWidth = false,
+            decorFitsSystemWindows = false
+        )
+    ) {
+        val view = androidx.compose.ui.platform.LocalView.current
+        DisposableEffect(Unit) {
+            val window = (view.parent as? androidx.compose.ui.window.DialogWindowProvider)?.window
+            window?.let {
+                it.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT))
+                it.clearFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND)
+                it.setDimAmount(0f)
+                it.setLayout(
+                    android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                    android.view.ViewGroup.LayoutParams.MATCH_PARENT
+                )
+            }
+            onDispose { }
+        }
+        Box(
+            Modifier
+                .fillMaxSize()
+                .background(
+                    androidx.compose.ui.graphics.Brush.verticalGradient(
+                        listOf(
+                            androidx.compose.ui.graphics.Color(0xFF9ED8FF),
+                            androidx.compose.ui.graphics.Color(0xFFCDEFF0),
+                            androidx.compose.ui.graphics.Color(0xFFFFF2C4)
+                        )
+                    )
+                )
+        ) {
+            SkyDecorations()
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .windowInsetsPadding(WindowInsets.safeDrawing)
+                    .padding(horizontal = 24.dp)
+            ) {
+                // 顶栏：返回 + 进度
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    androidx.compose.material3.Surface(
+                        onClick = onBack,
+                        shape = RoundedCornerShape(28.dp),
+                        color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.85f),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, com.xingmou.ui.theme.Rule)
+                    ) {
+                        Text(
+                            "← 返回",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = com.xingmou.ui.theme.Ink,
+                            modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp)
+                        )
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Column(horizontalAlignment = Alignment.End) {
+                            Text("我的彩虹冒险", style = MaterialTheme.typography.titleLarge, color = com.xingmou.ui.theme.Ink)
+                            Text(
+                                "已点亮 ${map.completedLevels} / ${map.totalLevels} 关",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = com.xingmou.ui.theme.Ink.copy(alpha = 0.7f)
+                            )
+                        }
+                        // 随时更换兴趣主题：显示当前主题，点击重选
+                        androidx.compose.material3.Surface(
+                            onClick = { showInterestSheet.value = true },
+                            shape = RoundedCornerShape(28.dp),
+                            color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.85f),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, com.xingmou.ui.theme.Rule)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Text("🎨", style = MaterialTheme.typography.titleMedium)
+                                Text(
+                                    map.interest.ifBlank { "选主题" },
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = com.xingmou.ui.theme.Ink
+                                )
+                            }
+                        }
+                        // 家长重置入口：低调的圆形小按钮，点击需二次确认
+                        androidx.compose.material3.Surface(
+                            onClick = { showResetConfirm.value = true },
+                            shape = CircleShape,
+                            color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.85f),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, com.xingmou.ui.theme.Rule)
+                        ) {
+                            Text(
+                                "↺",
+                                style = MaterialTheme.typography.titleLarge,
+                                color = com.xingmou.ui.theme.Ink.copy(alpha = 0.6f),
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                                    .semantics { contentDescription = "重新开始：清空小测和全部关卡进度" }
+                            )
+                        }
+                        // 更多入口：画报 / 设置
+                        androidx.compose.material3.Surface(
+                            onClick = { showMenu.value = true },
+                            shape = CircleShape,
+                            color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.85f),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, com.xingmou.ui.theme.Rule)
+                        ) {
+                            Text(
+                                "···",
+                                style = MaterialTheme.typography.titleLarge,
+                                color = com.xingmou.ui.theme.Ink.copy(alpha = 0.6f),
+                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
+                                    .semantics { contentDescription = "更多功能：画报和设置" }
+                            )
+                        }
+                    }
+                }
+
+                // 地图滚动区：第 1 关在底部，进入时直接停在最下面
+                val scrollState = rememberScrollState()
+                LaunchedEffect(map.totalLevels, courseUnlocked, map.interestChosen) {
+                    delay(120)
+                    scrollState.scrollTo(scrollState.maxValue)
+                }
+                Box(Modifier.weight(1f).fillMaxWidth()) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().verticalScroll(scrollState),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        CurriculumTrailMap(
+                            levels = map.levels,
+                            isWorking = isWorking,
+                            onOpenLevel = onOpenLevel,
+                            onLockedTap = { order -> if (order == 1 && !courseUnlocked) onStartBaseline() },
+                            immersive = true
+                        )
+                    }
+                    // 兴趣选择：白卡浮在地图中央，选好主题后消失（基线完成前后都可以选）
+                    if (!map.interestChosen) {
+                        Box(
+                            Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Color(0x66000000)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            androidx.compose.material3.Surface(
+                                shape = RoundedCornerShape(28.dp),
+                                color = androidx.compose.ui.graphics.Color.White,
+                                shadowElevation = 8.dp,
+                                modifier = Modifier.fillMaxWidth(0.82f).padding(24.dp)
+                            ) {
+                                Column(Modifier.padding(28.dp)) {
+                                    InterestGateway(map.interestOptions, onChooseInterest)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // 基线未完成：底部温和提示 + 开始小测按钮
+                // 底部留出系统导航栏空间（全屏 Dialog 的 safeDrawing inset 在部分设备上为 0）
+                if (!courseUnlocked) {
+                    androidx.compose.material3.Surface(
+                        shape = RoundedCornerShape(24.dp),
+                        color = com.xingmou.ui.theme.CoralSoft,
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 56.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 24.dp, vertical = 14.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            Text(
+                                "先完成六题起点小测，第 1 关就会打开。",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = com.xingmou.ui.theme.CoralDark,
+                                modifier = Modifier.weight(1f)
+                            )
+                            androidx.compose.material3.Button(
+                                onClick = onStartBaseline,
+                                enabled = !isWorking,
+                                shape = RoundedCornerShape(24.dp),
+                                colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                                    containerColor = com.xingmou.ui.theme.Coral
+                                )
+                            ) { Text("开始小测", modifier = Modifier.padding(horizontal = 8.dp)) }
+                        }
+                    }
+                }
+            }
+
+            // 随时更换兴趣主题：浮层中当前主题高亮，点选即换并关闭
+            if (showInterestSheet.value) {
+                Box(
+                    Modifier.fillMaxSize()
+                        .background(androidx.compose.ui.graphics.Color(0x66000000))
+                        .clickable(
+                            interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                            indication = null,
+                            onClick = { showInterestSheet.value = false }
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    androidx.compose.material3.Surface(
+                        shape = RoundedCornerShape(28.dp),
+                        color = androidx.compose.ui.graphics.Color.White,
+                        shadowElevation = 8.dp,
+                        modifier = Modifier
+                            .fillMaxWidth(0.82f)
+                            .padding(24.dp)
+                            .clickable(
+                                interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                                indication = null,
+                                onClick = {}
+                            )
+                    ) {
+                        Column(Modifier.padding(28.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Text("换一个喜欢的主题", style = MaterialTheme.typography.titleLarge, color = com.xingmou.ui.theme.Ink)
+                            Text(
+                                "小星会用新主题陪你玩，关卡进度不会受影响。",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = com.xingmou.ui.theme.Ink.copy(alpha = 0.7f)
+                            )
+                            map.interestOptions.forEach { option ->
+                                val selected = option == map.interest
+                                androidx.compose.material3.Surface(
+                                    onClick = {
+                                        onChooseInterest(option)
+                                        showInterestSheet.value = false
+                                    },
+                                    shape = RoundedCornerShape(18.dp),
+                                    color = if (selected) com.xingmou.ui.theme.CoralSoft else androidx.compose.ui.graphics.Color.White,
+                                    border = androidx.compose.foundation.BorderStroke(
+                                        1.dp,
+                                        if (selected) com.xingmou.ui.theme.Coral else com.xingmou.ui.theme.Rule
+                                    ),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 14.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Text(
+                                            option,
+                                            style = MaterialTheme.typography.titleMedium,
+                                            color = if (selected) com.xingmou.ui.theme.CoralDark else com.xingmou.ui.theme.Ink
+                                        )
+                                        if (selected) Text("✓", style = MaterialTheme.typography.titleMedium, color = com.xingmou.ui.theme.CoralDark)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 重置二次确认（防误触）：清空后需重新做起点小测
+            if (showResetConfirm.value) {
+                androidx.compose.material3.AlertDialog(
+                    onDismissRequest = { showResetConfirm.value = false },
+                    title = { Text("重新开始？") },
+                    text = { Text("会清空起点小测结果、已点亮的关卡和星星，第 1 关会重新锁上，需要再做一次小测。这个操作不能撤销。") },
+                    confirmButton = {
+                        androidx.compose.material3.TextButton(
+                            onClick = {
+                                showResetConfirm.value = false
+                                onReset()
+                            },
+                            colors = androidx.compose.material3.ButtonDefaults.textButtonColors(
+                                contentColor = com.xingmou.ui.theme.CoralDark
+                            )
+                        ) { Text("全部清空，重新开始") }
+                    },
+                    dismissButton = {
+                        androidx.compose.material3.TextButton(onClick = { showResetConfirm.value = false }) {
+                            Text("再想想")
+                        }
+                    }
+                )
+            }
+
+            // 「更多」侧滑面板：进入画报或设置（会退出全屏地图，回到主界面对应分区）
+            if (showMenu.value) {
+                MoreMenuSheet(
+                    onDismiss = { showMenu.value = false },
+                    onOpenProfile = {
+                        showMenu.value = false
+                        onOpenSection(ChildSection.PROFILE)
+                    },
+                    onOpenSettings = {
+                        showMenu.value = false
+                        onOpenSection(ChildSection.SETTINGS)
+                    }
+                )
+            }
+        }
     }
 }
 
@@ -513,18 +1034,19 @@ private fun SkyDecorations() {
         // 太阳光晕 + 太阳（右上）
         drawCircle(androidx.compose.ui.graphics.Color(0xFFFFF3C4), radius = 150f, center = androidx.compose.ui.geometry.Offset(w - 170f, 170f))
         drawCircle(androidx.compose.ui.graphics.Color(0xFFFFE082), radius = 85f, center = androidx.compose.ui.geometry.Offset(w - 170f, 170f))
-        // 云朵（白色半透明，圆叠加成云形）
-        val cloudColor = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.75f)
-        fun cloud(cx: Float, cy: Float, s: Float) {
-            drawCircle(cloudColor, radius = 46f * s, center = androidx.compose.ui.geometry.Offset(cx - 42f * s, cy + 10f * s))
-            drawCircle(cloudColor, radius = 62f * s, center = androidx.compose.ui.geometry.Offset(cx, cy - 12f * s))
-            drawCircle(cloudColor, radius = 44f * s, center = androidx.compose.ui.geometry.Offset(cx + 46f * s, cy + 12f * s))
-            drawCircle(cloudColor, radius = 52f * s, center = androidx.compose.ui.geometry.Offset(cx + 8f * s, cy + 18f * s))
-        }
         cloud(w * 0.16f, 220f, 1.1f)
         cloud(w * 0.52f, 130f, 0.8f)
         cloud(w * 0.8f, 420f, 0.9f)
     }
+}
+
+/** 云朵（白色半透明，圆叠加成云形），供天空装饰与闯关地图复用。 */
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.cloud(cx: Float, cy: Float, s: Float) {
+    val cloudColor = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.75f)
+    drawCircle(cloudColor, radius = 46f * s, center = androidx.compose.ui.geometry.Offset(cx - 42f * s, cy + 10f * s))
+    drawCircle(cloudColor, radius = 62f * s, center = androidx.compose.ui.geometry.Offset(cx, cy - 12f * s))
+    drawCircle(cloudColor, radius = 44f * s, center = androidx.compose.ui.geometry.Offset(cx + 46f * s, cy + 12f * s))
+    drawCircle(cloudColor, radius = 52f * s, center = androidx.compose.ui.geometry.Offset(cx + 8f * s, cy + 18f * s))
 }
 
 @Composable
@@ -687,7 +1209,7 @@ private fun CurriculumMapCard(
         when {
             !courseUnlocked -> Text("完成六题起点小测后，就可以开始第一关。", color = MaterialTheme.colorScheme.onSurfaceVariant)
             !map.interestChosen -> InterestGateway(map.interestOptions, onChooseInterest)
-            else -> map.levels.forEach { level -> LevelButton(level, isWorking, onOpenLevel) }
+            else -> CurriculumTrailMap(map.levels, isWorking, onOpenLevel)
         }
     }
 }
@@ -704,26 +1226,206 @@ private fun InterestGateway(options: List<String>, onChooseInterest: (String) ->
     }
 }
 
+/** 已通关节点的薄荷青底色。 */
+private val TrailDone = androidx.compose.ui.graphics.Color(0xFF4FB8A8)
+
+/** 消消乐式蜿蜒闯关地图：天空渐变背景上，糖果珠链串起 S 形路径的圆形关卡节点，第 1 关在底部向上闯关。 */
 @Composable
-private fun LevelButton(level: CurriculumLevelUi, isWorking: Boolean, onOpenLevel: (Int) -> Unit) {
-    val label = when (level.status) {
-        CurriculumLevelStatus.COMPLETED -> "✓ ${level.icon} 第 ${level.order} 关 · ${level.title} · ${level.theme}"
-        CurriculumLevelStatus.AVAILABLE -> "▶ ${level.icon} 第 ${level.order} 关 · ${level.title} · ${level.theme}"
-        CurriculumLevelStatus.LOCKED -> "🔒 ${level.icon} 第 ${level.order} 关 · ${level.title}"
-    }
-    val clickable = level.status == CurriculumLevelStatus.AVAILABLE || level.status == CurriculumLevelStatus.COMPLETED
-    if (clickable) {
-        Button(
-            onClick = { onOpenLevel(level.order) },
-            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).heightIn(min = 56.dp),
-            enabled = !isWorking
-        ) { Text(label) }
-    } else {
-        OutlinedButton(
-            onClick = {},
-            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).heightIn(min = 52.dp),
-            enabled = false
-        ) { Text(label) }
+private fun CurriculumTrailMap(
+    levels: List<CurriculumLevelUi>,
+    isWorking: Boolean,
+    onOpenLevel: (Int) -> Unit,
+    onLockedTap: ((Int) -> Unit)? = null,
+    immersive: Boolean = false
+) {
+    val gap = 150.dp
+    val swing = listOf(0.5f, 0.72f, 0.88f, 0.72f, 0.5f, 0.28f, 0.12f, 0.28f)
+    val pulse = rememberInfiniteTransition(label = "trailPulse").animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(motionTween(900), RepeatMode.Reverse),
+        label = "trailPulse"
+    ).value
+    BoxWithConstraints(
+        Modifier
+            .fillMaxWidth()
+            .height(gap * (levels.size + 1))
+            .then(
+                if (immersive) Modifier
+                else Modifier
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(
+                        androidx.compose.ui.graphics.Brush.verticalGradient(
+                            listOf(
+                                androidx.compose.ui.graphics.Color(0xFF9ED8FF),
+                                androidx.compose.ui.graphics.Color(0xFFCDEFF0),
+                                androidx.compose.ui.graphics.Color(0xFFFFF2C4)
+                            )
+                        )
+                    )
+            )
+    ) {
+        if (!immersive) SkyDecorations()
+        val w = maxWidth
+        val xOf = { i: Int -> (w.value * swing[i % swing.size]).dp }
+        val yOf = { i: Int -> gap * (levels.size - i) }
+
+        // 沿途零散云朵，让长地图不空
+        Canvas(Modifier.fillMaxSize()) {
+            val h = size.height
+            cloud(size.width * 0.2f, h * 0.22f, 1.0f)
+            cloud(size.width * 0.75f, h * 0.38f, 0.75f)
+            cloud(size.width * 0.3f, h * 0.55f, 0.9f)
+            cloud(size.width * 0.68f, h * 0.72f, 0.8f)
+            cloud(size.width * 0.25f, h * 0.9f, 1.05f)
+        }
+
+        // 节点之间的糖果珠链：两端都通关为珊瑚珠，其余为云灰珠
+        Canvas(Modifier.fillMaxSize()) {
+            levels.forEachIndexed { i, level ->
+                if (i == levels.lastIndex) return@forEachIndexed
+                val a = androidx.compose.ui.geometry.Offset(size.width * swing[i % swing.size], yOf(i).toPx())
+                val b = androidx.compose.ui.geometry.Offset(size.width * swing[(i + 1) % swing.size], yOf(i + 1).toPx())
+                val mid = androidx.compose.ui.geometry.Offset((a.x + b.x) / 2f, (a.y + b.y) / 2f)
+                val solid = level.status == CurriculumLevelStatus.COMPLETED &&
+                    levels[i + 1].status == CurriculumLevelStatus.COMPLETED
+                val coreColor = if (solid) com.xingmou.ui.theme.Coral else androidx.compose.ui.graphics.Color(0xFFB8C4D4)
+                val steps = 18
+                for (t in 0..steps) {
+                    if (t % 2 == 0) continue
+                    val tt = t / steps.toFloat()
+                    val omt = 1f - tt
+                    val x = omt * omt * a.x + 2f * omt * tt * mid.x + tt * tt * b.x
+                    val y = omt * omt * a.y + 2f * omt * tt * mid.y + tt * tt * b.y
+                    drawCircle(
+                        androidx.compose.ui.graphics.Color.White,
+                        radius = 10f,
+                        center = androidx.compose.ui.geometry.Offset(x, y)
+                    )
+                    drawCircle(
+                        coreColor,
+                        radius = 6f,
+                        center = androidx.compose.ui.geometry.Offset(x, y)
+                    )
+                }
+            }
+        }
+
+        // 顶点装饰：彩虹城堡（第 20 关上方）
+        Text(
+            "🏰",
+            fontSize = 40.sp,
+            modifier = Modifier.offset(x = (w.value * 0.5f).dp - 24.dp, y = gap * 0.32f)
+        )
+
+        levels.forEachIndexed { index, level ->
+            val canOpen = (level.status == CurriculumLevelStatus.AVAILABLE ||
+                level.status == CurriculumLevelStatus.COMPLETED) && !isWorking
+            // 第 1 关未解锁时允许点击（承接基线小测入口）
+            val lockedTapEnabled = level.status == CurriculumLevelStatus.LOCKED &&
+                level.order == 1 && onLockedTap != null && !isWorking
+            val canTap = canOpen || lockedTapEnabled
+            val nodeSize = when (level.status) {
+                CurriculumLevelStatus.AVAILABLE -> 96.dp
+                CurriculumLevelStatus.COMPLETED -> 76.dp
+                CurriculumLevelStatus.LOCKED -> if (lockedTapEnabled) 84.dp else 64.dp
+            }
+            val circleColor = when (level.status) {
+                CurriculumLevelStatus.COMPLETED -> TrailDone
+                CurriculumLevelStatus.AVAILABLE -> com.xingmou.ui.theme.Coral
+                CurriculumLevelStatus.LOCKED -> androidx.compose.ui.graphics.Color(0xFFE3E7EE)
+            }
+            Column(
+                modifier = Modifier
+                    .offset(x = xOf(index) - nodeSize / 2, y = yOf(index) - nodeSize / 2)
+                    .width(nodeSize)
+                    .then(if (canTap) Modifier.clickable {
+                        if (lockedTapEnabled) onLockedTap?.invoke(level.order) else onOpenLevel(level.order)
+                    } else Modifier)
+                    .semantics {
+                        contentDescription = when (level.status) {
+                            CurriculumLevelStatus.COMPLETED -> "第 ${level.order} 关 ${level.title}，已完成"
+                            CurriculumLevelStatus.AVAILABLE -> "第 ${level.order} 关 ${level.title}，可以开始"
+                            CurriculumLevelStatus.LOCKED ->
+                                if (lockedTapEnabled) "第 1 关还没解锁，点这里先做起点小测"
+                                else "第 ${level.order} 关，还没解锁"
+                        }
+                    },
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    if (level.status == CurriculumLevelStatus.AVAILABLE) {
+                        // 当前关呼吸光圈
+                        Box(
+                            Modifier
+                                .size(nodeSize + 22.dp)
+                                .scale(1f + pulse * 0.04f)
+                                .clip(CircleShape)
+                                .background(com.xingmou.ui.theme.Coral.copy(alpha = 0.20f + 0.16f * pulse))
+                        )
+                    }
+                    if (lockedTapEnabled) {
+                        // 待解锁的第 1 关：淡珊瑚光圈，提示可点
+                        Box(
+                            Modifier
+                                .size(nodeSize + 20.dp)
+                                .scale(1f + pulse * 0.05f)
+                                .clip(CircleShape)
+                                .background(com.xingmou.ui.theme.Coral.copy(alpha = 0.14f + 0.14f * pulse))
+                        )
+                    }
+                    androidx.compose.material3.Surface(
+                        shape = CircleShape,
+                        color = circleColor,
+                        border = androidx.compose.foundation.BorderStroke(3.dp, androidx.compose.ui.graphics.Color.White),
+                        shadowElevation = 4.dp
+                    ) {
+                        Box(Modifier.size(nodeSize), contentAlignment = Alignment.Center) {
+                            Text(
+                                if (level.status == CurriculumLevelStatus.LOCKED) "🔒" else level.icon,
+                                fontSize = when (level.status) {
+                                    CurriculumLevelStatus.AVAILABLE -> 38.sp
+                                    CurriculumLevelStatus.COMPLETED -> 30.sp
+                                    CurriculumLevelStatus.LOCKED -> 26.sp
+                                }
+                            )
+                        }
+                    }
+                    // 小星站在当前关顶上（对应消消乐停在当前关的小船）
+                    if (level.status == CurriculumLevelStatus.AVAILABLE) {
+                        Text(
+                            "⭐",
+                            fontSize = 24.sp,
+                            modifier = Modifier
+                                .align(Alignment.TopCenter)
+                                .offset(y = -(nodeSize / 2 + 6.dp) - 4.dp * pulse)
+                        )
+                    }
+                }
+                when (level.status) {
+                    CurriculumLevelStatus.COMPLETED -> Text(
+                        "★".repeat(level.stars) + "☆".repeat((3 - level.stars).coerceAtLeast(0)),
+                        color = androidx.compose.ui.graphics.Color(0xFFFFB300),
+                        fontSize = 16.sp,
+                        modifier = Modifier.padding(top = 2.dp)
+                    )
+                    CurriculumLevelStatus.AVAILABLE -> Text(
+                        "第 ${level.order} 关",
+                        color = com.xingmou.ui.theme.Ink,
+                        fontSize = 14.sp,
+                        modifier = Modifier.padding(top = 2.dp)
+                    )
+                    CurriculumLevelStatus.LOCKED -> if (lockedTapEnabled) {
+                        Text(
+                            "点我做小测",
+                            color = com.xingmou.ui.theme.Coral,
+                            fontSize = 13.sp,
+                            modifier = Modifier.padding(top = 2.dp)
+                        )
+                    } else {}
+                }
+            }
+        }
     }
 }
 
@@ -752,15 +1454,52 @@ private fun RewardCard(state: ChildUiState) {
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun InterestCard(state: ChildUiState, onInterestChange: (String) -> Unit) {
     SectionSurface(title = "我喜欢的主题", supporting = "主题只用来调整示例素材，不改变训练目标。") {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        // 窄屏四个按钮会自动换行，避免横向溢出裁切
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
             state.interestOptions.forEach { option ->
-                OutlinedButton(onClick = { onInterestChange(option) }, enabled = option != state.interest) { Text(option) }
+                val selected = option == state.interest
+                androidx.compose.material3.Surface(
+                    onClick = { if (!selected) onInterestChange(option) },
+                    shape = RoundedCornerShape(20.dp),
+                    color = if (selected) com.xingmou.ui.theme.CoralSoft else androidx.compose.ui.graphics.Color.White,
+                    border = androidx.compose.foundation.BorderStroke(
+                        1.dp,
+                        if (selected) com.xingmou.ui.theme.Coral else com.xingmou.ui.theme.Rule
+                    ),
+                    modifier = Modifier.semantics {
+                        contentDescription = if (selected) "$option（当前主题）" else "选择${option}主题"
+                    }
+                ) {
+                    Row(
+                        Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            if (selected) "$option  ✓" else option,
+                            color = if (selected) com.xingmou.ui.theme.CoralDark else com.xingmou.ui.theme.Ink
+                        )
+                    }
+                }
             }
         }
-        Text("当前主题：${state.interest}", modifier = Modifier.padding(top = 8.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(
+            if (state.interest.isBlank()) {
+                "还没选主题，先挑一个喜欢的吧。"
+            } else {
+                "当前主题：${state.interest}。每个主题有各自的闯关进度和星星，换主题不会影响其他主题。"
+            },
+            modifier = Modifier.padding(top = 8.dp),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }
 
@@ -811,32 +1550,91 @@ private fun AccessibilityCard(
     onSlowMotionChange: (Boolean) -> Unit
 ) {
     SectionSurface(title = "辅助设置", supporting = "设置只保存在本机，用来调整小星的呈现方式。") {
-        SettingRow("小星朗读", "朗读儿童端短句", accessibility.speechEnabled) { onSpeechEnabledChange(it) }
+        // —— 朗读组 ——
+        SettingsGroupLabel("朗读")
+        SettingRow("小星朗读", "朗读儿童端短句", accessibility.speechEnabled) { enabled ->
+            if (!enabled) {
+                // 关闭瞬间立即中断当前朗读并清空排队语音，不等待状态回流
+                speechController.stop()
+            } else {
+                // 开启时立即试听一句，家长不用等到下一题就能确认语音是否工作
+                speechController.speak("朗读已经打开啦，我会把题目读给你听。")
+            }
+            onSpeechEnabledChange(enabled)
+        }
         Spacer(Modifier.height(8.dp))
-        Text("语速：${"%.2f".format(accessibility.speechRate)}", style = MaterialTheme.typography.bodyMedium)
+        Text("语速：${speechRateWord(accessibility.speechRate)}（${"%.2f".format(accessibility.speechRate)}）", style = MaterialTheme.typography.bodyMedium)
         Slider(
             value = accessibility.speechRate,
             onValueChange = onSpeechRateChange,
-            onValueChangeFinished = { if (accessibility.speechEnabled) speechController.speak("小星会用这个速度说话。") },
+            enabled = accessibility.speechEnabled,
+            onValueChangeFinished = { speechController.speak("今天天气真好，我们一起来玩游戏吧。") },
             valueRange = 0.75f..1.25f,
-            steps = 4,
-            modifier = Modifier.fillMaxWidth()
+            // 3 个中间点 → 0.75 / 0.875 / 1.00 / 1.125 / 1.25，默认 1.00 正好落在标准档
+            steps = 3,
+            modifier = Modifier.fillMaxWidth().semantics { contentDescription = "朗读音语速调节，需先开启小星朗读" }
         )
-        Text("音量：${(accessibility.speechVolume * 100).toInt()}%", style = MaterialTheme.typography.bodyMedium)
+        SliderEndLabels("慢", "快")
+        Text("音量：${speechVolumeWord(accessibility.speechVolume)}（${(accessibility.speechVolume * 100).toInt()}%）", style = MaterialTheme.typography.bodyMedium)
         Slider(
             value = accessibility.speechVolume,
             onValueChange = onSpeechVolumeChange,
-            onValueChangeFinished = { if (accessibility.speechEnabled) speechController.speak("这是现在的朗读音量。") },
+            enabled = accessibility.speechEnabled,
+            onValueChangeFinished = { speechController.speak("这是现在的朗读音量。") },
             valueRange = 0.5f..1.0f,
             steps = 4,
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth().semantics { contentDescription = "朗读音量调节，需先开启小星朗读" }
         )
+        SliderEndLabels("轻柔", "响亮")
+        if (!accessibility.speechEnabled) {
+            Text("开启「小星朗读」后可以调整语速和音量。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.height(4.dp))
+        }
+
+        // —— 显示与动效组 ——
+        SettingsGroupLabel("显示与动效")
         SettingRow("大字体", "增加界面文字大小", accessibility.largeText) { onLargeTextChange(it) }
         Spacer(Modifier.height(8.dp))
         SettingRow("高对比", "提高文字与表面的对比度", accessibility.highContrast) { onHighContrastChange(it) }
         Spacer(Modifier.height(8.dp))
         SettingRow("慢动效", "放慢页面变化，给更多反应时间", accessibility.slowMotion) { onSlowMotionChange(it) }
     }
+}
+
+/** 辅助设置里的小组标题（朗读 / 显示与动效）。 */
+@Composable
+private fun SettingsGroupLabel(text: String) {
+    Spacer(Modifier.height(10.dp))
+    Text(
+        text,
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(bottom = 2.dp)
+    )
+}
+
+/** 滑条两端的语义标签（如 慢/快、轻柔/响亮）。 */
+@Composable
+private fun SliderEndLabels(left: String, right: String) {
+    Row(
+        Modifier.fillMaxWidth().padding(bottom = 4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(left, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(right, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+private fun speechRateWord(value: Float): String = when {
+    value <= 0.92f -> "慢"
+    value >= 1.08f -> "快"
+    else -> "标准"
+}
+
+private fun speechVolumeWord(value: Float): String = when {
+    value <= 0.62f -> "轻柔"
+    value >= 0.95f -> "响亮"
+    else -> "标准"
 }
 
 private fun assetResource(key: String): Int = when (key) {
@@ -1033,7 +1831,7 @@ private fun DetectPanel(detect: AutoDetectState) {
     val scale by infinite.animateFloat(
         initialValue = 0.92f, targetValue = 1.08f,
         animationSpec = androidx.compose.animation.core.infiniteRepeatable(
-            androidx.compose.animation.core.tween(1100),
+            motionTween(1100),
             repeatMode = androidx.compose.animation.core.RepeatMode.Reverse
         ), label = "scale"
     )
@@ -1081,6 +1879,9 @@ private fun DetectPanel(detect: AutoDetectState) {
 @Composable
 private fun ChatCard(
     state: ChildUiState,
+    greetingChoiceMade: androidx.compose.runtime.MutableState<Boolean>,
+    onPlayGame: () -> Unit,
+    onChoiceBegin: (androidx.compose.ui.graphics.Color, Float, Float, Float, () -> Unit) -> Unit,
     onSend: (String) -> Unit,
     onSelectProvider: (com.xingmou.core.llm.ChatLlmProvider) -> Unit,
     onOpenApiKey: () -> Unit
@@ -1088,6 +1889,82 @@ private fun ChatCard(
     val input = remember { mutableStateOf("") }
     val scrollState = rememberScrollState()
     val messages = state.chatMessages
+    val context = LocalContext.current
+
+    // ---- 语音输入：系统 RecognitionService，不可用时打字兜底 ----
+    val micGranted = remember {
+        mutableStateOf(
+            androidx.core.content.ContextCompat.checkSelfPermission(
+                context, android.Manifest.permission.RECORD_AUDIO
+            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        )
+    }
+    val micHint = remember { mutableStateOf<String?>(null) }
+    val micListening = remember { mutableStateOf(false) }
+    val micAvailable = remember { android.speech.SpeechRecognizer.isRecognitionAvailable(context) }
+    val recognizer = remember {
+        if (micAvailable) android.speech.SpeechRecognizer.createSpeechRecognizer(context) else null
+    }
+    androidx.compose.runtime.DisposableEffect(Unit) {
+        onDispose { recognizer?.destroy() }
+    }
+    val startListening: () -> Unit = {
+        val rec = recognizer
+        if (rec == null) {
+            micHint.value = "这台设备暂时听不到，请打字告诉我"
+        } else if (!micListening.value) {
+            val intent = android.content.Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                putExtra(
+                    android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL,
+                    android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM
+                )
+                putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE, "zh-CN")
+                putExtra(android.speech.RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+            }
+            rec.setRecognitionListener(object : android.speech.RecognitionListener {
+                override fun onReadyForSpeech(params: android.os.Bundle?) {
+                    micListening.value = true
+                    micHint.value = "正在听，请说话…"
+                }
+                override fun onBeginningOfSpeech() {}
+                override fun onRmsChanged(rmsdB: Float) {}
+                override fun onBufferReceived(buffer: ByteArray?) {}
+                override fun onEndOfSpeech() { micHint.value = "听听看…" }
+                override fun onError(error: Int) {
+                    micListening.value = false
+                    micHint.value = if (error == android.speech.SpeechRecognizer.ERROR_NO_MATCH) {
+                        "没听清，再按一次麦克风试试"
+                    } else {
+                        "没听到，也可以直接打字"
+                    }
+                }
+                override fun onResults(results: android.os.Bundle?) {
+                    micListening.value = false
+                    val text = results?.getStringArrayList(android.speech.SpeechRecognizer.RESULTS_RECOGNITION)
+                        ?.firstOrNull()?.trim()
+                    if (!text.isNullOrBlank()) {
+                        micHint.value = null
+                        onSend(text)
+                    } else {
+                        micHint.value = "没听清，再按一次麦克风试试"
+                    }
+                }
+                override fun onPartialResults(partialResults: android.os.Bundle?) {
+                    partialResults?.getStringArrayList(android.speech.SpeechRecognizer.RESULTS_RECOGNITION)
+                        ?.firstOrNull()?.let { input.value = it }
+                }
+                override fun onEvent(eventType: Int, params: android.os.Bundle?) {}
+            })
+            rec.startListening(intent)
+            micHint.value = "正在听，请说话…"
+        }
+    }
+    val micLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        micGranted.value = granted
+        if (granted) startListening() else micHint.value = "需要麦克风权限才能语音说话，也可以直接打字"
+    }
 
     // 新消息自动滚到底
     LaunchedEffect(messages.size) {
@@ -1101,64 +1978,83 @@ private fun ChatCard(
         }
     }
 
-    androidx.compose.foundation.layout.Box(modifier = Modifier.fillMaxWidth().heightIn(min = 320.dp)) {
-        Column(
-            modifier = Modifier.fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            // 供应商选择
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text("模型：", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                // 儿童端交互仅保留 DeepSeek，豆包/千问不在此暴露
-                com.xingmou.core.llm.ChatLlmProvider.entries
-                    .filter { it == com.xingmou.core.llm.ChatLlmProvider.DEEPSEEK }
-                    .forEach { provider ->
-                    androidx.compose.material3.FilterChip(
-                        selected = state.chatProvider == provider,
-                        onClick = { onSelectProvider(provider) },
-                        label = { Text(provider.label) }
-                    )
-                }
-            }
+    androidx.compose.foundation.layout.Column(modifier = Modifier.fillMaxSize()) {
+            // 儿童端模型已锁定 DeepSeek，不向孩子暴露供应商等工程信息
 
-            // 未配置提示：醒目引导用户去设置 API Key
+            // 未配置提示：柔和暖色引导家长去设置 API Key
             if (!state.chatProviderConfigured) {
                 androidx.compose.material3.Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = MaterialTheme.colorScheme.errorContainer,
+                    shape = RoundedCornerShape(14.dp),
+                    color = com.xingmou.ui.theme.CoralSoft,
                     modifier = Modifier
                         .fillMaxWidth()
                         .clickable { onOpenApiKey() }
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Text("⚠", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onErrorContainer)
+                        Text("🧠", style = MaterialTheme.typography.titleSmall)
                         Text(
-                            "还未配置 ${state.chatProvider.label} 的 API Key，点这里去设置。",
+                            "小星还没连上大脑，请爸爸妈妈点这里设置一下",
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onErrorContainer
+                            color = com.xingmou.ui.theme.CoralDark
                         )
                     }
                 }
             }
 
-            // 消息列表
+            // 新消息到达时自动滚动到底部
+            LaunchedEffect(messages.size) {
+                if (messages.isNotEmpty()) scrollState.animateScrollTo(scrollState.maxValue)
+            }
+
+            // 消息列表：占满剩余高度、消息不足一屏时贴底（贴近输入区），输入区始终固定底部
             Column(
                 modifier = Modifier
+                    .weight(1f)
                     .fillMaxWidth()
-                    .heightIn(min = 200.dp, max = 420.dp)
                     .verticalScroll(scrollState)
-                    .padding(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                    .padding(horizontal = 4.dp),
+                // 问候状态贴顶展示，进入真实对话后消息贴底靠近输入区
+                verticalArrangement = if (messages.isEmpty() && !greetingChoiceMade.value) {
+                    Arrangement.spacedBy(10.dp)
+                } else {
+                    Arrangement.spacedBy(10.dp, alignment = Alignment.Bottom)
+                }
             ) {
-                if (messages.isEmpty()) {
+                if (messages.isEmpty() && !greetingChoiceMade.value) {
+                    // 开场问候：小星主动给出「聊天 / 做游戏」两个大按钮选择
+                    ChatBubble(
+                        com.xingmou.ChatMessageUi(
+                            id = "greeting",
+                            role = "assistant",
+                            content = "你好呀，我是小星！今天想和我聊天，还是一起做游戏呀？"
+                        )
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        val chatContainer = MaterialTheme.colorScheme.secondaryContainer
+                        GreetingChoice("💬", "和小星聊天", Modifier.weight(1f)) { cx, cy, h ->
+                            onChoiceBegin(chatContainer, cx, cy, h) {
+                                greetingChoiceMade.value = true
+                            }
+                        }
+                        GreetingChoice(
+                            "🎮", "做游戏", Modifier.weight(1f),
+                            container = com.xingmou.ui.theme.Coral,
+                            content = androidx.compose.ui.graphics.Color.White
+                        ) { cx, cy, h ->
+                            onChoiceBegin(com.xingmou.ui.theme.Coral, cx, cy, h) {
+                                greetingChoiceMade.value = true
+                                onPlayGame()
+                            }
+                        }
+                    }
+                } else if (messages.isEmpty()) {
                     Text(state.chatHint, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 messages.forEach { msg ->
@@ -1178,32 +2074,97 @@ private fun ChatCard(
             ) {
                 state.chatQuickTopics.forEach { topic ->
                     androidx.compose.material3.Surface(
-                        shape = RoundedCornerShape(20.dp),
-                        color = MaterialTheme.colorScheme.secondaryContainer,
+                        shape = RoundedCornerShape(50),
+                        color = androidx.compose.ui.graphics.Color.White,
+                        border = androidx.compose.foundation.BorderStroke(1.dp, com.xingmou.ui.theme.Rule),
                         modifier = Modifier.clickable(enabled = !state.chatLoading) { onSend(topic) }
                     ) {
                         Text(
                             topic,
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                            color = com.xingmou.ui.theme.Ink,
                             style = MaterialTheme.typography.bodyMedium
                         )
                     }
                 }
             }
 
-            // 输入区
+            // 语音输入提示行
+            val hint = micHint.value
+            if (hint != null) {
+                Text(
+                    hint,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 2.dp)
+                )
+            }
+
+            // 输入区（交互模式为全屏无导航栏形态：常驻「做游戏」按钮提供去训练界面的路径）
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                val gameBtnRect = remember { mutableStateOf(androidx.compose.ui.geometry.Rect.Zero) }
+                androidx.compose.material3.Surface(
+                    onClick = {
+                        val r = gameBtnRect.value
+                        onChoiceBegin(
+                            com.xingmou.ui.theme.Coral,
+                            r.left + r.width / 2f,
+                            r.top + r.height / 2f,
+                            r.height
+                        ) { onPlayGame() }
+                    },
+                    enabled = !state.chatLoading,
+                    shape = RoundedCornerShape(50),
+                    color = com.xingmou.ui.theme.Coral,
+                    modifier = Modifier.onGloballyPositioned { coords ->
+                        val topLeft = coords.localToRoot(androidx.compose.ui.geometry.Offset.Zero)
+                        gameBtnRect.value = androidx.compose.ui.geometry.Rect(
+                            topLeft,
+                            androidx.compose.ui.geometry.Size(coords.size.width.toFloat(), coords.size.height.toFloat())
+                        )
+                    }
+                ) {
+                    Text(
+                        "🎮 做游戏",
+                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 14.dp),
+                        color = androidx.compose.ui.graphics.Color.White,
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                }
+                androidx.compose.material3.Surface(
+                    onClick = {
+                        micHint.value = null
+                        if (micGranted.value) startListening() else micLauncher.launch(android.Manifest.permission.RECORD_AUDIO)
+                    },
+                    enabled = !state.chatLoading && !micListening.value,
+                    shape = RoundedCornerShape(50),
+                    color = if (micListening.value) com.xingmou.ui.theme.Coral else androidx.compose.ui.graphics.Color.White,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, com.xingmou.ui.theme.Rule)
+                ) {
+                    Text(
+                        if (micListening.value) "🎧 听着呢" else "🎤 语音",
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                        color = if (micListening.value) androidx.compose.ui.graphics.Color.White else com.xingmou.ui.theme.Ink,
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                }
                 androidx.compose.material3.OutlinedTextField(
                     value = input.value,
                     onValueChange = { input.value = it },
                     modifier = Modifier.weight(1f),
-                    label = { Text("对小星说…") },
-                    enabled = !state.chatLoading
+                    placeholder = { Text("对小星说…") },
+                    enabled = !state.chatLoading,
+                    shape = RoundedCornerShape(28.dp),
+                    colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = com.xingmou.ui.theme.Coral,
+                        unfocusedBorderColor = com.xingmou.ui.theme.Rule,
+                        focusedContainerColor = androidx.compose.ui.graphics.Color.White,
+                        unfocusedContainerColor = androidx.compose.ui.graphics.Color.White
+                    )
                 )
                 Button(
                     onClick = {
@@ -1211,21 +2172,81 @@ private fun ChatCard(
                         input.value = ""
                         onSend(t)
                     },
-                    enabled = !state.chatLoading && input.value.isNotBlank()
+                    enabled = !state.chatLoading && input.value.isNotBlank(),
+                    shape = RoundedCornerShape(50),
+                    colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                        containerColor = com.xingmou.ui.theme.Coral,
+                        contentColor = androidx.compose.ui.graphics.Color.White
+                    )
                 ) { Text("发送") }
             }
+    }
+}
+
+/** 开场两个大选择按钮：儿童点击无需打字。「做游戏」用暖色实底与聊天形成明显区分。点击后色块从按钮位置放大铺满全屏。 */
+@Composable
+private fun GreetingChoice(
+    emoji: String,
+    label: String,
+    modifier: Modifier = Modifier,
+    container: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.secondaryContainer,
+    content: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.onSecondaryContainer,
+    onStart: (Float, Float, Float) -> Unit
+) {
+    val rectState = remember { mutableStateOf(androidx.compose.ui.geometry.Rect.Zero) }
+    androidx.compose.material3.Surface(
+        onClick = {
+            val r = rectState.value
+            onStart(r.left + r.width / 2f, r.top + r.height / 2f, r.height)
+        },
+        shape = RoundedCornerShape(24.dp),
+        color = container,
+        modifier = modifier.heightIn(min = 112.dp).onGloballyPositioned { coords ->
+            val topLeft = coords.localToRoot(androidx.compose.ui.geometry.Offset.Zero)
+            rectState.value = androidx.compose.ui.geometry.Rect(
+                topLeft,
+                androidx.compose.ui.geometry.Size(coords.size.width.toFloat(), coords.size.height.toFloat())
+            )
+        }
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(vertical = 18.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Text(emoji, style = MaterialTheme.typography.headlineLarge)
+            Text(
+                label,
+                style = MaterialTheme.typography.titleLarge,
+                color = content
+            )
         }
     }
 }
 
+/** 开场选择放大转场的参数：色块颜色、按钮中心与高度、切换完成回调。 */
+private data class ChoiceExpand(
+    val color: androidx.compose.ui.graphics.Color,
+    val centerX: Float,
+    val centerY: Float,
+    val sizePx: Float,
+    val onDone: () -> Unit
+)
+
 @Composable
 private fun ChatBubble(msg: com.xingmou.ChatMessageUi) {
     val isUser = msg.role == "user"
-    val avatar = if (isUser) "我" else "星"
-    val avatarColor = if (isUser) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.tertiary
-    val avatarText = if (isUser) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onTertiary
-    val bubbleColor = if (isUser) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant
-    val bubbleText = if (msg.isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
+    val bubbleColor = if (isUser) com.xingmou.ui.theme.Coral else androidx.compose.ui.graphics.Color.White
+    val bubbleBorder = if (isUser) {
+        androidx.compose.foundation.BorderStroke(1.dp, androidx.compose.ui.graphics.Color.Transparent)
+    } else {
+        androidx.compose.foundation.BorderStroke(1.dp, com.xingmou.ui.theme.Rule)
+    }
+    val bubbleText = when {
+        msg.isError -> com.xingmou.ui.theme.CoralDark
+        isUser -> androidx.compose.ui.graphics.Color.White
+        else -> com.xingmou.ui.theme.Ink
+    }
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start,
@@ -1234,32 +2255,38 @@ private fun ChatBubble(msg: com.xingmou.ChatMessageUi) {
         if (!isUser) {
             androidx.compose.material3.Surface(
                 shape = androidx.compose.foundation.shape.CircleShape,
-                color = avatarColor,
-                modifier = Modifier.size(28.dp)
+                color = com.xingmou.ui.theme.Coral,
+                modifier = Modifier.size(34.dp)
             ) {
-                Text(avatar, modifier = Modifier.padding(2.dp), style = MaterialTheme.typography.titleSmall, color = avatarText, textAlign = TextAlign.Center)
+                androidx.compose.foundation.layout.Box(contentAlignment = Alignment.Center) {
+                    Text("星", style = MaterialTheme.typography.titleMedium, color = androidx.compose.ui.graphics.Color.White)
+                }
             }
-            Spacer(modifier = Modifier.size(6.dp))
+            Spacer(modifier = Modifier.size(8.dp))
         }
         androidx.compose.material3.Surface(
-            shape = RoundedCornerShape(16.dp),
+            shape = RoundedCornerShape(20.dp),
             color = bubbleColor,
+            border = bubbleBorder,
             modifier = Modifier.weight(1f, fill = false)
         ) {
             Text(
                 text = msg.content,
-                modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                color = bubbleText
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                color = bubbleText,
+                style = MaterialTheme.typography.bodyLarge
             )
         }
         if (isUser) {
-            Spacer(modifier = Modifier.size(6.dp))
+            Spacer(modifier = Modifier.size(8.dp))
             androidx.compose.material3.Surface(
                 shape = androidx.compose.foundation.shape.CircleShape,
-                color = avatarColor,
-                modifier = Modifier.size(28.dp)
+                color = com.xingmou.ui.theme.ExistingBlue,
+                modifier = Modifier.size(34.dp)
             ) {
-                Text(avatar, modifier = Modifier.padding(2.dp), style = MaterialTheme.typography.titleSmall, color = avatarText, textAlign = TextAlign.Center)
+                androidx.compose.foundation.layout.Box(contentAlignment = Alignment.Center) {
+                    Text("我", style = MaterialTheme.typography.titleMedium, color = androidx.compose.ui.graphics.Color.White)
+                }
             }
         }
     }
