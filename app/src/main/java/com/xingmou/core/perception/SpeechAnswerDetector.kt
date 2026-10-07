@@ -87,9 +87,12 @@ class SpeechAnswerDetector(
     companion object {
         private const val TAG = "SpeechAnswerDetector"
 
-        /** ANY：有效文本 ≥2 字符即开口；KEYWORD：返回命中词，说了没命中返回空串标记。 */
+        /** ANY 至少两字符；KEYWORD 允许单字目标（如“狗”“球”）。 */
         fun evaluate(text: String, expected: ExpectedSpeech): SpeechHit {
             val normalized = KeywordMatcher.normalize(text)
+            if (expected.mode == com.xingmou.data.catalog.SpeechMode.KEYWORD) {
+                KeywordMatcher.matches(text, expected.keywords)?.let { return SpeechHit.SPOKEN(it) }
+            }
             if (normalized.length < 2) return SpeechHit.NONE
             return when (expected.mode) {
                 com.xingmou.data.catalog.SpeechMode.ANY -> SpeechHit.SPOKEN(null)

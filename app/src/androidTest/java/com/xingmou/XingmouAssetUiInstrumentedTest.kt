@@ -38,6 +38,7 @@ class XingmouAssetUiInstrumentedTest {
                     onAnswerCurriculumActivity = {},
                     onLeaveCurriculumLevel = {},
                     onChooseCurriculumInterest = {},
+                    onResetCurriculum = {},
                     onPause = {},
                     onResume = {},
                     onSpeechEnabledChange = {},

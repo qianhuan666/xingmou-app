@@ -5,10 +5,8 @@ import kotlin.random.Random
 /**
  * 兴趣主题素材换肤：让孩子选择的兴趣（动物 / 交通 / 生活用品）真正改变课程题的视觉素材。
  *
- * 只处理「纯素材结构题」——题干是通用指令（找不一样 / 刚才看到哪个 / 选出顺序 …），
- * 认知考点和评分都与具体素材语义无关，因此可以在不改变题型、题干、正确答案索引的前提下，
- * 把 emoji 整体换成同一主题的一组素材。颜色形状、语言理解、生活常识、情绪社交、动作题
- * 以及基线测评题不换肤（它们的考点与具体素材或文字绑定）。
+ * 精编题使用人工主题题库；扩展题仅对纯素材结构题使用稳定换肤。
+ * 基线题不换肤。主题题采用独立 ID，训练记录可区分所用主题。
  *
  * 同一道题在同一主题下的素材由题目 id 作随机种子决定，保证复盘与重复进入时素材稳定一致。
  */
@@ -25,6 +23,16 @@ object InterestThemeSkins {
      * 按主题给课程题换肤；主题为空 / “图片” / 未识别，或该题不属于可换肤模块时原样返回。
      */
     fun apply(question: QuestionDefinition, theme: String?): QuestionDefinition {
+        ThemeQuestionBanks.find(theme, question.id)?.let { themed ->
+            val adapted = if (question.options.size < themed.options.size) {
+                com.xingmou.core.domain.PlanQuestionPolicy.run { themed.forDifficulty(question.difficulty) }
+            } else themed
+            return adapted.copy(
+                difficulty = question.difficulty,
+                skillTag = question.skillTag,
+                variantGroup = question.variantGroup
+            )
+        }
         val pool = pools[theme?.trim().orEmpty()] ?: return question
         val rng = Random(question.id.hashCode().toLong())
         return when (question.moduleId) {
