@@ -151,7 +151,7 @@ fun ParentScreen(
                     ParentProfileCard(state.profile)
                     ParentTrainingStatsCard(state)
                     AdaptiveOverviewPanel(state)
-                    SectionSurface(title = "本周家庭回顾", supporting = "只汇总当前儿童最近 7 天的本地记录。") {
+                    SectionSurface(title = "本周家庭回顾", supporting = "过去一周的练习和状态记录。") {
                         StatusLine("任务完成率", state.weekCompletionRate)
                         Spacer(Modifier.height(8.dp))
                         StatusLine("状态变化", state.weekStatusSummary)
@@ -181,7 +181,7 @@ fun ParentScreen(
 
 @Composable
 private fun AdaptiveOverviewPanel(state: ParentUiState) {
-    SectionSurface(title = "训练模块进度", supporting = "显示每个模块最近保存的难度与支持等级。") {
+    SectionSurface(title = "训练模块进度", supporting = "看看孩子在各个练习上的表现。") {
         if (state.adaptiveOverview.isEmpty()) {
             Text("完成起点小测后，这里会显示训练模块状态。", color = MaterialTheme.colorScheme.onSurfaceVariant)
         } else {
@@ -192,17 +192,39 @@ private fun AdaptiveOverviewPanel(state: ParentUiState) {
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(Modifier.weight(1f)) {
-                        Text("${item.moduleId} · ${item.moduleName}", style = MaterialTheme.typography.titleSmall)
-                        Text("基线 V${item.baselineVersion} · ${item.correctStreak} 连续完成 / ${item.errorStreak} 连续未完成", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(item.moduleName, style = MaterialTheme.typography.titleSmall)
+                        Text(
+                            streakWord(item.correctStreak, item.errorStreak),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
-                    Text("L${item.difficulty} · ${item.supportLevel}", style = MaterialTheme.typography.labelLarge)
+                    Text(
+                        "难度 ${item.difficulty} · ${supportWord(item.supportLevel)}",
+                        style = MaterialTheme.typography.labelLarge
+                    )
                 }
             }
             if (state.adaptiveOverview.size > 8) {
-                Text("其余 ${state.adaptiveOverview.size - 8} 个模块已保存，可在专业端查看。", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("还有 ${state.adaptiveOverview.size - 8} 个模块", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }
+}
+
+private fun streakWord(correct: Int, error: Int): String = when {
+    correct > 0 -> "连续完成 ${correct} 次"
+    error > 0 -> "连续未完成 ${error} 次"
+    else -> "还没有练习记录"
+}
+
+private fun supportWord(level: String): String = when (level) {
+    "L0" -> "独立完成"
+    "L1" -> "需要少量提示"
+    "L2" -> "需要一些提示"
+    "L3" -> "需要较多帮助"
+    "L4" -> "需要全程帮助"
+    else -> "支持等级待定"
 }
 
 @Composable
