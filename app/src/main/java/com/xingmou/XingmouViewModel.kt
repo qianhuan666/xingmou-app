@@ -1361,6 +1361,67 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
         return "你在${strongest}小游戏里找到了自己的好办法！接下来我们会从轻松的${gentle}游戏开始，慢慢玩、慢慢进步，每一次尝试都值得一颗星星。"
     }
 
+    /** 家长向能力概括：逐域分组点评+领域专属建议+整体水平。避免诊断性语言。 */
+    private fun parentSummary(scores: Map<String, Int>): String {
+        val entries = scores.entries.sortedByDescending { it.value }
+        if (entries.isEmpty()) return "孩子还没完成起点小测，完成后这里会显示能力概括。"
+        val parts = mutableListOf<String>()
+        // 强项
+        val strong = entries.filter { it.value >= 50 }
+        if (strong.isNotEmpty()) {
+            val names = strong.joinToString("、") { "${DomainCatalog.find(it.key)?.name ?: it.key}（${it.value}分）" }
+            parts.add("表现不错的是${names}")
+        }
+        // 发展中
+        val developing = entries.filter { it.value in 30..49 }
+        if (developing.isNotEmpty()) {
+            val names = developing.joinToString("、") { "${DomainCatalog.find(it.key)?.name ?: it.key}（${it.value}分）" }
+            parts.add("正在发展中的是${names}，日常可以多穿插相关小活动")
+        }
+        // 需更多练习（<30分）
+        val weak = entries.filter { it.value < 30 }
+        if (weak.isNotEmpty()) {
+            val weakParts = weak.map { e ->
+                val name = DomainCatalog.find(e.key)?.name ?: e.key
+                val suggestion = domainSuggestion(e.key)
+                val status = if (e.value == 0) "尚未测评" else "${e.value}分"
+                "$name（$status）" to suggestion
+            }
+            val weakNames = weakParts.joinToString("、") { it.first }
+            val tips = weakParts.mapNotNull { it.second }.filter { it.isNotBlank() }.joinToString("；")
+            parts.add("需要更多练习的是${weakNames}${if (tips.isNotBlank()) "。建议：$tips" else ""}")
+        }
+        // 整体
+        val avg = entries.map { it.value }.average().toInt()
+        val assessed = entries.count { it.value > 0 }
+        parts.add("整体来看，已测评${assessed}个领域，均分约${avg}，处于${scoreLevelWord(avg)}水平")
+        return parts.joinToString("；") + "。"
+    }
+
+    /** 展开区用的详细建议文本：列出弱项领域的日常陪练方向。 */
+    private fun parentDetailAdvice(scores: Map<String, Int>): String {
+        val entries = scores.entries.sortedByDescending { it.value }
+        val weak = entries.filter { it.value < 30 }
+        if (weak.isEmpty()) return "各领域发展均衡，继续保持日常练习。"
+        return weak.joinToString("；") { e ->
+            val name = DomainCatalog.find(e.key)?.name ?: e.key
+            val status = if (e.value == 0) "尚未测评" else "${e.value}分"
+            val tip = domainSuggestion(e.key)
+            "$name（$status）${if (tip.isNotBlank()) "：$tip" else ""}"
+        } + "。"
+    }
+
+    /** 每个领域的日常陪练小建议，给家长具体可操作的方向。 */
+    private fun domainSuggestion(domainId: String): String = when (domainId) {
+        "A" -> "玩'找不同'图片、听声音猜东西；玩'红绿灯'练习等待和停止"
+        "B" -> "让孩子记3样购物清单、复述刚讲的短故事；玩翻牌配对记忆游戏"
+        "C" -> "按颜色或用途分类卡片、按'红蓝红蓝'规律排序；玩简单迷宫和拼图"
+        "D" -> "一起看绘本让孩子复述、指物说名字；玩过家家练习对话"
+        "E" -> "看表情图卡识别开心/难过/生气、讲故事问'他什么心情'；玩轮流拍球练习等待"
+        "F" -> "让孩子摆碗筷、分类收玩具；练习穿外套系扣子、用安全剪刀沿线剪"
+        else -> ""
+    }
+
     private fun parseProfileScores(json: String): Map<String, Int> {
         val raw = runCatching {
             com.google.gson.Gson().fromJson<Map<String, Double>>(
@@ -1385,10 +1446,13 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                     name = domain?.name ?: id,
                     emoji = domainEmoji(id),
                     colorKey = domain?.displayColor ?: "slate",
-                    score = scores[id] ?: 0
+                    score = scores[id] ?: 0,
+                    description = domain?.summary ?: ""
                 )
             },
             narrative = childNarrative(scores),
+            parentSummary = parentSummary(scores),
+            parentDetailAdvice = parentDetailAdvice(scores),
             createdLabel = createdLabel
         )
     }
@@ -2264,16 +2328,34 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
     private suspend fun loadHomeSupport(childId: String) {
         val latestPlan = database.planDao().latestActive(childId)
         val existing = database.homeTaskDao().latestForChild(childId)
+        val scores = parseProfileScores(database.abilityProfileDao().latestForChild(childId)?.scoresJson ?: "")
         val task = if (latestPlan != null && existing?.planId != latestPlan.planId) {
             createHomeTaskFromPlan(latestPlan).also { database.homeTaskDao().upsert(it) }
         } else if (existing == null) {
-            defaultMatchingHomeTask(childId).also { database.homeTaskDao().upsert(it) }
-        } else if (existing.source == "LOCAL_TEMPLATE") {
-            // 本地模板文案升级：保留完成状态与示范进度
-            defaultMatchingHomeTask(childId).copy(
-                status = existing.status,
-                demoStep = existing.demoStep
+            // 首次：从模板库选一个
+            val template = pickDailyTemplate(childId, scores)
+            HomeTaskEntity(
+                taskId = "home-$childId-${todayStartMillis()}",
+                childId = childId,
+                title = template.title,
+                description = template.description,
+                status = "pending",
+                frequency = "每日 1–2 次",
+                durationMinutes = 5,
+                supportLevel = "L1",
+                stopConditions = "出现疲劳、拒绝或风险时暂停",
+                source = "LOCAL_TEMPLATE",
+                updatedAt = System.currentTimeMillis()
             ).also { database.homeTaskDao().upsert(it) }
+        } else if (existing.source == "LOCAL_TEMPLATE") {
+            // 跨天轮换：如果上次更新是昨天或更早，选新任务并重置状态
+            val rotated = dailyRotatedTask(childId, existing, scores)
+            if (rotated != null) {
+                rotated.also { database.homeTaskDao().upsert(it) }
+            } else {
+                // 今天已更新过，保持原样
+                existing
+            }
         } else existing
         val safetyStopped = database.safetyFlagDao().observeActive(childId).first().isNotEmpty()
         val weekStart = System.currentTimeMillis() - 7 * 24 * 60 * 60 * 1000L
@@ -2718,10 +2800,17 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                     .chunked((records.size / 5).coerceAtLeast(1))
                     .takeLast(5)
                     .mapIndexed { index, chunk ->
+                        val fmt = SimpleDateFormat("MM-dd", Locale.CHINA)
+                        val range = if (chunk.size <= 1) {
+                            fmt.format(Date(chunk.first().createdAt))
+                        } else {
+                            "${fmt.format(Date(chunk.first().createdAt))}~${fmt.format(Date(chunk.last().createdAt))}"
+                        }
                         ReportTrendPointUi(
                             label = "${index + 1}",
                             accuracy = if (chunk.isEmpty()) 0f else chunk.count { it.correct }.toFloat() / chunk.size,
-                            sampleCount = chunk.size
+                            sampleCount = chunk.size,
+                            dateRange = range
                         )
                     }
                 val homeTasks = database.homeTaskDao().allForChild(childId).associateBy { it.taskId }
@@ -2758,12 +2847,13 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                     )
                 }.sortedWith(compareBy({ it.domain }, { it.task }))
                 val trainingDetails = records.take(10).map { item ->
+                    val taskIdShort = item.taskId.substringBefore("-")
                     TrainingDetailUi(
                         timestamp = item.createdAt,
-                        domain = item.domain,
-                        task = item.taskId,
+                        domain = DomainCatalog.find(item.domain)?.name ?: item.domain,
+                        task = TaskCatalog.find(taskIdShort)?.name ?: item.taskId,
                         result = if (item.correct) "完成" else "需再试",
-                        support = "${item.supportLevel} / 提示 ${item.promptLevel}",
+                        support = "${supportWord(item.supportLevel)} · 提示 ${item.promptLevel} 次",
                         reaction = item.reactionMs?.let { "$it ms" } ?: "—"
                     )
                 }
@@ -2938,19 +3028,64 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
         loadHomeSupport(childId)
     }
 
-    private fun defaultMatchingHomeTask(childId: String) = HomeTaskEntity(
-        taskId = "home-$childId-matching",
-        childId = childId,
-        title = "相同图片配对练习（5 分钟）",
-        description = "准备 2～3 对完全相同的图片卡（孩子熟悉的日常物品照片）。先由家长示范：拿起一张，找到相同的放在一起，同时说出名称；再把卡片打乱摆开，请孩子找出相同的两张，配对成功立即肯定。熟练后再过渡到相似图片或相关事物配对（如牙刷和杯子）。出现疲劳或拒绝时暂停。",
-        status = "pending",
-        frequency = "每日 1–2 次",
-        durationMinutes = 5,
-        supportLevel = "L1",
-        stopConditions = "出现疲劳、拒绝或风险时暂停",
-        source = "LOCAL_TEMPLATE",
-        updatedAt = System.currentTimeMillis()
+    /** 每日家庭练习模板库：六域各 2 个 5 分钟任务。 */
+    private data class HomeTaskTemplate(val domainId: String, val title: String, val description: String)
+    private val homeTaskTemplates = listOf(
+        HomeTaskTemplate("A", "找不同小游戏（5 分钟）", "准备两张相似的图片（如两幅场景画），让孩子找出不同之处。从 2-3 处差异开始，逐渐增加难度。找到后让孩子指出来并说出名称。出现疲劳或拒绝时暂停。"),
+        HomeTaskTemplate("A", "听声音猜东西（5 分钟）", "用手机播放或现场发出日常声音（动物叫声、敲门声、水流声等），让孩子猜是什么。猜对后一起模仿声音。可以轮流出题，让孩子也发声音让家长猜。出现疲劳或拒绝时暂停。"),
+        HomeTaskTemplate("B", "记购物清单（5 分钟）", "说 3-4 样东西让孩子记住（如苹果、牛奶、鸡蛋、面包），过 30 秒后让孩子复述。从 3 样开始，熟练后增加到 5-6 样。可以用手势辅助记忆。出现疲劳或拒绝时暂停。"),
+        HomeTaskTemplate("B", "翻牌配对（5 分钟）", "用 4-6 对卡片反面朝上排列，轮流翻两张找配对。找不到要记住位置翻回去，找到就拿走。从 4 对开始，逐渐增加。锻炼工作记忆和轮等待。出现疲劳或拒绝时暂停。"),
+        HomeTaskTemplate("C", "分类卡片（5 分钟）", "准备 10-15 张日常物品卡片，让孩子按用途分类（吃的、穿的、玩的）或按颜色分类。先家长示范分类 2-3 张，再让孩子继续。熟练后增加类别或混入抽象概念。出现疲劳或拒绝时暂停。"),
+        HomeTaskTemplate("C", "规律排序（5 分钟）", "用积木或卡片排成'红蓝红蓝'的规律，让孩子接着排下去。从 2 种颜色交替开始，熟练后尝试 3 种颜色或'红红蓝'等复杂规律。出现疲劳或拒绝时暂停。"),
+        HomeTaskTemplate("D", "看绘本讲故事（5 分钟）", "选一本孩子熟悉的绘本，一起读 1-2 页，然后让孩子复述刚才发生了什么。鼓励孩子用自己的话说，不必逐字背。可以用手指着图片提示。出现疲劳或拒绝时暂停。"),
+        HomeTaskTemplate("D", "指物说名字（5 分钟）", "在家里走一圈，指各种物品让孩子说出名字（杯子、桌子、电视、毛巾等）。说对就肯定，不会的家长说一遍让孩子跟读。可以加入简单描述，如'红色的杯子'。出现疲劳或拒绝时暂停。"),
+        HomeTaskTemplate("E", "表情卡片（5 分钟）", "准备开心、难过、生气、惊讶等表情卡片，让孩子说出每张是什么心情。然后家长说一个情境（'他的冰淇淋掉了'），让孩子指对应的表情。出现疲劳或拒绝时暂停。"),
+        HomeTaskTemplate("E", "轮流拍球（5 分钟）", "和孩子面对面，轮流拍一下球再传给对方。重点练习'等待'和'轮到我'的概念。可以边拍边数数。熟练后加快节奏或增加拍球次数。出现疲劳或拒绝时暂停。"),
+        HomeTaskTemplate("F", "摆碗筷（5 分钟）", "吃饭前让孩子帮忙摆放碗和筷子，每人一份。练习一一对应和日常自理。可以先示范一遍，让孩子照着做。熟练后增加勺子或杯子。出现疲劳或拒绝时暂停。"),
+        HomeTaskTemplate("F", "整理玩具（5 分钟）", "玩完后让孩子把玩具按类别收好（积木一箱、毛绒一箱、卡片一盒）。先家长示范分类，再让孩子继续。练习分类和收纳习惯。可以加计时增加趣味。出现疲劳或拒绝时暂停。")
     )
+
+    /** 根据当天日期和孩子弱项选择今日任务：优先弱项领域，按日轮换。 */
+    private fun pickDailyTemplate(childId: String, scores: Map<String, Int>): HomeTaskTemplate {
+        val dayIndex = (System.currentTimeMillis() / (24 * 60 * 60 * 1000L)).toInt()
+        val weakDomainIds = scores.entries
+            .filter { it.value < 50 }
+            .sortedBy { it.value }
+            .map { it.key }
+        val candidateDomains = if (weakDomainIds.isNotEmpty()) weakDomainIds else listOf("A", "B", "C", "D", "E", "F")
+        val targetDomain = candidateDomains[dayIndex % candidateDomains.size]
+        val domainTasks = homeTaskTemplates.filter { it.domainId == targetDomain }
+        return domainTasks[dayIndex % domainTasks.size]
+    }
+
+    /** 跨天重置：如果上次任务更新是昨天或更早，状态恢复为 pending 并选新任务。 */
+    private fun dailyRotatedTask(childId: String, existing: HomeTaskEntity, scores: Map<String, Int>): HomeTaskEntity? {
+        val todayStart = todayStartMillis()
+        if (existing.updatedAt >= todayStart) return null // 今天已更新过
+        val template = pickDailyTemplate(childId, scores)
+        return HomeTaskEntity(
+            taskId = "home-$childId-${todayStart}",
+            childId = childId,
+            title = template.title,
+            description = template.description,
+            status = "pending",
+            frequency = "每日 1–2 次",
+            durationMinutes = 5,
+            supportLevel = "L1",
+            stopConditions = "出现疲劳、拒绝或风险时暂停",
+            source = "LOCAL_TEMPLATE",
+            updatedAt = System.currentTimeMillis()
+        )
+    }
+
+    private fun todayStartMillis(): Long {
+        val cal = java.util.Calendar.getInstance()
+        cal.set(java.util.Calendar.HOUR_OF_DAY, 0)
+        cal.set(java.util.Calendar.MINUTE, 0)
+        cal.set(java.util.Calendar.SECOND, 0)
+        cal.set(java.util.Calendar.MILLISECOND, 0)
+        return cal.timeInMillis
+    }
 
     private fun createHomeTaskFromPlan(plan: PlanVersionEntity): HomeTaskEntity {
         val payload = plan.payloadJson

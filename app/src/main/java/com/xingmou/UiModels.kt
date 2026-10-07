@@ -233,7 +233,8 @@ data class RainbowDomainUi(
     val name: String,
     val emoji: String,
     val colorKey: String,
-    val score: Int
+    val score: Int,
+    val description: String = ""
 )
 
 /** 儿童端「我的彩虹画像」数据画报：完成起点小测后生成，展示六域训练起点与鼓励叙述。 */
@@ -241,6 +242,8 @@ data class RainbowProfileUi(
     val present: Boolean = false,
     val domainBars: List<RainbowDomainUi> = emptyList(),
     val narrative: String = "",
+    val parentSummary: String = "",
+    val parentDetailAdvice: String = "",
     val createdLabel: String = ""
 )
 
@@ -425,7 +428,7 @@ data class ReportGroupUi(
     val averageReaction: String
 )
 
-data class ReportTrendPointUi(val label: String, val accuracy: Float, val sampleCount: Int)
+data class ReportTrendPointUi(val label: String, val accuracy: Float, val sampleCount: Int, val dateRange: String = "")
 
 data class TrainingDetailUi(
     val timestamp: Long,
@@ -435,6 +438,24 @@ data class TrainingDetailUi(
     val support: String,
     val reaction: String
 )
+
+/** 支持等级 L0-L4 翻译为家长可读的描述。 */
+fun scoreLevelWord(score: Int): String = when {
+    score >= 80 -> "表现不错"
+    score >= 50 -> "中等水平"
+    score >= 30 -> "发展中"
+    score > 0 -> "起步阶段"
+    else -> "尚未测评"
+}
+
+fun supportWord(level: String): String = when (level) {
+    "L0" -> "独立完成"
+    "L1" -> "需要少量提示"
+    "L2" -> "需要一些提示"
+    "L3" -> "需要较多帮助"
+    "L4" -> "需要全程帮助"
+    else -> "支持等级待定"
+}
 
 data class AssessmentRecordUi(
     val assessmentName: String,

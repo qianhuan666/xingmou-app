@@ -62,6 +62,8 @@ import com.xingmou.ParentUiState
 import com.xingmou.RainbowProfileUi
 import com.xingmou.parentRiskLabel
 import com.xingmou.parentRouteLabel
+import com.xingmou.scoreLevelWord
+import com.xingmou.supportWord
 
 import com.xingmou.ui.components.AgentStatusLine
 import com.xingmou.ui.components.SectionSurface
@@ -151,7 +153,7 @@ fun ParentScreen(
                     ParentProfileCard(state.profile)
                     ParentTrainingStatsCard(state)
                     AdaptiveOverviewPanel(state)
-                    SectionSurface(title = "本周家庭回顾", supporting = "只汇总当前儿童最近 7 天的本地记录。") {
+                    SectionSurface(title = "本周家庭回顾", supporting = "过去一周的练习和状态记录。") {
                         StatusLine("任务完成率", state.weekCompletionRate)
                         Spacer(Modifier.height(8.dp))
                         StatusLine("状态变化", state.weekStatusSummary)
@@ -181,28 +183,65 @@ fun ParentScreen(
 
 @Composable
 private fun AdaptiveOverviewPanel(state: ParentUiState) {
-    SectionSurface(title = "训练模块进度", supporting = "显示每个模块最近保存的难度与支持等级。") {
+    SectionSurface(title = "训练模块进度", supporting = "看看孩子在各个练习上的表现。") {
         if (state.adaptiveOverview.isEmpty()) {
             Text("完成起点小测后，这里会显示训练模块状态。", color = MaterialTheme.colorScheme.onSurfaceVariant)
         } else {
-            state.adaptiveOverview.take(8).forEach { item ->
+            var showModules = remember { mutableStateOf(false) }
+            val preview = state.adaptiveOverview.take(3)
+            preview.forEach { item ->
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(Modifier.weight(1f)) {
-                        Text("${item.moduleId} · ${item.moduleName}", style = MaterialTheme.typography.titleSmall)
-                        Text("基线 V${item.baselineVersion} · ${item.correctStreak} 连续完成 / ${item.errorStreak} 连续未完成", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(item.moduleName, style = MaterialTheme.typography.titleSmall)
+                        Text(
+                            streakWord(item.correctStreak, item.errorStreak),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
-                    Text("L${item.difficulty} · ${item.supportLevel}", style = MaterialTheme.typography.labelLarge)
+                    Text(
+                        "难度 ${item.difficulty} · ${supportWord(item.supportLevel)}",
+                        style = MaterialTheme.typography.labelLarge
+                    )
                 }
             }
-            if (state.adaptiveOverview.size > 8) {
-                Text("其余 ${state.adaptiveOverview.size - 8} 个模块已保存，可在专业端查看。", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            TextButton(onClick = { showModules.value = !showModules.value }, modifier = Modifier.fillMaxWidth()) {
+                Text(if (showModules.value) "收起全部模块" else "展开全部${state.adaptiveOverview.size}个模块")
+            }
+            if (showModules.value) {
+                state.adaptiveOverview.drop(3).forEach { item ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(item.moduleName, style = MaterialTheme.typography.titleSmall)
+                            Text(
+                                streakWord(item.correctStreak, item.errorStreak),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Text(
+                            "难度 ${item.difficulty} · ${supportWord(item.supportLevel)}",
+                            style = MaterialTheme.typography.labelLarge
+                        )
+                    }
+                }
             }
         }
     }
+}
+
+private fun streakWord(correct: Int, error: Int): String = when {
+    correct > 0 -> "连续完成 ${correct} 次"
+    error > 0 -> "连续未完成 ${error} 次"
+    else -> "还没有练习记录"
 }
 
 @Composable
@@ -246,7 +285,7 @@ private fun HomeTaskPanel(
     }
     Spacer(Modifier.height(16.dp))
     // 卡片 2：怎么做
-    SectionSurface(title = "5 分钟陪练示范", supporting = "按步骤进行，不必一次做完。${state.homeTaskDurationMinutes} 分钟 · ${state.homeTaskSupportLevel}。出现疲劳、拒绝或风险时暂停。") {
+    SectionSurface(title = "5 分钟陪练示范", supporting = "按步骤进行，不必一次做完。${state.homeTaskDurationMinutes} 分钟 · ${supportWord(state.homeTaskSupportLevel)}。出现疲劳、拒绝或风险时暂停。") {
         DemoSteps(state.homeDemoStep, state.homeTaskSafetyStopped)
         Button(
             onClick = onAdvanceDemo,
@@ -519,24 +558,39 @@ private fun ParentProfileCard(profile: RainbowProfileUi) {
         return
     }
     SectionSurface(title = "平台初始能力画像", supporting = "生成于 ${profile.createdLabel}") {
-        Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-            profile.domainBars.forEach { bar ->
-                Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+            if (profile.parentSummary.isNotBlank()) {
+                Text(profile.parentSummary, style = MaterialTheme.typography.bodyLarge)
+            }
+            var showDetails = remember { mutableStateOf(false) }
+            TextButton(onClick = { showDetails.value = !showDetails.value }, modifier = Modifier.fillMaxWidth()) {
+                Text(if (showDetails.value) "收起六域详情" else "展开六域详情")
+            }
+            if (showDetails.value) {
+                if (profile.parentDetailAdvice.isNotBlank()) {
+                    Text(profile.parentDetailAdvice, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 4.dp))
+                }
+                profile.domainBars.forEach { bar ->
+                    Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
                         Column(Modifier.weight(1f)) {
-                        Text(bar.name, style = MaterialTheme.typography.titleMedium)
-                        LinearProgressIndicator(
-                            progress = { bar.score / 100f },
-                            color = domainBarColor(bar.colorKey),
-                            modifier = Modifier.fillMaxWidth().padding(top = 6.dp)
-                        )
+                            Text(bar.name, style = MaterialTheme.typography.titleMedium)
+                            if (bar.description.isNotBlank()) {
+                                Text(bar.description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 2.dp))
+                            }
+                            LinearProgressIndicator(
+                                progress = { bar.score / 100f },
+                                color = domainBarColor(bar.colorKey),
+                                modifier = Modifier.fillMaxWidth().padding(top = 6.dp)
+                            )
+                        }
+                        Text("训练起点 ${bar.score} · ${scoreLevelWord(bar.score)}", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    Text("训练起点 ${bar.score}", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }
-        Spacer(Modifier.height(14.dp))
-        Text(profile.narrative, style = MaterialTheme.typography.bodyLarge)
         Spacer(Modifier.height(10.dp))
+        Text(profile.narrative, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.height(6.dp))
         Text("平台原创训练起点画像，不等同于标准化量表或医学诊断。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
@@ -623,24 +677,37 @@ private fun ParentTrainingStatsCard(state: ParentUiState) {
         }
         HorizontalDivider(Modifier.padding(vertical = 14.dp))
         Text("正确率走势", style = MaterialTheme.typography.titleMedium)
-        Text("按训练记录时间分段，仅用于回看过程变化。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("按训练时间从早到晚分成最多 5 段，用于回看正确率的变化。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (state.trendPoints.isEmpty()) {
             Text("暂无足够记录生成趋势。", modifier = Modifier.padding(top = 8.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
         } else state.trendPoints.forEach { point ->
             Row(modifier = Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("第${point.label}段", modifier = Modifier.weight(0.22f), style = MaterialTheme.typography.labelMedium)
+                Text(point.dateRange.ifBlank { "第${point.label}段" }, modifier = Modifier.weight(0.22f), style = MaterialTheme.typography.labelMedium)
                 LinearProgressIndicator(progress = { point.accuracy }, modifier = Modifier.weight(0.55f).padding(top = 3.dp))
                 Text("${(point.accuracy * 100).toInt()}% · ${point.sampleCount}条", modifier = Modifier.weight(0.23f), style = MaterialTheme.typography.labelSmall)
             }
         }
         HorizontalDivider(Modifier.padding(vertical = 14.dp))
-        Text("最近训练记录", style = MaterialTheme.typography.titleMedium)
-        if (state.recentTrainingDetails.isEmpty()) {
-            Text("暂无训练记录。", modifier = Modifier.padding(top = 8.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
-        } else state.recentTrainingDetails.forEachIndexed { index, detail ->
-            if (index > 0) HorizontalDivider(Modifier.padding(vertical = 8.dp))
-            Text("${java.text.SimpleDateFormat("MM-dd HH:mm", java.util.Locale.getDefault()).format(java.util.Date(detail.timestamp))} · ${detail.domain}/${detail.task}", style = MaterialTheme.typography.titleSmall)
-            Text("${detail.result} · ${detail.support} · 反应时 ${detail.reaction}", modifier = Modifier.padding(top = 4.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
+        var showRecords = remember { mutableStateOf(false) }
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+            Text("最近训练记录", style = MaterialTheme.typography.titleMedium)
+            TextButton(onClick = { showRecords.value = !showRecords.value }) {
+                Text(if (showRecords.value) "收起" else "展开")
+            }
+        }
+        if (showRecords.value) {
+            if (state.recentTrainingDetails.isEmpty()) {
+                Text("暂无训练记录。", modifier = Modifier.padding(top = 8.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
+            } else state.recentTrainingDetails.forEachIndexed { index, detail ->
+                if (index > 0) HorizontalDivider(Modifier.padding(vertical = 8.dp))
+                Text("${detail.domain} · ${detail.task}", style = MaterialTheme.typography.titleSmall)
+                Text(
+                    "${java.text.SimpleDateFormat("MM-dd HH:mm", java.util.Locale.getDefault()).format(java.util.Date(detail.timestamp))} · ${detail.result} · ${detail.support} · 反应时 ${detail.reaction}",
+                    modifier = Modifier.padding(top = 4.dp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
         }
     }
 }
