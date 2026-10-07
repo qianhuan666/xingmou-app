@@ -1,6 +1,7 @@
 package com.xingmou.ui.professional
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -155,7 +157,10 @@ fun ProfessionalScreen(
                 }
                 ProfessionalSection.ASSESSMENT -> {
                     AssessmentPanel(state, onAssessmentSelect, onAssessmentDateChange, onAssessmentSourceChange, onAssessmentScoresChange, onAssessmentNotesChange, onSaveAssessment)
-                    MethodLibraryPanel()
+                    MethodLibraryPanel(onAssociateWithPlan = { taskText ->
+                        onPlanTaskChange(taskText)
+                        selectedSection.value = ProfessionalSection.PLAN
+                    })
                 }
                 ProfessionalSection.CARE -> {
                     CareWorkflowPanel(state, onAdvanceCareStage, onCareNoteChange, onCareClosureReasonChange, onCareFollowUpPlanChange, onCareFollowUpDateChange)
@@ -193,14 +198,42 @@ private fun AdaptiveOverviewPanel(state: ProfessionalUiState) {
 }
 
 @Composable
-private fun MethodLibraryPanel() {
-    SectionSurface(title = "12 方法库", supporting = "仅供专业人员参考；每条方法都保留适用边界和本地审核来源。") {
+private fun MethodLibraryPanel(onAssociateWithPlan: (String) -> Unit) {
+    val expandedMethod = remember { mutableStateOf<String?>(null) }
+    SectionSurface(title = "12 方法库", supporting = "点击方法展开详情，可关联到训练方案。仅供专业人员参考。") {
         RehabilitationMethods.all.forEachIndexed { index, method ->
             if (index > 0) HorizontalDivider(Modifier.padding(vertical = 8.dp))
-            Text(method.name, style = MaterialTheme.typography.titleSmall)
-            Text(method.summary, modifier = Modifier.padding(top = 3.dp))
-            Text("边界：${method.boundary}", modifier = Modifier.padding(top = 3.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text("来源：${method.sourceRef} · ${method.reviewStatus}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            val isExpanded = expandedMethod.value == method.id
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(MaterialTheme.shapes.medium)
+                    .then(if (isExpanded) Modifier else Modifier)
+                    .clickable { expandedMethod.value = if (isExpanded) null else method.id }
+                    .padding(vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    if (isExpanded) "▼" else "▶",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.width(8.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(method.name, style = MaterialTheme.typography.titleSmall)
+                    Text(method.summary, modifier = Modifier.padding(top = 3.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            if (isExpanded) {
+                Column(Modifier.padding(start = 20.dp, top = 6.dp, bottom = 6.dp)) {
+                    Text("适用边界：${method.boundary}", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("来源：${method.sourceRef} · ${method.reviewStatus}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    OutlinedButton(
+                        onClick = { onAssociateWithPlan("${method.name}：${method.summary}") },
+                        modifier = Modifier.padding(top = 8.dp)
+                    ) { Text("关联到训练方案") }
+                }
+            }
         }
     }
 }
