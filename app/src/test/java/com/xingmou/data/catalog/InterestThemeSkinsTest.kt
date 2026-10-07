@@ -1,19 +1,18 @@
 package com.xingmou.data.catalog
 
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
  * 验证兴趣主题换肤：可换肤模块的素材整体变为所选主题，题型/题干/正确答案索引保持不变；
- * 颜色形状/情绪社交等模块与基线题不受影响；同一题两次换肤结果稳定。
+ * 共用题保留内容；精编题采用人工题库；同一题两次换肤结果稳定。
  */
 class InterestThemeSkinsTest {
 
-    private val animals = listOf("🐶", "🐱", "🐰", "🐼", "🦁", "🐘", "🐸", "🐵", "🦊", "🐢", "🐟", "🐦")
-    private val vehicles = listOf("🚗", "🚌", "✈️", "🚲", "🚂", "🚢", "🚓", "🚑", "🚕", "🏍️", "⛵", "🚁")
+    private val animals = listOf("🐶", "🐱", "🐰", "🐼", "🦁", "🐘", "🐸", "🐵", "🦊", "🐢", "🐟", "🐦", "🐋", "🦋")
+    private val vehicles = listOf("🚗", "🚌", "✈️", "🚲", "🚂", "🚢", "🚓", "🚑", "🚕", "🏍️", "⛵", "🚁", "🚒")
     private val objects = listOf("🪥", "🧦", "👕", "🥄", "📕", "🧸", "🎈", "⚽", "🪑", "🔑", "🧢", "☂️")
 
     private fun bank(moduleId: String) =
@@ -106,10 +105,11 @@ class InterestThemeSkinsTest {
     }
 
     @Test
-    fun nonSkinModules_unchanged() {
-        listOf("P01", "P02", "S01", "D03", "M01", "L04").forEach { moduleId ->
+    fun commonModules_keepContentAndDetectionContracts() {
+        listOf("S01", "D03", "L04", "E01", "E04", "S02", "S03", "D01").forEach { moduleId ->
             bank(moduleId).forEach { q ->
-                assertEquals(q, InterestThemeSkins.apply(q, "动物"))
+                val themed = InterestThemeSkins.apply(q, "动物")
+                assertEquals(q, themed.copy(id = q.id, sourceRef = q.sourceRef))
             }
         }
     }

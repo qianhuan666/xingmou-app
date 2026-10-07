@@ -1195,8 +1195,9 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
                 .ifEmpty { TaskCatalog.all.map { it.id } }
         val stateByModule = database.moduleAdaptiveStateDao().allForChild(childId).associateBy { it.moduleId }
         val completedIds = allRecords.filter { it.correct }.map { it.taskId }.toSet()
+        val bank = (if (planPolicy == null) QuestionCatalog.starterCourseQuestions else QuestionCatalog.fullCourseQuestions)
+            .map { InterestThemeSkins.apply(it, curriculumInterest) }
         val currentModuleId = moduleQueue.firstOrNull { moduleId ->
-            val bank = if (planPolicy == null) QuestionCatalog.starterCourseQuestions else QuestionCatalog.fullCourseQuestions
             bank.any { it.moduleId == moduleId && it.id !in completedIds }
         }
         val currentState = currentModuleId?.let { stateByModule[it] }?.takeIf { state ->
@@ -1215,7 +1216,6 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
         val effectiveSupportLevel = if (samePlan) childSnapshot.supportLevel else planPolicy?.supportLevel ?: currentState?.currentSupportLevel
             ?.let { runCatching { com.xingmou.core.model.SupportLevel.valueOf(it) }.getOrNull() }
             ?: childSnapshot.supportLevel
-        val bank = if (planPolicy == null) QuestionCatalog.starterCourseQuestions else QuestionCatalog.fullCourseQuestions
         val moduleQuestions = currentModuleId?.let { id -> bank.filter { it.moduleId == id } }.orEmpty()
         val records = allRecords.filter { it.taskId in moduleQuestions.map { question -> question.id }.toSet() }
         val progressEngine = CourseProgressEngine(moduleQuestions)
@@ -2048,6 +2048,7 @@ class XingmouViewModel(application: Application) : AndroidViewModel(application)
         val snapshot = _uiState.value.child
         if (snapshot.isWorking || snapshot.isSafetyStopped || !snapshot.courseUnlocked || !snapshot.courseOpen || snapshot.courseQuestionId == null || snapshot.courseProgress >= snapshot.courseTotal) return
         val question = QuestionCatalog.fullCourseQuestions
+            .map { InterestThemeSkins.apply(it, curriculumInterest) }
             .firstOrNull { it.id == snapshot.courseQuestionId }
             ?.let { PlanQuestionPolicy.run { it.forDifficulty(snapshot.difficulty) } }
         if (question == null) {
