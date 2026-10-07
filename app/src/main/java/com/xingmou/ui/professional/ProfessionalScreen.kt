@@ -41,6 +41,9 @@ import com.xingmou.ProfessionalUiState
 import com.xingmou.HomeFeedbackUi
 import com.xingmou.data.catalog.AssessmentCatalog
 import com.xingmou.data.catalog.RehabilitationMethods
+import com.xingmou.data.catalog.DomainCatalog
+import com.xingmou.data.catalog.TaskCatalog
+import com.xingmou.supportWord
 import com.xingmou.core.domain.PlanStatus
 import com.xingmou.ui.components.AgentStatusLine
 import com.xingmou.ui.components.SectionSurface
@@ -187,10 +190,10 @@ private fun AdaptiveOverviewPanel(state: ProfessionalUiState) {
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(Modifier.weight(1f)) {
-                        Text("${item.moduleId} · ${item.moduleName}", style = MaterialTheme.typography.titleSmall)
+                        Text(item.moduleName, style = MaterialTheme.typography.titleSmall)
                         Text("基线 V${item.baselineVersion} · 方案 ${item.planVersion?.let { "V$it" } ?: "无"} · 最近题目 ${item.lastQuestionId ?: "—"}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    Text("L${item.difficulty} · ${item.supportLevel}", style = MaterialTheme.typography.labelLarge)
+                    Text("难度 ${item.difficulty} · ${supportWord(item.supportLevel)}", style = MaterialTheme.typography.labelLarge)
                 }
             }
         }
@@ -345,12 +348,12 @@ private fun ReportPanel(state: ProfessionalUiState) {
         }
         HorizontalDivider(Modifier.padding(vertical = 12.dp))
         Text("分段正确率趋势", style = MaterialTheme.typography.titleMedium)
-        Text("按训练记录时间分段，仅用于回看过程变化。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("按训练时间从早到晚分成最多 5 段，用于回看正确率的变化。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (state.reportTrend.isEmpty()) {
             Text("暂无足够记录生成趋势。", modifier = Modifier.padding(top = 8.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
         } else state.reportTrend.forEach { point ->
             Row(modifier = Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("第${point.label}段", modifier = Modifier.weight(0.22f), style = MaterialTheme.typography.labelMedium)
+                Text(point.label, modifier = Modifier.weight(0.22f), style = MaterialTheme.typography.labelMedium)
                 LinearProgressIndicator(progress = { point.accuracy }, modifier = Modifier.weight(0.55f).padding(top = 3.dp))
                 Text("${(point.accuracy * 100).toInt()}% · ${point.sampleCount}条", modifier = Modifier.weight(0.23f), style = MaterialTheme.typography.labelSmall)
             }
@@ -366,7 +369,9 @@ private fun GroupReportPanel(state: ProfessionalUiState) {
         } else {
             state.reportGroups.forEachIndexed { index, group ->
                 if (index > 0) HorizontalDivider(Modifier.padding(vertical = 8.dp))
-                Text("${group.domain} 域 · ${group.task}", style = MaterialTheme.typography.titleSmall)
+                val domainName = DomainCatalog.find(group.domain)?.name ?: group.domain
+                val taskName = TaskCatalog.find(group.task)?.name ?: group.task
+                Text("$domainName · $taskName", style = MaterialTheme.typography.titleSmall)
                 Text("${group.sampleCount} 条 · 正确率 ${group.accuracy} · 独立完成 ${group.independentRate} · 反应时 ${group.averageReaction}", modifier = Modifier.padding(top = 4.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
@@ -381,8 +386,10 @@ private fun TrainingDetailsPanel(state: ProfessionalUiState) {
         } else {
             state.recentTrainingDetails.forEachIndexed { index, detail ->
                 if (index > 0) HorizontalDivider(Modifier.padding(vertical = 8.dp))
-                Text("${java.text.SimpleDateFormat("MM-dd HH:mm", java.util.Locale.getDefault()).format(java.util.Date(detail.timestamp))} · ${detail.domain}/${detail.task}", style = MaterialTheme.typography.titleSmall)
-                Text("${detail.result} · ${detail.support} · 反应时 ${detail.reaction}", modifier = Modifier.padding(top = 4.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                val domainName = DomainCatalog.find(detail.domain)?.name ?: detail.domain
+                val taskName = TaskCatalog.find(detail.task)?.name ?: detail.task
+                Text("${java.text.SimpleDateFormat("MM-dd HH:mm", java.util.Locale.getDefault()).format(java.util.Date(detail.timestamp))} · $domainName · $taskName", style = MaterialTheme.typography.titleSmall)
+                Text("${detail.result} · ${supportWord(detail.support)} · 反应时 ${detail.reaction}", modifier = Modifier.padding(top = 4.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }
