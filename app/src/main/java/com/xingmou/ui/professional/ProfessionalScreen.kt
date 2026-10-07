@@ -410,12 +410,12 @@ private fun AssessmentPanel(
         Text("量表记录由专业人员录入，保留版本与来源。", color = MaterialTheme.colorScheme.onSurfaceVariant)
         androidx.compose.foundation.layout.Box {
             OutlinedButton(onClick = { expanded = true }, modifier = Modifier.fillMaxWidth().padding(top = 10.dp)) {
-                Text("${state.assessmentName} · ${state.assessmentId}")
+                Text(state.assessmentName)
             }
             DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
                 AssessmentCatalog.all.forEach { definition ->
                     DropdownMenuItem(
-                        text = { Text("${definition.name} · ${definition.id}") },
+                        text = { Text(definition.name) },
                         onClick = { expanded = false; onSelect(definition.id) }
                     )
                 }
@@ -510,10 +510,10 @@ private fun PlanPanel(
             HorizontalDivider(Modifier.padding(vertical = 14.dp))
             Text("编辑并创建新版本", style = MaterialTheme.typography.titleMedium)
             OutlinedTextField(state.planTask, onPlanTaskChange, modifier = Modifier.fillMaxWidth().padding(top = 8.dp), label = { Text("训练任务") })
-            OutlinedTextField(state.planGoal, onPlanGoalChange, modifier = Modifier.fillMaxWidth().padding(top = 8.dp), minLines = 2, maxLines = 3, label = { Text("可观察目标") }, placeholder = { Text("例如：在 L1 支持下完成 4/5 次") })
+            OutlinedTextField(state.planGoal, onPlanGoalChange, modifier = Modifier.fillMaxWidth().padding(top = 8.dp), minLines = 2, maxLines = 3, label = { Text("可观察目标") }, placeholder = { Text("例如：在少量提示下完成 4/5 次") })
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
                 OutlinedTextField(state.planDifficulty, onPlanDifficultyChange, modifier = Modifier.weight(1f), label = { Text("难度 1–5") })
-                OutlinedTextField(state.planSupportLevel, onPlanSupportLevelChange, modifier = Modifier.weight(1f), label = { Text("支持等级") })
+                OutlinedTextField(state.planSupportLevel, onPlanSupportLevelChange, modifier = Modifier.weight(1f), label = { Text("支持等级") }, placeholder = { Text("L0-L4") })
             }
             OutlinedTextField(state.planFrequency, onPlanFrequencyChange, modifier = Modifier.fillMaxWidth().padding(top = 8.dp), label = { Text("频率") })
             OutlinedTextField(state.planDuration, onPlanDurationChange, modifier = Modifier.fillMaxWidth().padding(top = 8.dp), label = { Text("单次时长") })
@@ -644,20 +644,20 @@ private fun AgentPanel(state: ProfessionalUiState, onRefreshAudit: () -> Unit, o
         OutlinedButton(onClick = onRefreshAudit, modifier = Modifier.padding(top = 8.dp)) { Text("刷新当前儿童运行记录") }
         state.auditRuns.forEach { run ->
             OutlinedButton(onClick = { onOpenAudit(run.runId) }, modifier = Modifier.fillMaxWidth().padding(top = 6.dp)) {
-                Text("${timeFormat.format(Date(run.startedAt))} · ${run.taskType} · ${run.port} · ${run.status} · ${run.runId.takeLast(8)}")
+                Text("${timeFormat.format(Date(run.startedAt))} · ${run.taskType} · ${run.port} · ${run.status}")
             }
         }
         if (state.auditSelectedRunId != null) {
-            Text("运行 ${state.auditSelectedRunId.takeLast(8)}", style = MaterialTheme.typography.titleSmall,
+            Text("决策轨迹回放", style = MaterialTheme.typography.titleSmall,
                 modifier = Modifier.padding(top = 12.dp))
             state.auditReplay.forEach { line ->
                 Text("${timeFormat.format(Date(line.timestamp))} · ${line.category} · ${line.description}", modifier = Modifier.padding(top = 5.dp))
                 if (line.traceId != null) {
                     val traceId = line.traceId
                     Row(modifier = Modifier.fillMaxWidth().padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        OutlinedButton(onClick = { onAnnotateTrace(state.auditSelectedRunId!!, traceId, "supported") }) { Text("依据充分") }
-                        OutlinedButton(onClick = { onAnnotateTrace(state.auditSelectedRunId!!, traceId, "unsupported") }) { Text("无依据") }
-                        OutlinedButton(onClick = { onAnnotateTrace(state.auditSelectedRunId!!, traceId, "uncertain") }) { Text("不确定") }
+                        OutlinedButton(onClick = { onAnnotateTrace(state.auditSelectedRunId!!, traceId, "supported") }) { Text("支持该决策") }
+                        OutlinedButton(onClick = { onAnnotateTrace(state.auditSelectedRunId!!, traceId, "unsupported") }) { Text("不支持该决策") }
+                        OutlinedButton(onClick = { onAnnotateTrace(state.auditSelectedRunId!!, traceId, "uncertain") }) { Text("尚不确定") }
                     }
                 }
             }
