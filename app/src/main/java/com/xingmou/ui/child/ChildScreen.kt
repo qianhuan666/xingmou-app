@@ -1063,7 +1063,9 @@ private fun CurriculumPlayerCard(
     onDetectManual: () -> Unit
 ) {
     val question = player.question
-    val isMemoryQuestion = question?.type == QuestionType.MEMORY
+    val isMemoryQuestion = question?.let {
+        it.type == QuestionType.MEMORY || (it.type == QuestionType.SEQUENCE && it.previewMs > 0L && it.stimulus.isNotBlank())
+    } == true
     val isPreviewing = remember(player.levelOrder, player.activityIndex, question?.id) {
         mutableStateOf(isMemoryQuestion && question?.stimulus?.isNotBlank() == true)
     }
@@ -1663,7 +1665,9 @@ private fun BaselineCard(
     immersive: Boolean = false
 ) {
     val question = state.question
-    val isMemoryQuestion = question?.type == QuestionType.MEMORY
+    val isMemoryQuestion = question?.let {
+        it.type == QuestionType.MEMORY || (it.type == QuestionType.SEQUENCE && it.previewMs > 0L && it.stimulus.isNotBlank())
+    } == true
     val isPreviewing = remember(question?.id, state.isOpen, state.status) {
         mutableStateOf(state.isOpen && isMemoryQuestion && question?.stimulus?.isNotBlank() == true)
     }
