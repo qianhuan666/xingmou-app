@@ -187,7 +187,9 @@ private fun AdaptiveOverviewPanel(state: ParentUiState) {
         if (state.adaptiveOverview.isEmpty()) {
             Text("完成起点小测后，这里会显示训练模块状态。", color = MaterialTheme.colorScheme.onSurfaceVariant)
         } else {
-            state.adaptiveOverview.take(8).forEach { item ->
+            var showModules = remember { mutableStateOf(false) }
+            val preview = state.adaptiveOverview.take(3)
+            preview.forEach { item ->
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -207,8 +209,30 @@ private fun AdaptiveOverviewPanel(state: ParentUiState) {
                     )
                 }
             }
-            if (state.adaptiveOverview.size > 8) {
-                Text("还有 ${state.adaptiveOverview.size - 8} 个模块", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            TextButton(onClick = { showModules.value = !showModules.value }, modifier = Modifier.fillMaxWidth()) {
+                Text(if (showModules.value) "收起全部模块" else "展开全部${state.adaptiveOverview.size}个模块")
+            }
+            if (showModules.value) {
+                state.adaptiveOverview.drop(3).forEach { item ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(item.moduleName, style = MaterialTheme.typography.titleSmall)
+                            Text(
+                                streakWord(item.correctStreak, item.errorStreak),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Text(
+                            "难度 ${item.difficulty} · ${supportWord(item.supportLevel)}",
+                            style = MaterialTheme.typography.labelLarge
+                        )
+                    }
+                }
             }
         }
     }
